@@ -23,12 +23,12 @@ USE MOD_Flexi
 USE MOD_TimeDisc   ,ONLY: TimeDisc
 USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID
 USE MOD_HDF5_Input ,ONLY: ReadAttribute
+USE MOD_BatchInput_Vars, ONLY: StochFile
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                        :: nArgsLoc,iArg,Color
 CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
-CHARACTER(LEN=255)             :: StochFile
 !==================================================================================================================================
 
 ! read command line arguments
@@ -55,8 +55,8 @@ myGlobalRank=0
 nGlobalProcessors=1
 #endif
 
-! open StochFile, Get Attributes nRuns, nParallelRuns
-CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+! open StochFile, get attributes nRuns, nParallelRuns
+CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
 CALL ReadAttribute(File_ID,'nRuns',1,IntScalar=nRuns)
 CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
 CALL CloseDataFile()
@@ -81,7 +81,7 @@ DO iSequentialRun=1,nSequentialRuns
   ! During las sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
   IF(iSequentialRun.EQ.nSequentialRuns)THEN
     Color=MERGE(0,MPI_UNDEFINED,iRun.LE.nRuns)
-    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
+    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
   END IF 
 
   ! Initialize
@@ -90,7 +90,6 @@ DO iSequentialRun=1,nSequentialRuns
   CALL TimeDisc()
   ! Finalize
   CALL FinalizeFlexi()
-! we also have to finalize MPI itself here
 END DO
 
 
