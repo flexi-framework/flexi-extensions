@@ -27,29 +27,41 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-CHARACTER(LEN=255)::ParameterFile                                             !< filename of the parameter file
-INTEGER,PARAMETER ::UNIT_stdOut=6                                             !< unit for writing to standard output (e.g. terminal)
-INTEGER,PARAMETER ::UNIT_logOut=133                                           !< unit for writing log files
-INTEGER           ::UNIT_errOut=999                                           !< unit for writing error files
-LOGICAL           ::Logging                                                   !< switch to turn log file writing on or of
-LOGICAL           ::ErrorFiles                                                !< switch to turn error file writing on or of
-CHARACTER(LEN=255)::ErrorFileName='NOT_SET'                                   !< file to write error data into
-INTEGER           ::iError                                                    !< default error handle
-REAL              ::StartTime                                                 !< start time of the simulation
-INTEGER           ::myRank,myLocalRank,myLeaderRank,myWorkerRank
-INTEGER           ::nProcessors,nLocalProcs,nLeaderProcs,nWorkerProcs
-INTEGER           ::MPI_COMM_FLEXI !< Flexi MPI communicator
-INTEGER           ::MPI_COMM_NODE                                             !< local node subgroup
-INTEGER           ::MPI_COMM_LEADERS                                          !< all node masters
-INTEGER           ::MPI_COMM_WORKERS                                          !< all non-master nodes
-LOGICAL           ::MPIRoot                                                   !< flag whether process is MPI root process
-LOGICAL           ::MPILocalRoot                                              !< flag whether process is root of MPI subgroup
+CHARACTER(LEN=255) :: ParameterFile                                     !< filename of the parameter file
+INTEGER,PARAMETER  :: UNIT_stdOut=6                                     !< unit for writing to standard output (e.g. terminal)
+INTEGER,PARAMETER  :: UNIT_logOut=133                                   !< unit for writing log files
+INTEGER            :: UNIT_errOut=999                                   !< unit for writing error files
+LOGICAL            :: Logging                                           !< switch to turn log file writing on or of
+LOGICAL            :: ErrorFiles                                        !< switch to turn error file writing on or of
+CHARACTER(LEN=255) :: ErrorFileName='NOT_SET'                           !< file to write error data into
+INTEGER            :: iError                                            !< default error handle
+REAL               :: StartTime                                         !< start time of the simulation
+INTEGER            :: myRank,myLocalRank,myLeaderRank,myWorkerRank
+INTEGER            :: nProcessors,nLocalProcs,nLeaderProcs,nWorkerProcs
+INTEGER            :: MPI_COMM_FLEXI                                    !< Flexi MPI communicator
+INTEGER            :: MPI_COMM_NODE                                     !< local node subgroup
+INTEGER            :: MPI_COMM_LEADERS                                  !< all node masters
+INTEGER            :: MPI_COMM_WORKERS                                  !< all non-master nodes
+LOGICAL            :: MPIRoot                                           !< flag whether process is MPI root process
+LOGICAL            :: MPILocalRoot                                      !< flag whether process is root of MPI subgroup
+
+INTEGER            :: MPI_COMM_ACTIVE
+INTEGER            :: myGlobalRank
+INTEGER            :: nGlobalProcessors
+INTEGER            :: nRuns
+INTEGER            :: nParallelRuns
+INTEGER            :: iParallelRun
+INTEGER            :: nProcsPerRun
+INTEGER            :: nSequentialRuns
+INTEGER            :: iSequentialRun
+INTEGER            :: iRun
+
 #if USE_MPI
-INTEGER           ::MPIStatus(MPI_STATUS_SIZE)
+INTEGER            :: MPIStatus(MPI_STATUS_SIZE)
 #endif
 
-LOGICAL           :: doGenerateUnittestReferenceData
-INTEGER           :: doPrintHelp ! 0: no help, 1: help, 2: markdown-help
+LOGICAL            :: doGenerateUnittestReferenceData
+INTEGER            :: doPrintHelp ! 0: no help, 1: help, 2: markdown-help
 
 INTERFACE Abort
   MODULE PROCEDURE Abort

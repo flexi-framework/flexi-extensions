@@ -21,9 +21,14 @@ PROGRAM FlexiBatch
 USE MOD_Globals
 USE MOD_Flexi
 USE MOD_TimeDisc,          ONLY:TimeDisc
+USE MOD_IO_HDF5, ONLY: OpenDataFile,CloseDataFile,File_ID
+USE MOD_HDF5_Input, ONLY: ReadAttribute
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER      :: nArgsLoc,iArg
+CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
+CHARACTER(LEN=255)             :: StochFile
 !==================================================================================================================================
 ! Initialize
 
@@ -32,30 +37,29 @@ CALL MPI_INIT(iError)
 CALL MPI_COMM_RANK(MPI_COMM_WORLD, myGlobalRank     , iError)
 CALL MPI_COMM_SIZE(MPI_COMM_WORLD, nGlobalProcessors, iError)
 
+MPI_COMM_ACTIVE=MPI_COMM_WORLD
 
 nArgsLoc = COMMAND_ARGUMENT_COUNT()
 IF(nArgsLoc.LT.2) CALL Abort(__STAMP__,'Usage: ./flexi flexi.h5 flexi.ini')
-CALL GET_COMMAND_ARGUMENT(1,FileNameStochH5)
+CALL GET_COMMAND_ARGUMENT(1,StochFile)
 
-! open FileNameStochH5, Get Attributes nRuns, nParallelRuns
+! open StochFile, Get Attributes nRuns, nParallelRuns
+CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL ReadAttribute(File_ID,'nRuns',1,IntScalar=nRuns)
+CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
+CALL CloseDataFile()
 
 ALLOCATE(ArgsLoc(nArgsLoc-1))
 DO iArg=2,nArgsLoc
   CALL GET_COMMAND_ARGUMENT(iArg,ArgsLoc(iArg-1))
 END DO 
 
-pos_NRuns=MINLOC(
-
-
-prmfile
-nRuns
-nParallelRuns
 
 IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
 nProcsPerRun=nGlobalProcessors/nParallelRuns
-myParallelRun = myGlobalRank/nProcsPerRun+1
+iParallelRun = myGlobalRank/nProcsPerRun+1
 
-CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,myParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
+CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
 
 IF(MOD(nRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nRuns has to be a multiple of nParallelRuns')
 nSequentialRuns= nRuns/nParallelRuns
@@ -66,9 +70,9 @@ nSequentialRuns=nRuns
 
 DO iSequentialRun=1,nSequentialRuns
 
-  iSample=iSequentialRun+nParallelRuns*(iSequentialRun-1)
+  iRun=iSequentialRun+nParallelRuns*(iSequentialRun-1)
 
-  CALL InitFlexi(nArgsLoc-1,ArgsLoc,MPI_COMM_FLEXI)
+  CALL InitFlexi(nArgsLoc-1,ArgsLoc,mpi_comm_loc=MPI_COMM_FLEXI)
   ! Run Simulation
   CALL TimeDisc()
   ! Finalize
