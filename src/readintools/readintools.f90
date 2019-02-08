@@ -218,6 +218,7 @@ IF (opt%multiple.AND.opt%hasDefault) THEN
 END IF
 
 opt%isSet = .FALSE.
+opt%isStoch = .FALSE.
 opt%name = name
 opt%description = description
 opt%section = this%actualSection
@@ -911,6 +912,9 @@ DO WHILE (associated(current))
         value%chars = opt%value
       END SELECT
     END SELECT
+
+    CALL OverwriteStoch(value,name,opt%isStoch,opt%isSet)
+
     ! print option and value to stdout
     CALL opt%print(prms%maxNameLen, prms%maxValueLen, mode=0)
     ! remove the option from the linked list of all parameters
@@ -923,6 +927,102 @@ CALL ABORT(__STAMP__, &
     'Option "'//TRIM(name)//'" is not defined in any DefineParameters... routine '//&
     'or already read (use GET... routine only for multiple options more than once).')
 END SUBROUTINE GetGeneralOption
+
+!==================================================================================================================================
+!> General routine to get an option. This routine is called from GETINT,GETREAL,GETLOGICAL,GETSTR to get the value a non-array
+!> option.
+!==================================================================================================================================
+SUBROUTINE OverwriteStoch(value,name, isStoch, isSet)
+USE MOD_Options
+USE MOD_BatchInput_Vars
+USE MOD_StringTools ,ONLY: STRICMP
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+CLASS(*),INTENT(INOUT)               :: value
+CHARACTER(LEN=*),INTENT(IN)          :: name     !< parameter name
+LOGICAL,INTENT(INOUT)                :: isStoch
+LOGICAL,INTENT(INOUT)                :: isSet
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER               :: iVarStoch
+!==================================================================================================================================
+SELECT TYPE(value)
+TYPE IS (INTEGER)
+  DO iVarStoch=1,nLevelVarsInt
+    IF(STRICMP(name,LevelVarNamesInt(iVarStoch)))THEN
+      value=LevelVarsInt(iVarStoch)
+      isStoch=.TRUE.
+      EXIT
+    END IF  
+  END DO
+TYPE IS (REAL)
+  DO iVarStoch=1,nLevelVarsReal
+    IF(STRICMP(name,LevelVarNamesReal(iVarStoch)))THEN
+      value=LevelVarsReal(iVarStoch)
+      isStoch=.TRUE.
+      EXIT
+    END IF  
+  END DO
+  DO iVarStoch=1,nStochVars
+    IF(STRICMP(name,StochVarNames(iVarStoch)))THEN
+      IF(iOccurence(iVarStoch).EQ.1) THEN 
+        value=StochVars(iVarStoch)
+        isStoch=.TRUE.
+      ELSE !iOccurence
+        iOccurence(iVarStoch)=iOccurence(iVarStoch)-1
+      END IF !iOccurence 
+    END IF !STRICMP
+  END DO !iVarStoch
+TYPE IS (STR255)
+  DO iVarStoch=1,nLevelVarsStr
+    IF(STRICMP(name,LevelVarNamesStr(iVarStoch)))THEN
+      value%chars=LevelVarsStr(iVarStoch)
+      isStoch=.TRUE.
+      EXIT
+    END IF  
+  END DO
+TYPE IS (LOGICAL)
+  RETURN
+END SELECT
+IF(isStoch) isSet=.FALSE.
+END SUBROUTINE OverwriteStoch
+
+
+!==================================================================================================================================
+!> General routine to get an option. This routine is called from GETINT,GETREAL,GETLOGICAL,GETSTR to get the value a non-array
+!> option.
+!==================================================================================================================================
+SUBROUTINE OverwriteStochArray(value, name, isStoch, isSet)
+USE MOD_Options
+USE MOD_BatchInput_Vars
+USE MOD_StringTools ,ONLY: STRICMP
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,INTENT(INOUT)                   :: value(:)    !< parameter value
+CHARACTER(LEN=*),INTENT(IN)          :: name     !< parameter name
+LOGICAL,INTENT(INOUT)                :: isStoch
+LOGICAL,INTENT(INOUT)                :: isSet
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER               :: iVarStoch
+!REAL,ALLOCATABLE      :: valueTmp(:)
+!==================================================================================================================================
+DO iVarStoch=1,nStochVars
+  IF(STRICMP(name,StochVarNames(iVarStoch)))THEN
+    isStoch=.TRUE.
+    IF(iArray(iVarStoch).EQ.0)THEN
+      value=StochVars(iVarStoch)
+      isSet=.FALSE.
+    ELSE
+      !ALLOCATE(valueTmp(SIZE(value)))
+      !valueTmp=value
+      !valueTmp(iArray(iVarStoch))=StochVars(iVarStoch)
+      !value=valueTmp
+      value(iArray(iVarStoch))=StochVars(iVarStoch)
+    END IF 
+  END IF  
+END DO
+END SUBROUTINE OverwriteStochArray
 
 !==================================================================================================================================
 !> General routine to get an array option. This routine is called from GETINTARRAY,GETREALARRAY,GETLOGICALARRAY,GETSTRARRAY to get
@@ -975,6 +1075,7 @@ DO WHILE (associated(current))
       SELECT TYPE(value)
       TYPE IS (REAL)
         value = opt%value
+        CALL OverwriteStochArray(value,name,opt%isStoch,opt%isSet)
       END SELECT
     CLASS IS (LogicalArrayOption)
       IF (SIZE(opt%value).NE.no) CALL Abort(__STAMP__,"Array size of option '"//TRIM(name)//"' is not correct!")

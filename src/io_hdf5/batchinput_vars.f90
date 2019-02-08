@@ -24,13 +24,23 @@ SAVE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255)             :: StochFile
+
 INTEGER                        :: nStochVars
-INTEGER                        :: nLevelVars
+REAL,ALLOCATABLE               :: StochVars(:)
 CHARACTER(LEN=255),ALLOCATABLE :: StochVarNames(:)
 INTEGER,ALLOCATABLE            :: iOccurence(:)
 INTEGER,ALLOCATABLE            :: iArray(:)
-CHARACTER(LEN=255),ALLOCATABLE :: LevelVarNames(:)
-REAL,ALLOCATABLE               :: StochVars(:)
+
+INTEGER                        :: nLevelVarsInt
+INTEGER                        :: nLevelVarsReal
+INTEGER                        :: nLevelVarsStr
+CHARACTER(LEN=255),ALLOCATABLE :: LevelVarNamesInt(:)
+CHARACTER(LEN=255),ALLOCATABLE :: LevelVarNamesReal(:)
+CHARACTER(LEN=255),ALLOCATABLE :: LevelVarNamesStr(:)
+INTEGER,ALLOCATABLE            :: LevelVarsInt(:)
+REAL,ALLOCATABLE               :: LevelVarsReal(:)
+CHARACTER(LEN=255),ALLOCATABLE :: LevelVarsStr(:)
+
 LOGICAL                        :: BatchInputInitIsDone=.FALSE.
 !==================================================================================================================================
 END MODULE MOD_BatchInput_Vars

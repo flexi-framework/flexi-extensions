@@ -701,6 +701,7 @@ CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,commun
 
 
 CALL ReadAttribute(File_ID,'nStochVars',1,IntScalar=nStochVars)
+
 ALLOCATE(StochVarNames(nStochVars))
 ALLOCATE(iOccurence(nStochVars))
 ALLOCATE(iArray(nStochVars))
@@ -708,9 +709,30 @@ CALL ReadAttribute(File_ID,'StochVarNames',nStochVars,StrArray=StochVarNames)
 CALL ReadAttribute(File_ID,'iOccurence',   nStochVars,IntArray=iOccurence)
 CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
 
-CALL ReadAttribute(File_ID,'nLevelVars',1,IntScalar=nLevelVars)
-ALLOCATE(LevelVarNames(nLevelVars))
-CALL ReadAttribute(File_ID,'LevelVarNames',nLevelVars,StrArray=LevelVarNames)
+
+CALL ReadAttribute(File_ID,'nLevelVarsInt',1,IntScalar=nLevelVarsInt)
+IF(nLevelVarsInt.GT.0)THEN
+  ALLOCATE(LevelVarNamesInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsInt,StrArray=LevelVarNamesInt)
+  ALLOCATE(LevelVarsInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsInt,IntArray=LevelVarsInt)
+END IF 
+
+CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsReal)
+IF(nLevelVarsReal.GT.0)THEN
+  ALLOCATE(LevelVarNamesReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarNamesReal',nLevelVarsReal,StrArray=LevelVarNamesReal)
+  ALLOCATE(LevelVarsReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsReal,RealArray=LevelVarsReal)
+END IF 
+
+CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStr)
+IF(nLevelVarsStr.GT.0)THEN
+  ALLOCATE(LevelVarNamesStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
+  ALLOCATE(LevelVarsStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
+END IF 
 
 ALLOCATE(StochVars(nStochVars))
 CALL ReadArray(ArrayName  = 'Samples',&
@@ -741,7 +763,9 @@ IMPLICIT NONE
 SDEALLOCATE(StochVarNames)
 SDEALLOCATE(iOccurence)
 SDEALLOCATE(iArray)
-SDEALLOCATE(LevelVarNames)
+SDEALLOCATE(LevelVarNamesInt)
+SDEALLOCATE(LevelVarNamesReal)
+SDEALLOCATE(LevelVarNamesStr)
 SDEALLOCATE(StochVars)
 END SUBROUTINE FinalizeBatchInput
 

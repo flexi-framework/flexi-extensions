@@ -148,8 +148,6 @@ IF (doPrintHelp.GT.0) THEN
 END IF
 CALL prms%read_options(ParameterFile)
 
-CALL BatchInput()
-CALL InitIOHDF5()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A)') &
 "           __________________   _______              __________________   ______      ______   __________________ "
@@ -183,6 +181,8 @@ SWRITE(UNIT_stdOut,'(132("="))')
 StartTime=FLEXITIME()
 
 ! Initialization
+CALL BatchInput()
+CALL InitIOHDF5()
 CALL InitInterpolation()
 #if FV_ENABLED
 CALL InitFV_Basis()
