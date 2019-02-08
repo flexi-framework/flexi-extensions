@@ -605,6 +605,8 @@ SET_TARGET_PROPERTIES(libflexishared PROPERTIES OUTPUT_NAME "libflexi")
 ADD_DEPENDENCIES(libflexishared libflexistatic userblocklib stacksizelib ${INTERNALLIBS})
 add_exec(flexi ./src/flexi.f90)
 ADD_DEPENDENCIES(flexi libflexistatic userblocklib stacksizelib ${INTERNALLIBS})
+add_exec(flexibatch ./src/flexibatch.f90)
+ADD_DEPENDENCIES(flexibatch libflexistatic userblocklib stacksizelib ${INTERNALLIBS})
 
 # special compiler flags to avoid warnings for empty functions of testcase.f90 and overwrite of intrinsic abort in globals.f90
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
@@ -684,6 +686,7 @@ IF(CTAGS_PATH)
   ADD_CUSTOM_TARGET(tags DEPENDS ctags.txt)
   MESSAGE(STATUS "Found ctags: ${CTAGS_PATH}")
   ADD_DEPENDENCIES(flexi tags)
+  ADD_DEPENDENCIES(flexibatch tags)
 ENDIF(CTAGS_PATH)
 
 # =========================================================================
