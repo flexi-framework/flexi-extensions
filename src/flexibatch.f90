@@ -24,61 +24,66 @@ USE MOD_TimeDisc,          ONLY:TimeDisc
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER :: nParallelRuns=2
+INTEGER :: nSequentialRuns,iArg,iSample,nArgsLoc,nProcsPerRun,myParallelRun
+CHARACTER(LEN=255),ALLOCATABLE:: ArgsLoc(:) 
 !==================================================================================================================================
 ! Initialize
 
-#if USE_MPI
 CALL MPI_INIT(iError)
 CALL MPI_COMM_RANK(MPI_COMM_WORLD, myGlobalRank     , iError)
-CALL MPI_COMM_SIZE(MPI_COMM_WORLD, nGlobalProcessors, iError)
+CALL MPI_COMM_SIZE(MPI_COMM_WORLD, nGlobalProcs     , iError)
 
-
+nGlobalRuns = 4
 nArgsLoc = COMMAND_ARGUMENT_COUNT()
-IF(nArgsLoc.LT.2) CALL Abort(__STAMP__,'Usage: ./flexi flexi.h5 flexi.ini')
-CALL GET_COMMAND_ARGUMENT(1,FileNameStochH5)
+!IF(nArgsLoc.LT.2) CALL Abort(__STAMP__,'Usage: ./flexi flexi.h5 flexi.ini')
+!CALL GET_COMMAND_ARGUMENT(1,FileNameStochH5)
 
-! open FileNameStochH5, Get Attributes nRuns, nParallelRuns
+!! open FileNameStochH5, Get Attributes nGlobalRuns, nParallelRuns
 
+MPI_COMM_ACTIVE=MPI_COMM_WORLD
 ALLOCATE(ArgsLoc(nArgsLoc-1))
 DO iArg=2,nArgsLoc
   CALL GET_COMMAND_ARGUMENT(iArg,ArgsLoc(iArg-1))
 END DO 
 
-pos_NRuns=MINLOC(
+!pos_NRuns=MINLOC(
 
 
-prmfile
-nRuns
-nParallelRuns
+!prmfile
+!nGlobalRuns
+!nParallelRuns
 
-IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
-nProcsPerRun=nGlobalProcessors/nParallelRuns
-myParallelRun = myGlobalRank/nProcsPerRun+1
+!IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
+nProcsPerRun  = nGlobalProcs/nParallelRuns
+myParallelRun = myGlobalRank/nProcsPerRun
 
+MPIGlobalRoot=(myGlobalRank .EQ. 0)
 CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,myParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
 
-IF(MOD(nRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nRuns has to be a multiple of nParallelRuns')
-nSequentialRuns= nRuns/nParallelRuns
-#else
-nParallelRuns=1
-nSequentialRuns=nRuns
-#endif
+!IF(MOD(nRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nRuns has to be a multiple of nParallelRuns')
+nSequentialRuns= nGlobalRuns/nParallelRuns
+!#else
+!nParallelRuns=1
+!nSequentialRuns=nGlobalRuns
+!#endif
 
 DO iSequentialRun=1,nSequentialRuns
-
-  iSample=iSequentialRun+nParallelRuns*(iSequentialRun-1)
-
+  myGlobalRun = myParallelRun+nParallelRuns*(iSequentialRun-1)
   CALL InitFlexi(nArgsLoc-1,ArgsLoc,MPI_COMM_FLEXI)
-  ! Run Simulation
+  !! Run Simulation
   CALL TimeDisc()
-  ! Finalize
+  !! Finalize
   CALL FinalizeFlexi()
-! we also have to finalize MPI itself here
+#if USE_MPI
+  CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
+#endif
+!! we also have to finalize MPI itself here
 END DO
 
 
-#if USE_MPI
-CALL MPI_FINALIZE(iError)
-IF(iError .NE. 0) STOP 'MPI finalize error'
-#endif
+!#if USE_MPI
+!CALL MPI_FINALIZE(iError)
+!IF(iError .NE. 0) STOP 'MPI finalize error'
+!#endif
 END PROGRAM FlexiBatch

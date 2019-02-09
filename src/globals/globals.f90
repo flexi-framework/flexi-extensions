@@ -36,14 +36,20 @@ LOGICAL           ::ErrorFiles                                                !<
 CHARACTER(LEN=255)::ErrorFileName='NOT_SET'                                   !< file to write error data into
 INTEGER           ::iError                                                    !< default error handle
 REAL              ::StartTime                                                 !< start time of the simulation
-INTEGER           ::myRank,myLocalRank,myLeaderRank,myWorkerRank
-INTEGER           ::nProcessors,nLocalProcs,nLeaderProcs,nWorkerProcs
-INTEGER           ::MPI_COMM_FLEXI !< Flexi MPI communicator
+INTEGER           ::myRank,myLocalRank,myLeaderRank,myWorkerRank,myGlobalRank
+INTEGER           ::nProcessors,nLocalProcs,nLeaderProcs,nWorkerProcs,nGlobalProcs
+INTEGER           ::MPI_COMM_FLEXI  !< Flexi MPI communicator
+INTEGER           ::MPI_COMM_ACTIVE !< Active communicator for now copy of world 
 INTEGER           ::MPI_COMM_NODE                                             !< local node subgroup
 INTEGER           ::MPI_COMM_LEADERS                                          !< all node masters
 INTEGER           ::MPI_COMM_WORKERS                                          !< all non-master nodes
 LOGICAL           ::MPIRoot                                                   !< flag whether process is MPI root process
+LOGICAL           ::MPIGlobalRoot                                                   !< flag whether process is MPI root process
 LOGICAL           ::MPILocalRoot                                              !< flag whether process is root of MPI subgroup
+
+
+INTEGER           :: nGlobalRuns,myGlobalRun,iSequentialRun                   !< number of total parallel flexi runs
+
 #if USE_MPI
 INTEGER           ::MPIStatus(MPI_STATUS_SIZE)
 #endif

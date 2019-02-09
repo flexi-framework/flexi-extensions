@@ -113,10 +113,10 @@ REAL,ALLOCATABLE               :: UOutTmp(:,:,:,:,:)
 REAL                           :: Utmp(5,0:PP_N,0:PP_N,0:PP_NZ)
 REAL                           :: JN(1,0:PP_N,0:PP_N,0:PP_NZ),JOut(1,0:NOut,0:NOut,0:ZDIM(NOut))
 INTEGER                        :: iElem,i,j,k
-INTEGER                        :: nVal(5)
+INTEGER                        :: nVal(6)
 !==================================================================================================================================
 IF (.NOT.WriteStateFiles) RETURN
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE STATE TO HDF5 FILE...'
   GETTIME(StartT)
 END IF
@@ -124,11 +124,13 @@ END IF
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileType=MERGE('ERROR_State','State      ',isErrorFile)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.h5'
-IF(MPIRoot) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
-                                      MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
+print*,"iSequentialRun"
+print*,iSequentialRun
+IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
+                                                    MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
 
 ! Set size of output
-nVal=(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems/)
+nVal=(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems,1/)
 
 ! build output data
 IF(NOut.NE.PP_N)THEN
@@ -158,9 +160,9 @@ IF(NOut.NE.PP_N)THEN
     UOutTmp = UOut
     DEALLOCATE(UOut)
     ALLOCATE(UOut(PP_nVar,0:NOut,0:NOut,0:NOut,nElems))
-    CALL ExpandArrayTo3D(5,nVal,4,Nout+1,UOutTmp,UOut)
+    CALL ExpandArrayTo3D(5,nVal(1:5),4,Nout+1,UOutTmp,UOut)
     DEALLOCATE(UOutTmp)
-    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/)
+    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems,1/)
   END IF
 #endif
 
@@ -174,7 +176,7 @@ ELSE ! write state on same polynomial degree as the solution
     ALLOCATE(UOut(PP_nVar,0:NOut,0:NOut,0:NOut,nElems))
     CALL ExpandArrayTo3D(5,(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems/),4,NOut+1,U,UOut)
     ! Correct size of the output array
-    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/)
+    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems,1/)
   ELSE
     UOut => U
   END IF
@@ -184,23 +186,23 @@ END IF ! (NOut.NE.PP_N)
 
 ! Reopen file and write DG solution
 #if USE_MPI
-CALL MPI_BARRIER(MPI_COMM_FLEXI,iError)
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                        DataSetName='DG_Solution', rank=5,&
-                        nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems/),&
+                        DataSetName='DG_Solution', rank=6,&
+                        nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
                         nVal=nVal                                              ,&
-                        offset=    (/0,      0,     0,     0,     offsetElem/),&
+                        offset=    (/0,      0,     0,     0,     offsetElem  ,myGlobalRun/),&
                         collective=.TRUE.,RealArray=UOut)
 
 ! Deallocate UOut only if we did not point to U
 IF((PP_N .NE. NOut).OR.((PP_dim .EQ. 2).AND.(.NOT.output2D))) DEALLOCATE(UOut)
 
-CALL WriteAdditionalElemData(FileName,ElementOut)
-CALL WriteAdditionalFieldData(FileName,FieldOut)
+!CALL WriteAdditionalElemData(FileName,ElementOut)
+!CALL WriteAdditionalFieldData(FileName,FieldOut)
 
 
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   CALL MarkWriteSuccessfull(FileName)
   GETTIME(EndT)
   WRITE(UNIT_stdOut,'(A,F0.3,A)',ADVANCE='YES')'DONE  [',EndT-StartT,'s]'
@@ -498,7 +500,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='FieldData', rank=5,  &
                         nValGlobal=(/nVar,PP_N+1,PP_N+1,PP_NZ+1,nGlobalElems/),&
                         nVal=      (/nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems      /),&
-                        offset=    (/0   ,0     ,0     ,0     ,offsetElem  /),&
+                        offset=    (/0   ,0     ,0     ,0      ,offsetElem  /),&
                         collective=.TRUE.,RealArray=tmp)
 DEALLOCATE(VarNames,tmp)
 
@@ -731,7 +733,7 @@ LOGICAL,INTENT(IN),OPTIONAL    :: withUserblock      !< specify whether userbloc
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
-INTEGER(HSIZE_T)               :: Dimsf(5)
+INTEGER(HSIZE_T)               :: Dimsf(6)
 CHARACTER(LEN=255)             :: MeshFile255
 CHARACTER(LEN=255)             :: Dataset_Str,Varname_Str
 #if FV_ENABLED
@@ -756,12 +758,12 @@ CALL OpenDataFile(TRIM(FileName),create=create_loc,single=.TRUE.,readOnly=.FALSE
 
 ! Preallocate the data space for the dataset.
 IF(output2D) THEN
-  Dimsf=(/nVar,NData+1,NData+1,1,nGlobalElems/)
+  Dimsf=(/nVar,NData+1,NData+1,1,nGlobalElems,nGlobalRuns/)
 ELSE
-  Dimsf=(/nVar,NData+1,NData+1,NData+1,nGlobalElems/)
+  Dimsf=(/nVar,NData+1,NData+1,NData+1,nGlobalElems,nGlobalRuns/)
 END IF
 
-CALL H5SCREATE_SIMPLE_F(5, Dimsf, FileSpace, iError)
+CALL H5SCREATE_SIMPLE_F(6, Dimsf, FileSpace, iError)
 ! Create the dataset with default properties.
 HDF5DataType=H5T_NATIVE_DOUBLE
 CALL H5DCREATE_F(File_ID,TRIM(Dataset_Str), HDF5DataType, FileSpace, DSet_ID, iError)
@@ -843,7 +845,7 @@ INTEGER                  :: stat,ioUnit
 REAL                     :: FlushTime
 CHARACTER(LEN=255)       :: FileName,InputFile,NextFile
 !==================================================================================================================================
-IF(.NOT.MPIRoot) RETURN
+IF(.NOT.MPIGlobalRoot .OR. iSequentialRun .NE. 1) RETURN
 
 WRITE(UNIT_stdOut,'(a)')' DELETING OLD HDF5 FILES...'
 IF (.NOT.PRESENT(FlushTime_In)) THEN
