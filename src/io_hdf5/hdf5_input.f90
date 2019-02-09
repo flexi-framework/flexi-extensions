@@ -59,6 +59,14 @@ INTERFACE GetVarnames
   MODULE PROCEDURE GetVarnames
 END INTERFACE
 
+INTERFACE BatchInput
+  MODULE PROCEDURE BatchInput
+END INTERFACE
+
+INTERFACE FinalizeBatchInput
+  MODULE PROCEDURE FinalizeBatchInput
+END INTERFACE
+
 PUBLIC :: Plist_File_ID,File_ID,HSize,nDims        ! Variables from MOD_IO_HDF5 that need to be public
 PUBLIC :: OpenDataFile,CloseDataFile ! Subroutines from MOD_IO_HDF5 that need to be public
 PUBLIC :: ISVALIDHDF5FILE,ISVALIDMESHFILE,GetDataSize,GetAttributeSize,GetDataProps,GetNextFileName
@@ -66,6 +74,8 @@ PUBLIC :: ReadArray,ReadAttribute
 PUBLIC :: GetArrayAndName
 PUBLIC :: GetVarnames
 PUBLIC :: DatasetExists
+PUBLIC :: BatchInput
+PUBLIC :: FinalizeBatchInput
 !==================================================================================================================================
 
 CONTAINS
@@ -664,5 +674,99 @@ ELSE
 END IF
 LOGWRITE(*,*)'...DONE!'
 END SUBROUTINE GetNextFileName
+
+
+
+!==================================================================================================================================
+!> Reads input variables which differ between runs (such as stochastic input parameters) from HDF5 input file
+!==================================================================================================================================
+SUBROUTINE BatchInput()
+! MODULES
+USE MOD_Globals
+USE MOD_BatchInput_Vars
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+IF(BatchInputInitIsDone)THEN
+  CALL CollectiveStop(__STAMP__,&
+    "Init BatchInput not ready to be called or already called.")
+END IF
+SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(A)') ' INIT BATCH INPUT...'
+
+CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
+
+
+CALL ReadAttribute(File_ID,'nStochVars',1,IntScalar=nStochVars)
+
+ALLOCATE(StochVarNames(nStochVars))
+ALLOCATE(iOccurence(nStochVars))
+ALLOCATE(iArray(nStochVars))
+CALL ReadAttribute(File_ID,'StochVarNames',nStochVars,StrArray=StochVarNames)
+CALL ReadAttribute(File_ID,'iOccurence',   nStochVars,IntArray=iOccurence)
+CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
+
+
+CALL ReadAttribute(File_ID,'nLevelVarsInt',1,IntScalar=nLevelVarsInt)
+IF(nLevelVarsInt.GT.0)THEN
+  ALLOCATE(LevelVarNamesInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsInt,StrArray=LevelVarNamesInt)
+  ALLOCATE(LevelVarsInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsInt,IntArray=LevelVarsInt)
+END IF 
+
+CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsReal)
+IF(nLevelVarsReal.GT.0)THEN
+  ALLOCATE(LevelVarNamesReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarNamesReal',nLevelVarsReal,StrArray=LevelVarNamesReal)
+  ALLOCATE(LevelVarsReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsReal,RealArray=LevelVarsReal)
+END IF 
+
+CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStr)
+IF(nLevelVarsStr.GT.0)THEN
+  ALLOCATE(LevelVarNamesStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
+  ALLOCATE(LevelVarsStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
+END IF 
+
+ALLOCATE(StochVars(nStochVars))
+CALL ReadArray(ArrayName  = 'Samples',&
+               Rank       = 2,&
+               nVal       = (/nStochVars,1/),&
+               Offset_in  = iRun,&
+               Offset_dim = 2,&
+               RealArray  = StochVars)
+
+CALL CloseDataFile()
+
+END SUBROUTINE BatchInput
+
+
+!==================================================================================================================================
+!> Subroutine to determine filename of next HDF5 file for FlushFiles
+!==================================================================================================================================
+SUBROUTINE FinalizeBatchInput()
+! MODULES
+USE MOD_Globals
+USE MOD_BatchInput_Vars
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+SDEALLOCATE(StochVarNames)
+SDEALLOCATE(iOccurence)
+SDEALLOCATE(iArray)
+SDEALLOCATE(LevelVarNamesInt)
+SDEALLOCATE(LevelVarNamesReal)
+SDEALLOCATE(LevelVarNamesStr)
+SDEALLOCATE(StochVars)
+END SUBROUTINE FinalizeBatchInput
 
 END MODULE MOD_HDF5_Input

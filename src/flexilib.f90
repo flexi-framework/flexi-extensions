@@ -74,6 +74,7 @@ USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
 USE MOD_Restart_Vars      ,ONLY:RestartFile
 USE MOD_StringTools       ,ONLY:STRICMP, GetFileExtension
+USE MOD_HDF5_Input,        ONLY:BatchInput
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -147,7 +148,6 @@ IF (doPrintHelp.GT.0) THEN
 END IF
 CALL prms%read_options(ParameterFile)
 
-CALL InitIOHDF5()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A)') &
 "           __________________   _______              __________________   ______      ______   __________________ "
@@ -181,6 +181,8 @@ SWRITE(UNIT_stdOut,'(132("="))')
 StartTime=FLEXITIME()
 
 ! Initialization
+CALL BatchInput()
+CALL InitIOHDF5()
 CALL InitInterpolation()
 #if FV_ENABLED
 CALL InitFV_Basis()
@@ -249,6 +251,7 @@ USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
+USE MOD_HDF5_Input,        ONLY:FinalizeBatchInput
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -282,6 +285,7 @@ CALL FinalizeIndicator()
 Time=FLEXITIME()
 CALL FinalizeParameters()
 CALL FinalizeCommandlineArguments()
+CALL FinalizeBatchInput()
 #if USE_MPI
 ! For flexilib MPI init/finalize is controlled by main program
 CALL FinalizeMPI()

@@ -29,6 +29,7 @@ MODULE MOD_Options
     CHARACTER(LEN=1000)   :: description  !< comment in parameter file, after '!' character
     CHARACTER(LEN=255)    :: section      !< section to which the option belongs. Not mandatory.
     LOGICAL               :: isSet        !< default false. Becomes true, if set in parameter file
+    LOGICAL               :: isStoch      !< default false. Becomes true, if set in HDF5 stoch input file
     LOGICAL               :: hasDefault   !< default false. True if a default value is given in CreateXXXOption routine
     LOGICAL               :: multiple     !< default false. Indicates if an option can occur multiple times in parameter file
     LOGICAL               :: isRemoved    !< default false. Indicates if the option is already used (GET... call) and therefore is
@@ -316,7 +317,17 @@ END IF
 ! print DEFAULT/CUSTOM or print comment
 IF (mode.EQ.0) THEN
   ! print DEFAULT/CUSTOM
-  IF (this%isSet) THEN
+  IF (this%isStoch) THEN
+    SWRITE(UNIT_stdOut,"(a3)", ADVANCE='NO') ' | '
+    CALL set_formatting("yellow")
+    IF(this%isSet)THEN
+      SWRITE(UNIT_stdOut,'(a7)', ADVANCE='NO')  "CST/HDF"
+    ELSE
+      SWRITE(UNIT_stdOut,'(a7)', ADVANCE='NO')  "***HDF5"
+    END IF 
+    CALL clear_formatting()
+    SWRITE(UNIT_stdOut,"(a3)") ' | '
+  ELSEIF (this%isSet) THEN
     SWRITE(UNIT_stdOut,"(a3)", ADVANCE='NO') ' | '
     CALL set_formatting("green")
     SWRITE(UNIT_stdOut,'(a7)', ADVANCE='NO')  "*CUSTOM"
