@@ -528,6 +528,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 SDEALLOCATE(CalcAvg)
+SDEALLOCATE(CalcFluc)
 SDEALLOCATE(iAvg)
 SDEALLOCATE(iFluc)
 SDEALLOCATE(UAvg)

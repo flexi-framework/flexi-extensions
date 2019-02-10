@@ -81,22 +81,18 @@ nSequentialRuns = nGlobalRuns / nParallelRuns
 DO iSequentialRun=1,nSequentialRuns
 
   iGlobalRun=iParallelRun+nParallelRuns*(iSequentialRun-1)
-  print*,'iGlobalRun'
-  print*,iGlobalRun
 
   ! During last sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
-  !IF(iSequentialRun.EQ.nSequentialRuns)THEN
-    !Color=MERGE(0,MPI_UNDEFINED,iGlobalRun.LE.nGlobalRuns)
-    !CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
-  !END IF 
+  IF(iSequentialRun.EQ.nSequentialRuns)THEN
+    Color=MERGE(0,MPI_UNDEFINED,iGlobalRun.LE.nGlobalRuns)
+    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
+  END IF 
 
   ! Initialize
   CALL InitFlexi(nArgsLoc-1,ArgsLoc,mpi_comm_loc=MPI_COMM_FLEXI)
   ! Run Simulation
   CALL TimeDisc()
-#if USE_MPI
-  CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
-#endif
+
   ! Finalize
   CALL FinalizeFlexi()
 END DO

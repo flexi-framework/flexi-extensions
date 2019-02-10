@@ -287,6 +287,7 @@ USE MOD_Equation_Vars
 USE MOD_Testcase        ,ONLY: FinalizeTestcase
 USE MOD_Riemann         ,ONLY: FinalizeRiemann
 USE MOD_CalcTimeStep    ,ONLY: FinalizeCalctimestep
+USE MOD_TimeAverage     ,ONLY: FinalizeTimeAverage
 #if EDDYVISCOSITY
 USE MOD_EddyVisc        ,ONLY: FinalizeEddyVisc
 #endif /*EDDYVISCOSITY*/
@@ -296,6 +297,7 @@ IMPLICIT NONE
 CALL FinalizeTestcase()
 CALL FinalizeRiemann()
 CALL FinalizeCalctimestep()
+CALL FinalizeTimeAverage()
 #if EDDYVISCOSITY
 CALL FinalizeEddyVisc()
 #endif /*EDDYVISCOSITY*/

@@ -333,7 +333,7 @@ TYPE(tElementOut),POINTER,INTENT(IN) :: ElemList !< Linked list of arrays to wri
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255),ALLOCATABLE :: VarNames(:)
-REAL,ALLOCATABLE               :: ElemData(:,:)
+REAL,ALLOCATABLE               :: ElemData(:,:,:)
 INTEGER                        :: nVar
 TYPE(tElementOut),POINTER      :: e
 !==================================================================================================================================
@@ -349,7 +349,7 @@ END DO
 
 ! Allocate variable names and data array
 ALLOCATE(VarNames(nVar))
-ALLOCATE(ElemData(nVar,nElems))
+ALLOCATE(ElemData(nVar,nElems,1))
 
 ! Fill the arrays
 nVar = 0
@@ -357,24 +357,24 @@ e=>ElemList
 DO WHILE(ASSOCIATED(e))
   nVar=nVar+1
   VarNames(nVar)=e%VarName
-  IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:)=e%RealArray
-  IF(ASSOCIATED(e%RealScalar)) ElemData(nVar,:)=e%RealScalar
-  IF(ASSOCIATED(e%IntArray))   ElemData(nVar,:)=REAL(e%IntArray)
-  IF(ASSOCIATED(e%IntScalar))  ElemData(nVar,:)=REAL(e%IntScalar)
-  IF(ASSOCIATED(e%eval))       CALL e%eval(ElemData(nVar,:)) ! function fills elemdata
+  IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:,1)=e%RealArray
+  IF(ASSOCIATED(e%RealScalar)) ElemData(nVar,:,1)=e%RealScalar
+  IF(ASSOCIATED(e%IntArray))   ElemData(nVar,:,1)=REAL(e%IntArray)
+  IF(ASSOCIATED(e%IntScalar))  ElemData(nVar,:,1)=REAL(e%IntScalar)
+  IF(ASSOCIATED(e%eval))       CALL e%eval(ElemData(nVar,:,1)) ! function fills elemdata
   e=>e%next
 END DO
 
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot.AND. iGlobalRun .EQ. 1)THEN
   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
   CALL WriteAttribute(File_ID,'VarNamesAdd',nVar,StrArray=VarNames)
   CALL CloseDataFile()
 END IF
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                        DataSetName='ElemData', rank=2,  &
-                        nValGlobal=(/nVar,nGlobalElems/),&
-                        nVal=      (/nVar,nElems      /),&
-                        offset=    (/0   ,offSetElem  /),&
+                        DataSetName='ElemData', rank=3,  &
+                        nValGlobal=(/nVar,nGlobalElems,nGlobalRuns/),&
+                        nVal=      (/nVar,nElems      ,1/),&
+                        offset=    (/0   ,offSetElem  ,iGlobalRun-1/),&
                         collective=.TRUE.,RealArray=ElemData)
 DEALLOCATE(ElemData,VarNames)
 END SUBROUTINE WriteAdditionalElemData
@@ -444,10 +444,10 @@ DO WHILE(ASSOCIATED(f))
       NodeData=>tmp
     END IF
     CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                            DataSetName=f%DatasetName, rank=5, &
-                            nValGlobal=(/f%nVal,nGlobalElems/),&
-                            nVal=      (/f%nVal,nElems      /),&
-                            offset=    (/0,0,0,0,  offsetElem  /),&
+                            DataSetName=f%DatasetName, rank=6, &
+                            nValGlobal=(/f%nVal,nGlobalElems,nGlobalRuns/),&
+                            nVal=      (/f%nVal,nElems      ,1/),&
+                            offset=    (/0,0,0,0,  offsetElem ,iGlobalRun-1 /),&
                             collective=.TRUE.,RealArray=NodeData)
     IF(ASSOCIATED(f%Eval)) DEALLOCATE(tmp)
   END IF
@@ -495,10 +495,10 @@ DO WHILE(ASSOCIATED(f))
 END DO
 ! Write the arrays (fixed size)
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                        DataSetName='FieldData', rank=5,  &
-                        nValGlobal=(/nVar,PP_N+1,PP_N+1,PP_NZ+1,nGlobalElems/),&
-                        nVal=      (/nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems      /),&
-                        offset=    (/0   ,0     ,0     ,0      ,offsetElem  /),&
+                        DataSetName='FieldData', rank=6,  &
+                        nValGlobal=(/nVar,PP_N+1,PP_N+1,PP_NZ+1,nGlobalElems,nGlobalRuns/),&
+                        nVal=      (/nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems      ,1/),&
+                        offset=    (/0   ,0     ,0     ,0      ,offsetElem  ,iGlobalRun/),&
                         collective=.TRUE.,RealArray=tmp)
 DEALLOCATE(VarNames,tmp)
 
@@ -538,7 +538,7 @@ END IF
 
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_BaseFlow',OutputTime))//'.h5'
-IF(MPIRoot) CALL GenerateFileSkeleton(TRIM(FileName),'BaseFlow',PP_nVar,PP_N,StrVarNames,MeshFileName,OutputTime)
+IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'BaseFlow',PP_nVar,PP_N,StrVarNames,MeshFileName,OutputTime)
 
 #if PP_dim == 3
   UOut => SpBaseFlow
@@ -562,13 +562,13 @@ END IF
 
 ! Write DG solution
 #if USE_MPI
-CALL MPI_BARRIER(MPI_COMM_FLEXI,iError)
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                        DataSetName='DG_Solution', rank=5,&
-                        nValGlobal=(/PP_nVar,PP_N+1,PP_N+1,NZ_loc+1,nGlobalElems/),&
-                        nVal=      (/PP_nVar,PP_N+1,PP_N+1,NZ_loc+1,nElems/),&
-                        offset=    (/0,      0,     0,     0,     offsetElem/),&
+                        DataSetName='DG_Solution', rank=6,&
+                        nValGlobal=(/PP_nVar,PP_N+1,PP_N+1,NZ_loc+1,nGlobalElems,nGlobalRuns/),&
+                        nVal=      (/PP_nVar,PP_N+1,PP_N+1,NZ_loc+1,nElems,1/),&
+                        offset=    (/0,      0,     0,     0,     offsetElem,iGlobalRun-1/),&
                         collective=.TRUE., RealArray=UOut)
 
 #if PP_dim == 2
@@ -620,7 +620,7 @@ REAL,POINTER                   :: UOut(:,:,:,:,:)
 REAL,POINTER                   :: UOut2D(:,:,:,:,:)
 #endif
 TYPE(tElementOut),POINTER      :: ElementOutTimeAvg
-INTEGER                        :: nVar_loc, nVal_loc(5), nVal_glob(5), i
+INTEGER                        :: nVar_loc, nVal_loc(6), nVal_glob(6), i
 !==================================================================================================================================
 IF(ANY(nVal(1:PP_dim).EQ.0)) RETURN ! no time averaging
 IF(nVarAvg.EQ.0.AND.nVarFluc.EQ.0) RETURN ! no time averaging
@@ -634,7 +634,7 @@ FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_TimeAvg',OutputTime))//'.h5'
 IF(PRESENT(Filename_In)) Filename=TRIM(Filename_In)
 
 ! Write time averaged data --------------------------------------------------------------------------------------------------------
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1)THEN
                     CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',1 ,PP_N,(/'DUMMY_DO_NOT_VISUALIZE'/),&
                            MeshFileName,OutputTime,FutureTime,create=.TRUE.) ! dummy DG_Solution to fix Posti error, tres oegly !!!
   IF(nVarAvg .GT.0) CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',nVarAvg ,PP_N,VarNamesAvg,&
@@ -647,7 +647,7 @@ IF(MPIRoot)THEN
   CALL CloseDataFile()
 END IF
 #if USE_MPI
-CALL MPI_BARRIER(MPI_COMM_FLEXI,iError)
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
 
 ! write dummy FV array
@@ -665,35 +665,35 @@ DO i=1,2
   ELSE
     UOut   => UFluc
   END IF
-  nVal_loc =  (/nVar_loc,nVal,nElems/)
+  nVal_loc =  (/nVar_loc,nVal,nElems,1/)
 #if PP_dim == 2
   IF (.NOT.output2D) THEN
     ! If the output should be done with a full third dimension in a two dimensional computation, we need to expand the solution
     NULLIFY(UOut2D)
     ALLOCATE(UOut2D(nVal_loc(1),nVal_loc(2),nVal_loc(3),nVal(1),nVal_loc(5)))
-    CALL ExpandArrayTo3D(5,nVal_loc,4,nVal(1),UOut,UOut2D)
+    CALL ExpandArrayTo3D(5,nVal_loc(1:5),4,nVal(1),UOut,UOut2D)
     nVal_loc(4)=nVal(1)
     UOut=>UOut2D
   END IF
 #endif
-  nVal_glob=  (/nVal_loc(1:4),nGlobalElems/)
+  nVal_glob=  (/nVal_loc(1:4),nGlobalElems,nGlobalRuns/)
 
   ! Reopen file and write DG solution
   CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                          DataSetName=TRIM(DataSet), rank=5,&
+                          DataSetName=TRIM(DataSet), rank=6,&
                           nValGlobal=nVal_glob,&
                           nVal=      nVal_loc,&
-                          offset=    (/0,0,0,0,offsetElem/),&
-                          collective=.TRUE., RealArray=UOut)
+                          offset=    (/0,0,0,0,offsetElem,iGlobalRun-1/),&
+                          collective=.TRUE., RealArray=(/UOut,1./))
 #if PP_dim == 2
   ! Deallocate UOut only if we did not point to UAvg
   IF(.NOT.output2D) DEALLOCATE(UOut2D)
 #endif
 END DO
 
-IF(MPIROOT) CALL MarkWriteSuccessfull(FileName)
+IF(MPIGlobalRoot) CALL MarkWriteSuccessfull(FileName)
 
-IF(MPIROOT)THEN
+IF(MPIGlobalRoot)THEN
   GETTIME(EndT)
   WRITE(UNIT_stdOut,'(A,F0.3,A)',ADVANCE='YES')'DONE  [',EndT-StartT,'s]'
 END IF
