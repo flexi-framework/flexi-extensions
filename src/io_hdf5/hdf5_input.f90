@@ -738,7 +738,7 @@ ALLOCATE(StochVars(nStochVars))
 CALL ReadArray(ArrayName  = 'Samples',&
                Rank       = 2,&
                nVal       = (/nStochVars,1/),&
-               Offset_in  = iRun,&
+               Offset_in  = iGlobalRun,&
                Offset_dim = 2,&
                RealArray  = StochVars)
 

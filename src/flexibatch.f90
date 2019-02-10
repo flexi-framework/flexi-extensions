@@ -54,12 +54,16 @@ MPI_COMM_ACTIVE=MPI_COMM_WORLD
 myGlobalRank=0
 nGlobalProcessors=1
 #endif
+MPIGlobalRoot=(myGlobalRank .EQ. 0)
 
-! open StochFile, get attributes nRuns, nParallelRuns
-CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
-CALL ReadAttribute(File_ID,'nRuns',1,IntScalar=nRuns)
-CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
-CALL CloseDataFile()
+
+! open StochFile, get attributes nGlobalRuns, nParallelRuns
+!CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
+!CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
+!CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
+!CALL CloseDataFile()
+nGlobalRuns=4
+nParallelRuns=2
 
 
 IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
@@ -68,19 +72,19 @@ iParallelRun = myGlobalRank/nProcsPerRun+1
 
 CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
 
-!We now allow nRuns not to fit perfectly.
-!IF(MOD(nRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nRuns has to be a multiple of nParallelRuns')
-nSequentialRuns = nRuns / nParallelRuns
+!We now allow nGlobalRuns not to fit perfectly.
+!IF(MOD(nGlobalRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nGlobalRuns has to be a multiple of nParallelRuns')
+nSequentialRuns = nGlobalRuns / nParallelRuns
 
 ! run FLEXI in loop
 
 DO iSequentialRun=1,nSequentialRuns
 
-  iRun=iSequentialRun+nParallelRuns*(iSequentialRun-1)
+  iGlobalRun=iSequentialRun+nParallelRuns*(iSequentialRun-1)
 
   ! During last sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
   IF(iSequentialRun.EQ.nSequentialRuns)THEN
-    Color=MERGE(0,MPI_UNDEFINED,iRun.LE.nRuns)
+    Color=MERGE(0,MPI_UNDEFINED,iGlobalRun.LE.nGlobalRuns)
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
   END IF 
 

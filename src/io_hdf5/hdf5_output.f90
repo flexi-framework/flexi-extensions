@@ -192,7 +192,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='DG_Solution', rank=6,&
                         nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
                         nVal=nVal                                              ,&
-                        offset=    (/0,      0,     0,     0,     offsetElem  ,myGlobalRun/),&
+                        offset=    (/0,      0,     0,     0,     offsetElem  ,iGlobalRun/),&
                         collective=.TRUE.,RealArray=UOut)
 
 ! Deallocate UOut only if we did not point to U

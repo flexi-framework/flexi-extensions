@@ -48,13 +48,14 @@ LOGICAL            :: MPILocalRoot                                      !< flag 
 INTEGER            :: MPI_COMM_ACTIVE
 INTEGER            :: myGlobalRank
 INTEGER            :: nGlobalProcessors
-INTEGER            :: nRuns
+INTEGER            :: nGlobalRuns
 INTEGER            :: nParallelRuns
 INTEGER            :: iParallelRun
 INTEGER            :: nProcsPerRun
 INTEGER            :: nSequentialRuns
 INTEGER            :: iSequentialRun
-INTEGER            :: iRun
+INTEGER            :: iGlobalRun
+LOGICAL            :: MPIGlobalRoot         
 
 #if USE_MPI
 INTEGER            :: MPIStatus(MPI_STATUS_SIZE)
