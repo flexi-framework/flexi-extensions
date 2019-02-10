@@ -17,7 +17,7 @@
 !> Option-classes for values that are read from the parameter file (integer,logical, real, string; each single or array).
 !==================================================================================================================================
 MODULE MOD_Options
-  USE MOD_Globals ,ONLY:MPIRoot,UNIT_StdOut
+  USE MOD_Globals ,ONLY:MPIRoot,UNIT_StdOut,MPIGlobalRoot
   IMPLICIT NONE
   PRIVATE
 !================================================

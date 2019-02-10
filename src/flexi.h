@@ -57,7 +57,7 @@
 
 ! Define MPI specific write shortcuts
 #if USE_MPI
-#  define SWRITE IF(MPIRoot) WRITE
+#  define SWRITE IF(MPIGlobalRoot) WRITE
 #  define IPWRITE(a,b) WRITE(a,b)myRank,
 #  define GETTIME(a) a=MPI_WTIME()
 #else

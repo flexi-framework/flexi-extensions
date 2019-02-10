@@ -124,9 +124,7 @@ END IF
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileType=MERGE('ERROR_State','State      ',isErrorFile)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.h5'
-print*,"iSequentialRun"
-print*,iSequentialRun
-IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
+IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
                                                     MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
 
 ! Set size of output
@@ -192,7 +190,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='DG_Solution', rank=6,&
                         nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
                         nVal=nVal                                              ,&
-                        offset=    (/0,      0,     0,     0,     offsetElem  ,iGlobalRun/),&
+                        offset=    (/0,      0,     0,     0,     offsetElem  ,iGlobalRun-1/),&
                         collective=.TRUE.,RealArray=UOut)
 
 ! Deallocate UOut only if we did not point to U
@@ -845,7 +843,7 @@ INTEGER                  :: stat,ioUnit
 REAL                     :: FlushTime
 CHARACTER(LEN=255)       :: FileName,InputFile,NextFile
 !==================================================================================================================================
-IF(.NOT.MPIGlobalRoot .OR. iSequentialRun .NE. 1) RETURN
+IF(.NOT.MPIGlobalRoot .OR. iGlobalRun .NE. 1) RETURN
 
 WRITE(UNIT_stdOut,'(a)')' DELETING OLD HDF5 FILES...'
 IF (.NOT.PRESENT(FlushTime_In)) THEN

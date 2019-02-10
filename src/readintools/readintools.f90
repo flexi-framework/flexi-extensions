@@ -965,12 +965,12 @@ TYPE IS (REAL)
   END DO
   DO iVarStoch=1,nStochVars
     IF(STRICMP(name,StochVarNames(iVarStoch)))THEN
-      IF(iOccurence(iVarStoch).EQ.1) THEN 
+      IF(iOccurrence(iVarStoch).EQ.1) THEN 
         value=StochVars(iVarStoch)
         isStoch=.TRUE.
-      ELSE !iOccurence
-        iOccurence(iVarStoch)=iOccurence(iVarStoch)-1
-      END IF !iOccurence 
+      ELSE !iOccurrence
+        iOccurrence(iVarStoch)=iOccurrence(iVarStoch)-1
+      END IF !iOccurrence 
     END IF !STRICMP
   END DO !iVarStoch
 TYPE IS (STR255)

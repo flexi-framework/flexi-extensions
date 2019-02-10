@@ -28,7 +28,7 @@ CHARACTER(LEN=255)             :: StochFile
 INTEGER                        :: nStochVars
 REAL,ALLOCATABLE               :: StochVars(:)
 CHARACTER(LEN=255),ALLOCATABLE :: StochVarNames(:)
-INTEGER,ALLOCATABLE            :: iOccurence(:)
+INTEGER,ALLOCATABLE            :: iOccurrence(:)
 INTEGER,ALLOCATABLE            :: iArray(:)
 
 INTEGER                        :: nLevelVarsInt
