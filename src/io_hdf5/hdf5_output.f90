@@ -113,7 +113,7 @@ REAL,ALLOCATABLE               :: UOutTmp(:,:,:,:,:)
 REAL                           :: Utmp(5,0:PP_N,0:PP_N,0:PP_NZ)
 REAL                           :: JN(1,0:PP_N,0:PP_N,0:PP_NZ),JOut(1,0:NOut,0:NOut,0:ZDIM(NOut))
 INTEGER                        :: iElem,i,j,k
-INTEGER                        :: nVal(6)
+INTEGER                        :: nVal(5)
 !==================================================================================================================================
 IF (.NOT.WriteStateFiles) RETURN
 IF(MPIGlobalRoot)THEN
@@ -124,11 +124,11 @@ END IF
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileType=MERGE('ERROR_State','State      ',isErrorFile)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.h5'
-IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
+IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
                                                     MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
 
 ! Set size of output
-nVal=(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems,1/)
+nVal=(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems/)
 
 ! build output data
 IF(NOut.NE.PP_N)THEN
@@ -158,9 +158,9 @@ IF(NOut.NE.PP_N)THEN
     UOutTmp = UOut
     DEALLOCATE(UOut)
     ALLOCATE(UOut(PP_nVar,0:NOut,0:NOut,0:NOut,nElems))
-    CALL ExpandArrayTo3D(5,nVal(1:5),4,Nout+1,UOutTmp,UOut)
+    CALL ExpandArrayTo3D(5,nVal,4,Nout+1,UOutTmp,UOut)
     DEALLOCATE(UOutTmp)
-    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems,1/)
+    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/)
   END IF
 #endif
 
@@ -174,7 +174,7 @@ ELSE ! write state on same polynomial degree as the solution
     ALLOCATE(UOut(PP_nVar,0:NOut,0:NOut,0:NOut,nElems))
     CALL ExpandArrayTo3D(5,(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems/),4,NOut+1,U,UOut)
     ! Correct size of the output array
-    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems,1/)
+    nVal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/)
   ELSE
     UOut => U
   END IF
@@ -186,12 +186,14 @@ END IF ! (NOut.NE.PP_N)
 #if USE_MPI
 CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
+print*,'iGlobalRun'
+print*,iGlobalRun
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='DG_Solution', rank=6,&
                         nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
-                        nVal=nVal                                              ,&
+                        nVal=(/nVal,1/)                                              ,&
                         offset=    (/0,      0,     0,     0,     offsetElem  ,iGlobalRun-1/),&
-                        collective=.TRUE.,RealArray=UOut)
+                        collective=.TRUE.,RealArray=(/UOut,1.0/))
 
 ! Deallocate UOut only if we did not point to U
 IF((PP_N .NE. NOut).OR.((PP_dim .EQ. 2).AND.(.NOT.output2D))) DEALLOCATE(UOut)
@@ -333,7 +335,7 @@ TYPE(tElementOut),POINTER,INTENT(IN) :: ElemList !< Linked list of arrays to wri
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255),ALLOCATABLE :: VarNames(:)
-REAL,ALLOCATABLE               :: ElemData(:,:,:)
+REAL,ALLOCATABLE               :: ElemData(:,:)
 INTEGER                        :: nVar
 TYPE(tElementOut),POINTER      :: e
 !==================================================================================================================================
@@ -349,7 +351,7 @@ END DO
 
 ! Allocate variable names and data array
 ALLOCATE(VarNames(nVar))
-ALLOCATE(ElemData(nVar,nElems,1))
+ALLOCATE(ElemData(nVar,nElems))
 
 ! Fill the arrays
 nVar = 0
@@ -357,15 +359,15 @@ e=>ElemList
 DO WHILE(ASSOCIATED(e))
   nVar=nVar+1
   VarNames(nVar)=e%VarName
-  IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:,1)=e%RealArray
-  IF(ASSOCIATED(e%RealScalar)) ElemData(nVar,:,1)=e%RealScalar
-  IF(ASSOCIATED(e%IntArray))   ElemData(nVar,:,1)=REAL(e%IntArray)
-  IF(ASSOCIATED(e%IntScalar))  ElemData(nVar,:,1)=REAL(e%IntScalar)
-  IF(ASSOCIATED(e%eval))       CALL e%eval(ElemData(nVar,:,1)) ! function fills elemdata
+  IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:)=e%RealArray
+  IF(ASSOCIATED(e%RealScalar)) ElemData(nVar,:)=e%RealScalar
+  IF(ASSOCIATED(e%IntArray))   ElemData(nVar,:)=REAL(e%IntArray)
+  IF(ASSOCIATED(e%IntScalar))  ElemData(nVar,:)=REAL(e%IntScalar)
+  IF(ASSOCIATED(e%eval))       CALL e%eval(ElemData(nVar,:)) ! function fills elemdata
   e=>e%next
 END DO
 
-IF(MPIGlobalRoot.AND. iGlobalRun .EQ. 1)THEN
+IF(MPIGlobalRoot.AND. iSequentialRun .EQ. 1)THEN
   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
   CALL WriteAttribute(File_ID,'VarNamesAdd',nVar,StrArray=VarNames)
   CALL CloseDataFile()
@@ -375,7 +377,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         nValGlobal=(/nVar,nGlobalElems,nGlobalRuns/),&
                         nVal=      (/nVar,nElems      ,1/),&
                         offset=    (/0   ,offSetElem  ,iGlobalRun-1/),&
-                        collective=.TRUE.,RealArray=ElemData)
+                        collective=.TRUE.,RealArray=(/ElemData,1./))
 DEALLOCATE(ElemData,VarNames)
 END SUBROUTINE WriteAdditionalElemData
 
@@ -538,7 +540,7 @@ END IF
 
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_BaseFlow',OutputTime))//'.h5'
-IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'BaseFlow',PP_nVar,PP_N,StrVarNames,MeshFileName,OutputTime)
+IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'BaseFlow',PP_nVar,PP_N,StrVarNames,MeshFileName,OutputTime)
 
 #if PP_dim == 3
   UOut => SpBaseFlow
@@ -634,7 +636,7 @@ FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_TimeAvg',OutputTime))//'.h5'
 IF(PRESENT(Filename_In)) Filename=TRIM(Filename_In)
 
 ! Write time averaged data --------------------------------------------------------------------------------------------------------
-IF(MPIGlobalRoot .AND. iGlobalRun .EQ. 1)THEN
+IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1)THEN
                     CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',1 ,PP_N,(/'DUMMY_DO_NOT_VISUALIZE'/),&
                            MeshFileName,OutputTime,FutureTime,create=.TRUE.) ! dummy DG_Solution to fix Posti error, tres oegly !!!
   IF(nVarAvg .GT.0) CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',nVarAvg ,PP_N,VarNamesAvg,&
