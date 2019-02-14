@@ -26,7 +26,7 @@ SAVE
 CHARACTER(LEN=255)             :: StochFile
 
 INTEGER                        :: nStochVars
-REAL,ALLOCATABLE               :: StochVars(:)
+REAL,ALLOCATABLE               :: iStochSample(:)
 CHARACTER(LEN=255),ALLOCATABLE :: StochVarNames(:)
 INTEGER,ALLOCATABLE            :: iOccurrence(:)
 INTEGER,ALLOCATABLE            :: iArray(:)

@@ -198,6 +198,9 @@ CHARACTER(LEN=255) :: blow
 !==================================================================================================================================
 CALL LowCase(a, alow)
 CALL LowCase(b, blow)
+!print*,TRIM(alow),TRIM(blow)
+!print*,len(TRIM(alow))
+!print*,len(TRIM(blow))
 STRICMP = (TRIM(alow).EQ.TRIM(blow))
 END FUNCTION STRICMP
 

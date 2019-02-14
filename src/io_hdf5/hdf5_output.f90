@@ -186,8 +186,7 @@ END IF ! (NOut.NE.PP_N)
 #if USE_MPI
 CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
-print*,'iGlobalRun'
-print*,iGlobalRun
+
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='DG_Solution', rank=6,&
                         nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
@@ -654,9 +653,9 @@ CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 
 ! write dummy FV array
 NULLIFY(ElementOutTimeAvg)
-CALL AddToElemData(ElementOutTimeAvg,'FV_Elems',IntArray=FV_Elems_In)
-CALL WriteAdditionalElemData(FileName,ElementOutTimeAvg)
-DEALLOCATE(ElementOutTimeAvg)
+!CALL AddToElemData(ElementOutTimeAvg,'FV_Elems',IntArray=FV_Elems_In)
+!CALL WriteAdditionalElemData(FileName,ElementOutTimeAvg)
+!DEALLOCATE(ElementOutTimeAvg)
 
 DO i=1,2
   nVar_loc =  MERGE(nVarAvg,nVarFluc,i.EQ.1)
@@ -686,7 +685,7 @@ DO i=1,2
                           nValGlobal=nVal_glob,&
                           nVal=      nVal_loc,&
                           offset=    (/0,0,0,0,offsetElem,iGlobalRun-1/),&
-                          collective=.TRUE., RealArray=(/UOut,1./))
+                          collective=.TRUE., RealArray=UOut)
 #if PP_dim == 2
   ! Deallocate UOut only if we did not point to UAvg
   IF(.NOT.output2D) DEALLOCATE(UOut2D)

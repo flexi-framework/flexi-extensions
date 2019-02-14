@@ -706,7 +706,7 @@ ALLOCATE(StochVarNames(nStochVars))
 ALLOCATE(iOccurrence(nStochVars))
 ALLOCATE(iArray(nStochVars))
 CALL ReadAttribute(File_ID,'StochVarNames',nStochVars,StrArray=StochVarNames)
-CALL ReadAttribute(File_ID,'iOccurrence',   nStochVars,IntArray=iOccurrence)
+CALL ReadAttribute(File_ID,'iOccurrence',  nStochVars,IntArray=iOccurrence)
 CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
 
 
@@ -730,18 +730,18 @@ CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
 !IF(nLevelVarsStr.GT.0)THEN
   !ALLOCATE(LevelVarNamesStr(nLevelVarsStr))
   !CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
-  !ALLOCATE(LevelVarsStr(nLevelVarsStr))io_hdf5/hdf5_input.f90
+  !ALLOCATE(LevelVarsStr(nLevelVarsStr))
   !CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
 !END IF 
 
-ALLOCATE(StochVars(nStochVars))
+
+ALLOCATE(iStochSample(nStochVars))
 CALL ReadArray(ArrayName  = 'Samples',&
                Rank       = 2,&
                nVal       = (/nStochVars,1/),&
-               !Offset_in  = iGlobalRun,&
-               Offset_in  = 0,&
+               Offset_in  = iGlobalRun-1,&
                Offset_dim = 2,&
-               RealArray  = StochVars)
+               RealArray  = iStochSample)
 
 CALL CloseDataFile()
 
@@ -767,7 +767,7 @@ SDEALLOCATE(iArray)
 SDEALLOCATE(LevelVarNamesInt)
 SDEALLOCATE(LevelVarNamesReal)
 SDEALLOCATE(LevelVarNamesStr)
-SDEALLOCATE(StochVars)
+SDEALLOCATE(iStochSample)
 END SUBROUTINE FinalizeBatchInput
 
 END MODULE MOD_HDF5_Input

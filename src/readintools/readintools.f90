@@ -944,7 +944,7 @@ LOGICAL,INTENT(INOUT)                :: isStoch
 LOGICAL,INTENT(INOUT)                :: isSet
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER               :: iVarStoch
+INTEGER                              :: iVarStoch
 !==================================================================================================================================
 SELECT TYPE(value)
 TYPE IS (INTEGER)
@@ -966,7 +966,7 @@ TYPE IS (REAL)
   DO iVarStoch=1,nStochVars
     IF(STRICMP(name,StochVarNames(iVarStoch)))THEN
       IF(iOccurrence(iVarStoch).EQ.1) THEN 
-        value=StochVars(iVarStoch)
+        value=iStochSample(iVarStoch)
         isStoch=.TRUE.
       ELSE !iOccurrence
         iOccurrence(iVarStoch)=iOccurrence(iVarStoch)-1
@@ -1011,14 +1011,14 @@ DO iVarStoch=1,nStochVars
   IF(STRICMP(name,StochVarNames(iVarStoch)))THEN
     isStoch=.TRUE.
     IF(iArray(iVarStoch).EQ.0)THEN
-      value=StochVars(iVarStoch)
+      value=iStochSample(iVarStoch)
       isSet=.FALSE.
     ELSE
       !ALLOCATE(valueTmp(SIZE(value)))
       !valueTmp=value
       !valueTmp(iArray(iVarStoch))=StochVars(iVarStoch)
       !value=valueTmp
-      value(iArray(iVarStoch))=StochVars(iVarStoch)
+      value(iArray(iVarStoch))=iStochSample(iVarStoch)
     END IF 
   END IF  
 END DO
