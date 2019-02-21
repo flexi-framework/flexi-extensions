@@ -12,6 +12,9 @@ CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISUALIZERECORDPOINTS "Build the Record Point
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_EVALUATERECORDPOINTS  "Build the Record Point aposteriori evaluation tool" ON  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_SWAPMESH              "Build the Swapmesh tool"                            OFF "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_CHANNEL_FFT           "Build the channel FFT tool"                         OFF "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MLMC  "Build MLMC tools" ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MLMC_FIELDSOLUTION  "Build MLMC field solution tools" ON  "POSTI_BUILD_MLMC" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MLMC_RP  "Build MLMC recordpoints tools" OFF  "POSTI_BUILD_MLMC" OFF)
 
 
 SET(   POSTI_WHICH_EQNSYS "navierstokes" CACHE STRING
@@ -19,7 +22,7 @@ SET(   POSTI_WHICH_EQNSYS "navierstokes" CACHE STRING
 SET(   POSTI_WHICH_EOS    "idealgas" CACHE STRING
                         "Used equation of state (idealgas)")
 
-IF(POSTI_BUILD_VISUALIZERECORDPOINTS OR POSTI_BUILD_CHANNEL_FFT)
+IF(POSTI_BUILD_VISUALIZERECORDPOINTS OR POSTI_BUILD_CHANNEL_FFT OR POSTI_BUILD_MLMC_RP)
   # =========================================================================
   # FFTW (FFT tool)
   # =========================================================================
@@ -92,3 +95,14 @@ ENDIF()
 IF(POSTI_BUILD_CHANNEL_FFT)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/channel_fft/CMakeLists.txt)
 ENDIF()
+
+IF(POSTI_BUILD_MLMC_FIELDSOLUTION)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/mlmc/estimatesigma/CMakeLists.txt)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/mlmc/combinelevels/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_MLMC_RP)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/mlmc/recordpoints/estimatesigma/CMakeLists.txt)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/mlmc/recordpoints/combinelevels/CMakeLists.txt)
+ENDIF()
+       

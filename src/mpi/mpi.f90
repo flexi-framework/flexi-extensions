@@ -129,6 +129,13 @@ MPIRoot     =.TRUE.
 MPILocalRoot=.TRUE.
 #endif  /*USE_MPI*/
 
+IF (.NOT.PRESENT(mpi_comm_IN)) THEN
+  MPIGlobalRoot=MPIRoot
+  MPI_COMM_ACTIVE=MPI_COMM_FLEXI
+  myGlobalRank=myRank
+  nGlobalProcessors=nProcessors
+END IF 
+
 ! At this point the initialization is not completed. We first have to create a new MPI communicator.
 END SUBROUTINE InitMPI
 

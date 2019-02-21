@@ -27,6 +27,10 @@ INTERFACE InitAnalyze
   MODULE PROCEDURE InitAnalyze
 END INTERFACE
 
+INTERFACE InitAnalyzeBasis
+  MODULE PROCEDURE InitAnalyzeBasis
+END INTERFACE
+
 INTERFACE Analyze
   MODULE PROCEDURE Analyze
 END INTERFACE
@@ -36,7 +40,7 @@ INTERFACE FinalizeAnalyze
 END INTERFACE
 
 
-PUBLIC:: Analyze, InitAnalyze, FinalizeAnalyze
+PUBLIC:: Analyze, InitAnalyze, InitAnalyzeBasis, FinalizeAnalyze
 !==================================================================================================================================
 
 PUBLIC::DefineParametersAnalyze

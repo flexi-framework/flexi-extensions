@@ -705,7 +705,7 @@ END SUBROUTINE WriteTimeAverage
 !> Subroutine that generates the output file on a single processor and writes all the necessary attributes (better MPI performance)
 !==================================================================================================================================
 SUBROUTINE GenerateFileSkeleton(FileName,TypeString,nVar,NData,StrVarNames,MeshFileName,OutputTime,&
-                                FutureTime,Dataset,create,withUserblock)
+                                FutureTime,Dataset,create,withUserblock,batchMode)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
@@ -715,6 +715,7 @@ USE MOD_Interpolation_Vars ,ONLY: NodeType
 #if FV_ENABLED
 USE MOD_FV_Vars            ,ONLY: FV_X,FV_w
 #endif
+USE MOD_BatchInput_Vars    ,ONLY: nPreviousRuns
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -729,6 +730,7 @@ REAL,INTENT(IN),OPTIONAL       :: FutureTime         !< Time of next output
 CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: Dataset      !< Name of the dataset
 LOGICAL,INTENT(IN),OPTIONAL    :: create             !< specify whether file should be newly created
 LOGICAL,INTENT(IN),OPTIONAL    :: withUserblock      !< specify whether userblock data shall be written or not
+LOGICAL,INTENT(IN),OPTIONAL    :: batchMode          !< specify whether userblock data shall be written or not
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
@@ -738,13 +740,15 @@ CHARACTER(LEN=255)             :: Dataset_Str,Varname_Str
 #if FV_ENABLED
 REAL                           :: FV_w_array(0:PP_N)
 #endif
-LOGICAL                        :: withUserblock_loc,create_loc
+LOGICAL                        :: withUserblock_loc,create_loc,batchMode_loc
 !==================================================================================================================================
 ! Create file
 create_loc=.TRUE.
 withUserblock_loc=.FALSE.
+batchMode_loc=.TRUE.
 IF(PRESENT(create))                       create_loc       =create
 IF(PRESENT(withUserblock).AND.create_loc) withUserblock_loc=withUserblock
+IF(PRESENT(batchMode))                    batchMode_loc    =batchMode
 Dataset_Str='DG_Solution'
 Varname_Str='VarNames'
 IF(PRESENT(Dataset))THEN
@@ -756,13 +760,11 @@ CALL OpenDataFile(TRIM(FileName),create=create_loc,single=.TRUE.,readOnly=.FALSE
                   userblockSize=MERGE(userblock_total_len,0,withUserblock_loc))
 
 ! Preallocate the data space for the dataset.
-IF(output2D) THEN
-  Dimsf=(/nVar,NData+1,NData+1,1,nGlobalElems,nGlobalRuns/)
-ELSE
-  Dimsf=(/nVar,NData+1,NData+1,NData+1,nGlobalElems,nGlobalRuns/)
-END IF
+Dimsf=(/nVar,NData+1,NData+1,NData+1,nGlobalElems,nGlobalRuns/)
+IF(output2D) Dimsf(4)=1
+nDims=MERGE(6,5,batchMode_loc)
 
-CALL H5SCREATE_SIMPLE_F(6, Dimsf, FileSpace, iError)
+CALL H5SCREATE_SIMPLE_F(nDims, Dimsf(1:nDims), FileSpace, iError)
 ! Create the dataset with default properties.
 HDF5DataType=H5T_NATIVE_DOUBLE
 CALL H5DCREATE_F(File_ID,TRIM(Dataset_Str), HDF5DataType, FileSpace, DSet_ID, iError)
@@ -793,8 +795,10 @@ IF(create_loc)THEN
   FV_w_array(:)= FV_w
   CALL WriteAttribute(File_ID,'FV_w',PP_N+1,RealArray=FV_w_array)
 #endif
-
   CALL WriteAttribute(File_ID,'NComputation',1,IntScalar=PP_N)
+
+  CALL WriteAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
+  CALL WriteAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
 END IF
 
 CALL CloseDataFile()
