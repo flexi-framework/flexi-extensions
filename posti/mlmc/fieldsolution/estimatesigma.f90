@@ -35,9 +35,10 @@ USE MOD_MPI,                     ONLY: InitMPIvars,FinalizeMPI
 USE MOD_SwapMesh,                ONLY: WriteNewStateFile,FinalizeSwapMesh
 USE MOD_EOS,                     ONLY: ConsToPrim
 USE MOD_InterpolateSolution,     ONLY: InterpolateSolution
-USE MOD_EstimateSigma_Vars
-USE MOD_EstimateSigma_ReadState ,ONLY: ReadOldSums
-USE MOD_EstimateSigma_Output
+USE MOD_MLMC_Vars
+USE MOD_MLMC_SwapMesh_Vars
+USE MOD_MLMC_Input,              ONLY: ReadSums,ReadStateFile
+USE MOD_MLMC_Output
 USE MOD_IO_HDF5                 ,ONLY: AddToFieldData
 USE MOD_HDF5_Input,              ONLY: OpenDataFile,CloseDataFile,ReadAttribute
 USE MOD_Mesh                    ,ONLY: DefineParametersMesh,InitMesh
@@ -52,7 +53,7 @@ IMPLICIT NONE
 CHARACTER(LEN=255)  :: tmp
 INTEGER             :: i,j,k,iElem
 REAL,ALLOCATABLE    :: UPrim(:,:,:,:,:)
-LOGICAL             :: validInput,isLevel1
+LOGICAL             :: validInput,hasCoarse
 INTEGER             :: nPrevious
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
@@ -113,8 +114,8 @@ CALL CloseDataFile()
 varAna       = GETINT('varAna')
 nAna         = GETINT('nAna')
 
-isLevel1 = nArgs.EQ.2
-IF(.NOT.isLevel1) StateFileCoarse=TRIM(Args(3))
+hasCoarse = nArgs.EQ.3
+IF(hasCoarse) StateFileCoarse=TRIM(Args(3))
 
 
 !Swapmesh
@@ -144,7 +145,7 @@ CALL InitMPIvars()
 CALL InitSwapmesh(StateFileFine)
 CALL SwapmeshToEstsig(.TRUE.)
 
-IF (.NOT.isLevel1) THEN
+IF (hasCoarse) THEN
   CALL FinalizeSwapMesh()
   CALL InitSwapmesh(StateFileCoarse)
   CALL SwapmeshToEstsig(.FALSE.)
@@ -164,25 +165,17 @@ CALL CloseDataFile()
 IF (TRIM(FileType)=='State') THEN
   suffix='state'
   DataSetName="DG_Solution"
-  nVarTotal=10
 ELSEIF (TRIM(FileType)=='TimeAvg') THEN
   suffix='avg'
   DataSetName="Mean"
-  nVarTotal=10
 ELSE
   CALL CollectiveStop(__STAMP__,'ERROR - Invalid FileType')
 END IF
 
 FileNameSums = 'postproc_'//TRIM(ProjectName)//'_'//TRIM(suffix)//'.h5'
 
-!FilenameMean     = 'mean_'//TRIM(suffix)//'.h5'
-!FilenameVariance = 'variance_'//TRIM(suffix)//'.h5'
-
-
 snSamples  =1./REAL(nEnd)
 snSamplesM1=1./(REAL(nEnd)-1.)
-
-
 
 SWRITE(UNIT_stdOut,'(132("="))')
 
@@ -199,9 +192,7 @@ IF (TRIM(FileType)=='State') THEN
   ALLOCATE(UPrim       (nVar_State+1,0:NNew,  0:NNew,  0:NNew,  nElemsNew))
 END IF
 
-IF (isLevel1) THEN
-  UCoarse = 0.
-END IF
+IF (.NOT.hasCoarse) UCoarse = 0.
 
 IF (nStart.EQ.1) THEN
   UFineSum     =0.
@@ -210,7 +201,8 @@ IF (nStart.EQ.1) THEN
   UCoarseSqSum =0.
   DUSqSum      =0.
 ELSE
-  CALL ReadOldSums()
+  nVal=(/nVarTotal,NNew,NNew,NNew,nElemsNew/)
+  CALL ReadSums(FileNameSums)
 END IF
 
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -238,7 +230,7 @@ DO iSample=nStart,nEnd
     UFine=U
   END IF
 
-  IF (.NOT.isLevel1) THEN
+  IF (hasCoarse) THEN
     CALL EstsigToSwapmesh(.FALSE.)
     CALL ReadStateFile(StateFileCoarse,DataSetName,iSample-nStart)
     SWRITE(UNIT_stdOut,'(A)') ' EVALUATING THE COARSE SOLUTION ON NEW MESH ...'
@@ -273,18 +265,9 @@ CALL BiasL2(BiasField(VarAna,:,:,:,:),Bias)
 
 ! Stochastic Error:
 SigmaSqField = snSamplesM1*( DUSqSum                   - snSamples* (UFineSum-UCoarseSum) * (UFineSum  -UCoarseSum)  )
-
 CALL IntegrateOverMesh(SigmaSqField    (VarAna,:,:,:,:),SigmaSq)
 
-SigmaSqField = snSamplesM1*( UFineSqSum                - snSamples*  UFineSum*UFineSum                               )
-
-CALL IntegrateOverMesh(SigmaSqField(VarAna,:,:,:,:),SigmaSqFine)
-
-SigmaSqField = SigmaSqField&
-             - snSamplesM1*( UCoarseSqSum              - snSamples*  UCoarseSum*UCoarseSum                           )
-
 CALL WriteSumsToHDF5()
-!CALL WriteMeanAndVarianceToHDF5()
 
 CALL FinalizeSwapMesh()
 
@@ -319,11 +302,6 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 CALL prms%SetSection("EstimateSigmaSq")
-!CALL prms%CreateIntOption(      "nStart"             , "Number of first new sample")
-!CALL prms%CreateIntOption(      "nEnd"               , "Number of last new sample")
-!CALL prms%CreateIntOption(      "nIter"              , "Number of Iteration")
-!CALL prms%CreateIntOption(      "nIterIn"            , "Number of Iteration of last sums file")
-!CALL prms%CreateIntOption(      "iLevel"             , "SigmaSq is computed only on this specific level")
 CALL prms%CreateIntOption(      "varAna"             , "Specifiy the variable from U cons to comput SigmaSq")
 CALL prms%CreateIntOption(      "NNew"               , "Polynomial degree used in new state files")
 CALL prms%CreateIntOption(      "nAna"               , "Polynomial degree used for integration")
@@ -333,10 +311,7 @@ CALL prms%CreateLogicalOption(  "useCurvedsOld"      , "Controls usage of high-o
                                                       "high-order data and treat curved meshes as linear meshes.", '.TRUE.')
 CALL prms%CreateLogicalOption(  "useCurvedsNew"      , "Controls usage of high-order information in new mesh. Turn off to discard "//&
                                                       "high-order data and treat curved meshes as linear meshes.", '.TRUE.')
-!CALL prms%CreateIntOption(      "NInter"             , "Polynomial degree used for interpolation on new mesh (should be equal or  "//&
-                                                       !"higher than N)" )
 CALL prms%CreateIntOption(      "NNew"               , "Polynomial degree used in new state files")
-!CALL prms%CreateIntOption(      "NSuper"             , "Polynomial degree used for supersampling on the old mesh")
 CALL prms%CreateRealOption(     "maxTolerance"       , "Tolerance used to mark points as invalid if outside of reference element "//&
                                                        "more than maxTolerance",'5.e-2')
 CALL prms%CreateLogicalOption(  "printTroublemakers" , "Turn output of not-found points on or off",'.TRUE.')
@@ -426,26 +401,8 @@ ALLOCATE(equalElem(nElemsNew))
 ! Find the parametric coordinates of the interpolation points of the new state in the old mesh
 CALL GetParametricCoordinates()
 
-! Allocate aray for new and the old solution - for the new solution, we use the U array from DG vars
-! to be able to later use the WriteState routine from FLEXI
-!ALLOCATE(UOld(nVar_State,0:NState,0:NState,0:NState,nElemsOld))
 ALLOCATE(U   (nVar_State,0:NNew,  0:NNew,  0:NNew,  nElemsNew))
 
-!CALL OpenDataFile(FileName,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-!CALL DatasetExists(File_ID, 'FieldData', FieldDataFound)
-!nVar_Field = 0
-!IF (FieldDataFound) THEN
-  !! get size of FieldData array
-  !CALL GetDataSize(File_ID,'FieldData',nDims,HSize)
-  !nVar_Field=INT(HSize(1),4)
-  !! read FieldData
-  !IF(.NOT. ALLOCATED(VarNamesField)) ALLOCATE(VarNamesField(nVar_Field))
-  !CALL ReadAttribute(File_ID,'VarNamesAddField',nVar_Field,StrArray=VarNamesField)
-  !!CALL ReadAttribute(File_ID,'Project_Name'    ,1         ,StrScalar=ProjectName)
-  !IF(.NOT. ALLOCATED(FieldDataOld)) ALLOCATE(FieldDataOld(nVar_Field,0:NState,0:NState,0:NState,nElemsOld))
-  !IF(.NOT. ALLOCATED(FieldData))     ALLOCATE(FieldData(nVar_Field,0:NNew,0:NNew,0:NNew,nElemsNew))
-!END IF
-!CALL CloseDataFile()
 END SUBROUTINE InitSwapmesh
 
 
@@ -457,7 +414,8 @@ SUBROUTINE SwapmeshToEstsig(isFine)
 ! MODULES
 ! !
 USE MOD_SwapMesh_Vars
-USE MOD_EstimateSigma_Vars
+USE MOD_MLMC_Vars
+USE MOD_MLMC_SwapMesh_Vars
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
@@ -514,7 +472,8 @@ SUBROUTINE EstsigToSwapmesh(isFine)
 ! MODULES
 
 USE MOD_SwapMesh_Vars
-USE MOD_EstimateSigma_Vars
+USE MOD_MLMC_Vars
+USE MOD_MLMC_SwapMesh_Vars
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
@@ -569,7 +528,7 @@ SUBROUTINE IntegrateOverMesh(UIn,resu)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars,          ONLY: sJ
-USE MOD_EstimateSigma_Vars, ONLY: nAna
+USE MOD_MLMC_Vars,          ONLY: nAna
 USE MOD_Swapmesh_Vars,      ONLY: nElemsNew,NNew
 USE MOD_Exactfunc,          ONLY: ExactFunc
 USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
@@ -626,7 +585,7 @@ SUBROUTINE BiasL2(UIn,resu)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars,          ONLY: sJ
-USE MOD_EstimateSigma_Vars, ONLY: nAna
+USE MOD_MLMC_Vars,          ONLY: nAna
 USE MOD_Swapmesh_Vars,      ONLY: nElemsNew,NNew
 USE MOD_Exactfunc,          ONLY: ExactFunc
 USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
@@ -673,38 +632,13 @@ END SUBROUTINE BiasL2
 
 
 !===================================================================================================================================
-!> Open a state file, read the old state and store the information later needed to write a new state.
-!===================================================================================================================================
-SUBROUTINE ReadStateFile(StateFile,DataSetName,offset)
-! MODULES                                                                                                                          !
-USE MOD_HDF5_Input,    ONLY: OpenDataFile,CloseDataFile,ReadArray,ReadAttribute
-USE MOD_IO_HDF5,       ONLY: File_ID
-USE MOD_Swapmesh_Vars, ONLY: nVar_State,NState,nElemsOld,Time_State,UOld
-!----------------------------------------------------------------------------------------------------------------------------------!
-IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES
-CHARACTER(LEN=255),INTENT(IN) :: StateFile !< State file to be read
-CHARACTER(LEN=255),INTENT(IN) :: DataSetName
-INTEGER,INTENT(IN)            :: offset
-!-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!===================================================================================================================================
-CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-CALL ReadArray(TRIM(DataSetName),6,&
-               (/nVar_State,NState+1,NState+1,NState+1,nElemsOld,1/),offset,6,RealArray=UOld)
-CALL ReadAttribute(File_ID,'Time',1,RealScalar=Time_State)
-CALL CloseDataFile()
-END SUBROUTINE ReadStateFile
-
-
-
-!===================================================================================================================================
 !> Copy all necessary variables for InterpolateSolution from Estsig data type to according swapmesh readable variables
 !===================================================================================================================================
 SUBROUTINE FinalizeEstimateSigma()
 ! MODULES
 
-USE MOD_EstimateSigma_Vars
+USE MOD_MLMC_Vars
+USE MOD_MLMC_SwapMesh_Vars
 USE MOD_DG_Vars, ONLY: U,UPrim
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
@@ -712,18 +646,18 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
-SDEALLOCATE(U           )
-SDEALLOCATE(UPrim       )
+SDEALLOCATE(U)
+SDEALLOCATE(UPrim)
 
-SDEALLOCATE(UFine       )
-SDEALLOCATE(UFineSum    )
-SDEALLOCATE(UFineSqSum  )
+SDEALLOCATE(UFine)
+SDEALLOCATE(UFineSum)
+SDEALLOCATE(UFineSqSum)
 
-SDEALLOCATE(UCoarse     )
-SDEALLOCATE(UCoarseSum  )
+SDEALLOCATE(UCoarse)
+SDEALLOCATE(UCoarseSum)
 SDEALLOCATE(UCoarseSqSum)
 
-SDEALLOCATE(DUSqSum     )
+SDEALLOCATE(DUSqSum)
 SDEALLOCATE(SigmaSqField)
 !----------------------------------------------------------------------
 SDEALLOCATE(FinexiInter)
