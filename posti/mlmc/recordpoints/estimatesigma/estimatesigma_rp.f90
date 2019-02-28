@@ -31,12 +31,16 @@ USE MOD_MPI                         ,ONLY:DefineParametersMPI,InitMPI
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                            :: iArg,iExt,nDataFiles,iSample
+INTEGER                            :: iArg,
+INTEGER:                           :: iExt,iSample
 REAL                               :: df
-CHARACTER(LEN=255)                 :: InputIniFile
-CHARACTER(LEN=255)                 :: InputDataFile
-CHARACTER(LEN=255)                 :: sample_string,level_string,RPFilePath,iteration_string,iterationM1_string
-CHARACTER(LEN=255),ALLOCATABLE     :: DataFiles(:)
+CHARACTER(LEN=255),ALLOCATABLE     :: DataFilesFine(:)
+CHARACTER(LEN=255),ALLOCATABLE     :: DataFilesCoarse(:)
+LOGICAL                            :: hasCoarse, validInput
+INTEGER                            :: nStartCoarse
+INTEGER                            :: nFiles
+INTEGER                            :: nDataFiles
+INTEGER                            :: nPrevious
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI() ! NO PARALLELIZATION, ONLY FOR COMPILING WITH MPI FLAGS ON SOME MACHINES OR USING MPI-DEPENDANT HDF5
@@ -44,7 +48,7 @@ IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
      'This tool is designed only for single execution!')
 
 WRITE(UNIT_stdOut,'(A)') " ||======================================||"
-WRITE(UNIT_stdOut,'(A)') " || Compute SigmaSq based on RP data!    ||"
+WRITE(UNIT_stdOut,'(A)') " || Compute SigmaSq based on RP data     ||"
 WRITE(UNIT_stdOut,'(A)') " ||======================================||"
 WRITE(UNIT_stdOut,'(A)')
 
@@ -61,40 +65,45 @@ WRITE(UNIT_stdOut,'(A)') " || Compute sigmaSq based on RP data!    ||"
   CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, Args(1))
   STOP
 END IF
-
-nArgs=COMMAND_ARGUMENT_COUNT()
-IF(nArgs .LT. 2) CALL Abort(__STAMP__,'Missirg argument')
-CALL GET_COMMAND_ARGUMENT(1,InputIniFile)
-! Get start index of file extension
-iExt=INDEX(InputIniFile,'.',BACK = .TRUE.)
-! check if first file is a .ini file
-IF(InputIniFile(iExt+1:iExt+3) .NE. 'ini') &
-  CALL Abort(__STAMP__,'ERROR - No / invalid parameter file given.')
+validInput = .TRUE.
+IF(nArgs.LT.3)                                         validInput=.FALSE.
+IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))    validInput=.FALSE.
+IF(.NOT.(STRICMP(GetFileExtension(Args(3)),'h5')))     validInput=.FALSE.
+IF(.NOT.(STRICMP(GetFileExtension(Args(nArgs)),'h5'))) validInput=.FALSE.
+IF (.NOT.validInput) THEN
+  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file [number of Files] statefiles')
+END IF
 
 CALL prms%read_options(Args(1))
+nFiles=Args(2)
+nDataFiles=nArgs-2
 
-!CALL InitRPSet()
-
-nDataFiles=nArgs-1
-ALLOCATE(DataFiles(1:nDataFiles))
-
-! get list of input files
-DO iArg=2,nArgs
-  CALL GET_COMMAND_ARGUMENT(iArg,DataFiles(iArg-1))
+ALLOCATE(DataFilesFine(1:nFiles))
+DO iArg=3,3+(nFiles-1)
+  CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-1))
 END DO
+
+hasCoarse = (MOD(nDataFiles,nFiles).EQ.2)
+IF(hasCoarse) THEN
+  nStartCoarse = (2+ nFiles) + 1
+  ALLOCATE(DataFilesCoarse(1:nDataFiles))
+  DO iArg=nStartCoarse,nDataFiles
+    CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-1))
+  END DO
+END IF
+
+CALL OpenDataFile(DataFilesFine(1),create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPrevious)
+nStart=nPrevious+1
+CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
+nEnd=nEnd+nPrevious
+CALL ReadAttribute(File_ID,'Project_Name',1,StrScalar=ProjectName)
+FileNameSums = 'postproc_'//TRIM(ProjectName)//'.h5'
+CALL CloseDataFile()
 
 CALL InitParameters()
 CALL InitIOHDF5()
 !-----------------------------------------------------------------------------------------------------------------------------------
-WRITE(level_string,"(I0)") iLevel
-WRITE(iteration_string,"(I0)") nIter
-WRITE(iterationM1_string,"(I0)") nIterIn
-Filename_SigmaSq  = 'level_'//TRIM(level_string)//'/'//'sigmasq_spec.dat'
-Filename_SigmaSq_Fine  = 'level_'//TRIM(level_string)//'/'//'fine_sigmasq_spec.dat'
-FileNameSumsIn    = 'level_'//TRIM(level_string)//'/sums_'//TRIM(iterationM1_string)//'_spec.h5'
-FileNameSumsOut   = 'level_'//TRIM(level_string)//'/sums_'//TRIM(iteration_string)//'_spec.h5'
-FilenameMean      = 'level_'//TRIM(level_string)//'/'//'mean_spec.h5'
-FilenameVariance  = 'level_'//TRIM(level_string)//'/'//'variance_spec.h5'
 snSamples  =1./REAL(nEnd)
 snSamplesM1=1./(REAL(nEnd)-1.)
 
@@ -103,9 +112,9 @@ DO iSample=nStart,nEnd
 
    ! readin RP Data from all input files
    DO iArg=1,nDataFiles
-     InputDataFile=DataFiles(iArg)
+     InputDataFile=DataFilesFine(iArg)
      WRITE(UNIT_stdOut,'(132("="))')
-     WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the fine grid of Level.',iLevel
+     WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the fine grid of Level.'
      WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
      WRITE(UNIT_stdOut,'(132("="))')
 
@@ -114,9 +123,6 @@ DO iSample=nStart,nEnd
      iExt=INDEX(InputDataFile,'.',BACK = .TRUE.)
      IF(InputDataFile(iExt+1:iExt+2) .NE. 'h5') &
        CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
-     ! Read in main attributes from given HDF5 State File
-     InputDataFile='level_'//TRIM(level_string)//'/f/sample_'//TRIM(sample_string)//'/'//&
-      TRIM(InputDataFile)
      WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(InputDataFile), """"
      IF(iArg.EQ.1) THEN
        CALL ReadRPData(InputDataFile,firstFile=.TRUE.)
@@ -140,17 +146,6 @@ DO iSample=nStart,nEnd
 
 
    IF (iSample .EQ. nStart) THEN
-     !ALLOCATE(UFine(nVarVisu,nPoints,nSamples_spec))
-     !ALLOCATE(UCoarse(nVarVisu,nPoints,nSamples_spec))
-     !ALLOCATE(DeltaU(nVarVisu,nPoints,nSamples_spec))
-     !ALLOCATE(USum(nVarVisu,nPoints,nSamples_spec))
-     !ALLOCATE(USqSum(nVarVisu,nPoints,nSamples_spec))
-     !ALLOCATE(SigmaSqSpec(nVarVisu,nPoints,nSamples_spec))
-     !UFine(:,:,:)=0
-     !UCoarse(:,:,:)=0
-     !DeltaU(:,:,:)=0
-     !USum(:,:,:)=0
-     !USqSum(:,:,:)=0
      ALLOCATE(UFine(nVarVisu,nPoints,nSamples_spec))
      ALLOCATE(UCoarse(nVarVisu,nPoints,nSamples_spec))
      ALLOCATE(UFineSum(nVarVisu,nPoints,nSamples_spec))
@@ -174,17 +169,17 @@ DO iSample=nStart,nEnd
 
    UFine(:,:,:)=RPData_spec(:,:,:)
    CALL FinalizeRPData()
-   !CALL FinalizeOutput()
-   IF (iLevel .GT. 1 .OR. iSample .LT. nEnd) CALL FinalizeSpec()
-   IF (iLevel .GT. 1 .OR. iSample .LT. nEnd) CALL FinalizeRPSet()
+   IF (hasCoarse .OR. iSample .LT. nEnd) THEN
+     CALL FinalizeSpec()
+     CALL FinalizeRPSet()
+  END IF
 
-
-   IF (iLevel .GT. 1) THEN
+   IF (hasCoarse.GT.1) THEN
      ! readin RP Data from all input files
      DO iArg=1,nDataFiles
-       InputDataFile=DataFiles(iArg)
+       InputDataFile=DataFilesCoarse(iArg)
        WRITE(UNIT_stdOut,'(132("="))')
-       WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the coarse grid of Level.',iLevel
+       WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the coarse grid.'
        WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
        WRITE(UNIT_stdOut,'(132("="))')
 
@@ -219,7 +214,6 @@ DO iSample=nStart,nEnd
      IF (iSample .LT. nEnd) CALL FinalizeRPSet()
    END IF
 
-
    UFineSum     = UFineSum     + UFine
    UCoarseSum   = UCoarseSum   + UCoarse
 
@@ -227,39 +221,28 @@ DO iSample=nStart,nEnd
    UCoarseSqSum = UCoarseSqSum + UCoarse*UCoarse
 
    DUSqSum      = DUSqSum      + (UFine-UCoarse)*(UFine-UCoarse)
-
-
 END DO
 
 ! SigmaSq Computation
 df=RPData_freq(nSamples_spec)/(nSamples_Spec-1)
-
-
-
+Bias=Sum(df*snSamples*ABS(UFineSum-UCoarseSum)))
 CALL WriteSumsToHDF5()
 
 SigmaSqSpec = snSamplesM1*( DUSqSum - snSamples*(UFineSum-UCoarseSum) * (UFineSum - UCoarseSum) )
 SigmaSq = Sum(df*SigmaSqSpec(VarAna,RP_specified,3:nSamples_Spec))
-! Output SigmaSq
-SWRITE(UNIT_stdOut,'(132("="))')
-CALL WriteSigmaSq(Filename_SigmaSq)
-
 ! Write SigmaSq only on fine grid
 SigmaSqSpec = snSamplesM1*( UFineSqSum - snSamples * UFineSum * UFineSum )
-SigmaSq = Sum(df*SigmaSqSpec(VarAna,RP_specified,3:nSamples_Spec))
-SWRITE(UNIT_stdOut,'(132("="))')
-CALL WriteSigmaSq(Filename_SigmaSq_Fine)
+SigmaSqFine = Sum(df*SigmaSqSpec(VarAna,RP_specified,3:nSamples_Spec))
 
 SigmaSqSpec = SigmaSqSpec - snSamplesM1*( UCoarseSqSum - snSamples * UCoarseSum*UCoarseSum )
-CALL WriteMeanAndVarianceToHDF5()
+! CALL WriteMeanAndVarianceToHDF5()
 
 CALL FinalizeRPSet()
 CALL FinalizeSpec()
 CALL FinalizeOutput()
 WRITE(UNIT_stdOut,'(132("="))')
-WRITE(UNIT_stdOut,'(A,I2,A)') 'SigmaSq on Level ', iLevel,' computed !'
+WRITE(UNIT_stdOut,'(A,I2,A)') 'SigmaSq on computed !'
 WRITE(UNIT_stdOut,'(A,ES14.7)') 'SigmaSq: ', SigmaSq
-WRITE(UNIT_stdOut,'(A,I1,A)') 'SigmaSq written to level_', iLevel,'/SigmaSq.dat !'
 WRITE(UNIT_stdOut,'(132("="))')
 
 CALL FinalizeParameters()
@@ -271,7 +254,7 @@ IF(iError .NE. 0) &
   CALL abort(__STAMP__,'MPI finalize error',iError)
 #endif
 WRITE(UNIT_stdOut,'(132("="))')
-WRITE(UNIT_stdOut,'(A)') 'SigmaSq comptued from RECORDPOINTS done ! '
+WRITE(UNIT_stdOut,'(A)') 'SigmaSq from RECORDPOINTS done ! '
 WRITE(UNIT_stdOut,'(132("="))')
 
 END PROGRAM EstimateSigma_RP
@@ -289,12 +272,6 @@ IMPLICIT NONE
 CALL prms%SetSection('MLMC Parameters for RP')
 CALL prms%CreateStringOption(   "ProjectName"        , "Define Name of the project.")
 CALL prms%CreateStringOption(   "RP_DefFile"         , "File which defines the RP setup.")
-
-CALL prms%CreateIntOption(      "nStart"             , "Number of first new sample")
-CALL prms%CreateIntOption(      "nEnd"               , "Number of last new sample")
-CALL prms%CreateIntOption(      "nIter"              , "Number of current iteration")
-CALL prms%CreateIntOption(      "nIterIn"              , "Number of current iteration")
-CALL prms%CreateIntOption(      "iLevel"             , "SigmaSq is computed only on this specific level")
 CALL prms%CreateIntOption(      "varAna"             , "Specifiy the variable from U cons to comput SigmaSq")
 
 CALL prms%CreateLogicalOption('OutputPoints'       ,"TODO",".FALSE.")
@@ -342,18 +319,11 @@ RP_DefFile=GETSTR('RP_DefFile','')
 ! =============================================================================== !
 ! RP INFO
 ! =============================================================================== !
-iLevel=GETINT('iLevel')
-nStart=GETINT('nStart')
-nEnd=GETINT('nEnd')
-nIter=GETINT('nIter')
-nIter=GETINT('nIterIn')
 VarAna=GETINT('VarAna')
 RP_specified=GETINT('RP_specified')
 
 OutputPoints    = GETLOGICAL('OutputPoints','.TRUE.')
 OutputFormat    = GETINT('OutputFormat','2')
-
-
 ! =============================================================================== !
 ! FOURIER TRANSFORM
 ! =============================================================================== !
