@@ -65,8 +65,8 @@ tmp(3*nVarVisu+1:4*nVarVisu,:,:) = UCoarseSqSum
 tmp(4*nVarVisu+1:           ,:,:) = DUSqSum
 
 WRITE(UNIT_StdOut,'(132("-"))')
-  WRITE(UNIT_stdOut,'(A,A)')' WRITING SUMS OF SPECTRA TO ', FileNameSumsOut
-  CALL WriteDataToHDF5(nSamples_spec,nPoints,5*nVarVisu,VarNames_tmp,RPData_freq,tmp,FileNameSumsOut)
+  WRITE(UNIT_stdOut,'(A,A)')' WRITING SUMS OF SPECTRA TO ', FileNameSums
+  CALL WriteDataToHDF5(nSamples_spec,nPoints,5*nVarVisu,VarNames_tmp,RPData_freq,tmp,FileNameSums)
 WRITE(UNIT_StdOut,'(132("-"))')
 CALL WriteAttribute(File_ID,'SigmaSq',1,RealScalar=SigmaSq)
 CALL WriteAttribute(File_ID,'SigmaSqFine',1,RealScalar=SigmaSqFine)
