@@ -710,29 +710,29 @@ CALL ReadAttribute(File_ID,'iOccurrence',  nStochVars,IntArray=iOccurrence)
 CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
 
 
-!CALL ReadAttribute(File_ID,'nLevelVarsInt',1,IntScalar=nLevelVarsInt)
-!IF(nLevelVarsInt.GT.0)THEN
-  !ALLOCATE(LevelVarNamesInt(nLevelVarsInt))
-  !CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsInt,StrArray=LevelVarNamesInt)
-  !ALLOCATE(LevelVarsInt(nLevelVarsInt))
-  !CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsInt,IntArray=LevelVarsInt)
-!END IF 
+CALL ReadAttribute(File_ID,'nLevelVarsInt',1,IntScalar=nLevelVarsInt)
+IF(nLevelVarsInt.GT.0)THEN
+  ALLOCATE(LevelVarNamesInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsInt,StrArray=LevelVarNamesInt)
+  ALLOCATE(LevelVarsInt(nLevelVarsInt))
+  CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsInt,IntArray=LevelVarsInt)
+END IF 
 
-!CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsReal)
-!IF(nLevelVarsReal.GT.0)THEN
-  !ALLOCATE(LevelVarNamesReal(nLevelVarsReal))
-  !CALL ReadAttribute(File_ID,'LevelVarNamesReal',nLevelVarsReal,StrArray=LevelVarNamesReal)
-  !ALLOCATE(LevelVarsReal(nLevelVarsReal))
-  !CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsReal,RealArray=LevelVarsReal)
-!END IF 
+CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsReal)
+IF(nLevelVarsReal.GT.0)THEN
+  ALLOCATE(LevelVarNamesReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarNamesReal',nLevelVarsReal,StrArray=LevelVarNamesReal)
+  ALLOCATE(LevelVarsReal(nLevelVarsReal))
+  CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsReal,RealArray=LevelVarsReal)
+END IF 
 
-!CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStr)
-!IF(nLevelVarsStr.GT.0)THEN
-  !ALLOCATE(LevelVarNamesStr(nLevelVarsStr))
-  !CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
-  !ALLOCATE(LevelVarsStr(nLevelVarsStr))
-  !CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
-!END IF 
+CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStr)
+IF(nLevelVarsStr.GT.0)THEN
+  ALLOCATE(LevelVarNamesStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
+  ALLOCATE(LevelVarsStr(nLevelVarsStr))
+  CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
+END IF 
 
 
 ALLOCATE(iStochSample(nStochVars))
@@ -767,6 +767,9 @@ SDEALLOCATE(iArray)
 SDEALLOCATE(LevelVarNamesInt)
 SDEALLOCATE(LevelVarNamesReal)
 SDEALLOCATE(LevelVarNamesStr)
+SDEALLOCATE(LevelVarsInt)
+SDEALLOCATE(LevelVarsReal)
+SDEALLOCATE(LevelVarsStr)
 SDEALLOCATE(iStochSample)
 END SUBROUTINE FinalizeBatchInput
 

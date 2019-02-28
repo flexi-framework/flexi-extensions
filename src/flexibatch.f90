@@ -22,13 +22,15 @@ USE MOD_Globals
 USE MOD_Flexi
 USE MOD_TimeDisc   ,ONLY: TimeDisc
 USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID
-USE MOD_HDF5_Input ,ONLY: ReadAttribute
-USE MOD_BatchInput_Vars, ONLY: StochFile
+USE MOD_HDF5_Input ,ONLY: ReadAttribute,DatasetExists
+USE MOD_BatchInput_Vars, ONLY: StochFile,nPreviousRuns
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                        :: nArgsLoc,iArg,Color
 CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
+LOGICAL                        :: exists
+REAL                           :: GlobalStartTime,GlobalEndTime
 !==================================================================================================================================
 
 ! read command line arguments
@@ -58,17 +60,20 @@ MPIGlobalRoot=(myGlobalRank .EQ. 0)
 
 
 ! open StochFile, get attributes nGlobalRuns, nParallelRuns
-!CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
-!CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
-!CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
-!CALL CloseDataFile()
-nGlobalRuns=4
-nParallelRuns=2
-!nParallelRuns=2
+CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
+CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
+CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
+CALL DatasetExists(File_ID,'nPreviousRuns',exists,attrib=.TRUE.)
+IF(exists)THEN
+  CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
+ELSE
+  nPreviousRuns=0
+END IF
+CALL CloseDataFile()
 
 
-!IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
 nProcsPerRun = nGlobalProcessors/nParallelRuns
+IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
 iParallelRun = myGlobalRank/nProcsPerRun+1
 
 CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
@@ -78,6 +83,7 @@ CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iErr
 nSequentialRuns = nGlobalRuns / nParallelRuns
 
 ! run FLEXI in loop
+GlobalStartTime=FLEXITIME()
 
 DO iSequentialRun=1,nSequentialRuns
 
@@ -97,12 +103,13 @@ DO iSequentialRun=1,nSequentialRuns
   ! Finalize
   CALL FinalizeFlexi()
 END DO
+GlobalEndTime=FLEXITIME()
 
+SWRITE(Unit_StdOut,'(A)')
+SWRITE(Unit_StdOut,'(A)') "FLEXIBATCH FINISHED"
+SWRITE(Unit_StdOut,'(A)') "AvgWork (s) ="
+SWRITE(Unit_StdOut,'(E11.5)') (GlobalEndTime-GlobalStartTime)*nGlobalProcessors/(nParallelRuns*nSequentialRuns)
 
-  IF(iSequentialRun.EQ.nSequentialRuns)THEN
-    Color=MERGE(0,MPI_UNDEFINED,iGlobalRun.LE.nGlobalRuns)
-    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
-  END IF 
 #if USE_MPI
 CALL MPI_FINALIZE(iError)
 IF(iError .NE. 0) STOP 'MPI finalize error'
