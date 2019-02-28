@@ -64,6 +64,7 @@ MPIGlobalRoot=(myGlobalRank .EQ. 0)
 !CALL CloseDataFile()
 nGlobalRuns=4
 nParallelRuns=2
+!nParallelRuns=2
 
 
 !IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
