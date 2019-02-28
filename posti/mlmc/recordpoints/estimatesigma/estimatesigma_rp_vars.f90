@@ -12,26 +12,22 @@ SAVE
 
 INTEGER                             :: nStart
 INTEGER                             :: nEnd
-CHARACTER(LEN=255)                  :: Filename_SigmaSq
-CHARACTER(LEN=255)                  :: Filename_SigmaSq_Fine 
-CHARACTER(LEN=255)                  :: FileNameSumsIn
-CHARACTER(LEN=255)                  :: FileNameSumsOut
+CHARACTER(LEN=255)                  :: FileNameSums
 CHARACTER(LEN=255)                  :: FilenameMean
 CHARACTER(LEN=255)                  :: FilenameVariance
 
 INTEGER                             :: iLevel
 INTEGER                             :: nIter
 INTEGER                             :: nIterIn
-INTEGER                             :: VarAna 
+INTEGER                             :: VarAna
 
 INTEGER                             :: RP_specified
 REAL                                :: SigmaSq
+REAL                                :: SigmaSqFine
+REAL                                :: Bias
 REAL,ALLOCATABLE,TARGET             :: SigmaSqSpec(:,:,:)
 REAL,ALLOCATABLE,TARGET             :: UFine(:,:,:)
 REAL,ALLOCATABLE,TARGET             :: UCoarse(:,:,:)
-!REAL,ALLOCATABLE,TARGET             :: DeltaU(:,:,:)
-!REAL,ALLOCATABLE,TARGET             :: USum(:,:,:)
-!REAL,ALLOCATABLE,TARGET             :: USqSum(:,:,:)
 REAL,ALLOCATABLE,TARGET             :: UFineSum(:,:,:)
 REAL,ALLOCATABLE,TARGET             :: UCoarseSum(:,:,:)
 REAL,ALLOCATABLE,TARGET             :: UFineSqSum(:,:,:)

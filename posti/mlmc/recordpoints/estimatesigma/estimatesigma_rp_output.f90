@@ -6,7 +6,7 @@
 MODULE MOD_EstimateSigma_RP_Output
 ! MODULES
 !-----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
+! GLOBAL VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 
 INTERFACE WriteSumsToHDF5
@@ -24,29 +24,18 @@ END INTERFACE
 
 PUBLIC:: WriteSumsToHDF5
 PUBLIC:: WriteMeanAndVarianceToHDF5
-PUBLIC:: WriteSigmaSq
 !===================================================================================================================================
 
 CONTAINS
 
 !===================================================================================================================================
-!> Subroutine to write the sum of all deltaU and deltaU^2 RP data to HDF5 format for a specififc level 
+!> Subroutine to write the sum of all deltaU and deltaU^2 RP data to HDF5 format for a specififc level
 !===================================================================================================================================
 SUBROUTINE WriteSumsToHDF5()
 ! MODULES
 USE MOD_Globals
-!USE MOD_RPData_Vars         ,ONLY: RPTime
-!USE MOD_ParametersVisu      ,ONLY: OutputFormat,thirdOct,ProjectName
-!USE MOD_OutputRPVisu_Vars   ,ONLY: nSamples_out,RPData_out,RPDataTimeAvg_out,CoordNames 
-!USE MOD_OutputRPVisu_HDF5
-!USE MOD_spec_Vars           ,ONLY: nSamples_spec,RPData_freq,RPData_spec
-!USE MOD_spec_Vars           ,ONLY: nSamples_Oct,RPData_freqOct,RPData_Oct
-!USE MOD_ParametersVisu      ,ONLY: nVarVisu,VarNameVisu
-!USE MOD_ParametersVisu      ,ONLY: OutputTimeAverage,OutputTimeData,doSpec,doFluctuations
-!USE MOD_ParametersVisu      ,ONLY: Plane_doBLProps
-!USE MOD_RPSetVisuVisu_Vars  ,ONLY: nRP_global
 USE MOD_RPSetVisuVisu_Vars   ,ONLY:  nPoints
-USE MOD_EstimateSigma_RP_Vars 
+USE MOD_EstimateSigma_RP_Vars
 USE MOD_spec_Vars             ,ONLY: nSamples_spec,RPData_freq
 USE MOD_ParametersVisu        ,ONLY: nVarVisu,VarNameVisu
 USE MOD_OutputRPVisu_HDF5
@@ -59,7 +48,6 @@ REAL,ALLOCATABLE                 :: tmp(:,:,:)
 CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_tmp(:)
 !===================================================================================================================================
 ! Output spectra
-!CoordNames(1)='Frequency'
 ALLOCATE (tmp(5*nVarVisu,nPoints,nSamples_spec))
 ALLOCATE (VarNames_tmp(5*nVarVisu))
 DO i=1,nVarVisu
@@ -70,19 +58,19 @@ DO i=1,nVarVisu
   VarNames_tmp(i+4*nVarVisu)=TRIM(VarNameVisu(i))//'_DSq'
 END DO
 
-!tmp(1:nVarVisu,:,:)=USum
-!tmp(nVarVisu+1:,:,:)=USqSum
-
 tmp(1            :  nVarVisu,:,:) = UFineSum
 tmp(  nVarVisu+1:2*nVarVisu,:,:) = UCoarseSum
 tmp(2*nVarVisu+1:3*nVarVisu,:,:) = UFineSqSum
 tmp(3*nVarVisu+1:4*nVarVisu,:,:) = UCoarseSqSum
-tmp(4*nVarVisu+1:           ,:,:) = DUSqSum   
+tmp(4*nVarVisu+1:           ,:,:) = DUSqSum
 
 WRITE(UNIT_StdOut,'(132("-"))')
-  WRITE(UNIT_stdOut,'(A,A)')' WRITING SUMS OF SPECTRA TO ', FileNameSumsOut
-  CALL WriteDataToHDF5(nSamples_spec,nPoints,5*nVarVisu,VarNames_tmp,RPData_freq,tmp,FileNameSumsOut)
+  WRITE(UNIT_stdOut,'(A,A)')' WRITING SUMS OF SPECTRA TO ', FileNameSums
+  CALL WriteDataToHDF5(nSamples_spec,nPoints,5*nVarVisu,VarNames_tmp,RPData_freq,tmp,FileNameSums)
 WRITE(UNIT_StdOut,'(132("-"))')
+CALL WriteAttribute(File_ID,'SigmaSq',1,RealScalar=SigmaSq)
+CALL WriteAttribute(File_ID,'SigmaSqFine',1,RealScalar=SigmaSqFine)
+CALL WriteAttribute(File_ID,'Bias',1,RealScalar=Bias)
 
 
 SDEALLOCATE (tmp)
@@ -96,18 +84,8 @@ END SUBROUTINE WriteSumsToHDF5
 SUBROUTINE WriteMeanAndVarianceToHDF5()
 ! MODULES
 USE MOD_Globals
-!USE MOD_RPData_Vars         ,ONLY: RPTime
-!USE MOD_ParametersVisu      ,ONLY: OutputFormat,thirdOct,ProjectName
-!USE MOD_OutputRPVisu_Vars   ,ONLY: nSamples_out,RPData_out,RPDataTimeAvg_out,CoordNames 
-!USE MOD_OutputRPVisu_HDF5
-!USE MOD_spec_Vars           ,ONLY: nSamples_spec,RPData_freq,RPData_spec
-!USE MOD_spec_Vars           ,ONLY: nSamples_Oct,RPData_freqOct,RPData_Oct
-!USE MOD_ParametersVisu      ,ONLY: nVarVisu,VarNameVisu
-!USE MOD_ParametersVisu      ,ONLY: OutputTimeAverage,OutputTimeData,doSpec,doFluctuations
-!USE MOD_ParametersVisu      ,ONLY: Plane_doBLProps
-!USE MOD_RPSetVisuVisu_Vars  ,ONLY: nRP_global
 USE MOD_RPSetVisuVisu_Vars   ,ONLY:  nPoints
-USE MOD_EstimateSigma_RP_Vars 
+USE MOD_EstimateSigma_RP_Vars
 USE MOD_spec_Vars             ,ONLY: nSamples_spec,RPData_freq
 USE MOD_ParametersVisu        ,ONLY: nVarVisu,VarNameVisu
 USE MOD_OutputRPVisu_HDF5
@@ -144,30 +122,5 @@ SDEALLOCATE (VarNames_tmp)
 SDEALLOCATE (tmp)
 
 END SUBROUTINE WriteMeanAndVarianceToHDF5
-
-!===================================================================================================================================
-!> Write Sigma squared for specific level to level directory
-!===================================================================================================================================
-SUBROUTINE WriteSigmaSq(FileName)
-! MODULES
-USE MOD_Globals
-USE MOD_EstimateSigma_RP_Vars
-IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
-CHARACTER(LEN=255),INTENT(IN)   :: FileName
-!-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!===================================================================================================================================
-! Output spectra
-WRITE(UNIT_StdOut,'(132("-"))')
-SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE SigmaSq .dat FILE "',TRIM(FileName),'" ...'
-OPEN(73, FILE = FileName, STATUS = 'replace', ACTION = 'write')
-WRITE(73,'(E15.8)') SigmaSq
-CLOSE(73)
-
-WRITE(UNIT_StdOut,'(132("-"))')
-
-END SUBROUTINE WriteSigmaSq
-
 
 END MODULE MOD_EstimateSigma_RP_Output
