@@ -119,6 +119,7 @@ IF(RP_onProc)THEN
   lastSample=0.
 END IF
 
+
 RecordPointsInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT RECORDPOINTS DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -156,22 +157,22 @@ IF(MPIRoot) THEN
     noRPrank=0
   END IF
   DO iProc=1,nProcessors-1
-    CALL MPI_RECV(hasRP,1,MPI_LOGICAL,iProc,0,MPI_COMM_FLEXI,MPIstatus,iError)
+    CALL MPI_RECV(hasRP,1,MPI_LOGICAL,iProc,0,MPI_COMM_ACTIVE,MPIstatus,iError)
     IF(hasRP) THEN
       RPrank=RPrank+1
-      CALL MPI_SEND(RPrank,1,MPI_INTEGER,iProc,0,MPI_COMM_FLEXI,iError)
+      CALL MPI_SEND(RPrank,1,MPI_INTEGER,iProc,0,MPI_COMM_ACTIVE,iError)
     ELSE
       noRPrank=noRPrank+1
-      CALL MPI_SEND(noRPrank,1,MPI_INTEGER,iProc,0,MPI_COMM_FLEXI,iError)
+      CALL MPI_SEND(noRPrank,1,MPI_INTEGER,iProc,0,MPI_COMM_ACTIVE,iError)
     END IF
   END DO
 ELSE
-    CALL MPI_SEND(RP_onProc,1,MPI_LOGICAL,0,0,MPI_COMM_FLEXI,iError)
-    CALL MPI_RECV(myRPrank,1,MPI_INTEGER,0,0,MPI_COMM_FLEXI,MPIstatus,iError)
+    CALL MPI_SEND(RP_onProc,1,MPI_LOGICAL,0,0,MPI_COMM_ACTIVE,iError)
+    CALL MPI_RECV(myRPrank,1,MPI_INTEGER,0,0,MPI_COMM_ACTIVE,MPIstatus,iError)
 END IF
 
 ! create new RP communicator for RP output
-CALL MPI_COMM_SPLIT(MPI_COMM_FLEXI, color, myRPrank, RP_COMM,iError)
+CALL MPI_COMM_SPLIT(MPI_COMM_ACTIVE, color, myRPrank, RP_COMM,iError)
 IF(RP_onProc) CALL MPI_COMM_SIZE(RP_COMM, nRP_Procs,iError)
 IF(myRPrank.EQ.0 .AND. RP_onProc) WRITE(*,*) 'RP COMM:',nRP_Procs,'procs'
 
@@ -340,11 +341,15 @@ SUBROUTINE RecordPoints(iter,t,forceSampling)
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_DG_Vars          ,ONLY: U
+USE MOD_Output_Vars      ,ONLY: ProjectName
 USE MOD_Timedisc_Vars,    ONLY: dt
 USE MOD_Analyze_Vars,     ONLY: WriteData_dt,tWriteData
 USE MOD_RecordPoints_Vars,ONLY: RP_Data,RP_ElemID
 USE MOD_RecordPoints_Vars,ONLY: RP_Buffersize,RP_MaxBuffersize,RP_SamplingOffset,iSample
 USE MOD_RecordPoints_Vars,ONLY: l_xi_RP,l_eta_RP,nRP
+USE MOD_RecordPoints_Vars,ONLY: RP_onProc,myRPrank,RP_COMM,nRP_Procs
+USE MOD_IO_HDF5           
+USE MOD_HDF5_Input        ,ONLY: GetDataSize
 #if PP_dim==3
 USE MOD_RecordPoints_Vars,ONLY: l_zeta_RP
 #endif
@@ -363,11 +368,24 @@ LOGICAL,INTENT(IN)             :: forceSampling           !< force sampling (e.g
 INTEGER                 :: i,j,k,iRP
 REAL                    :: u_RP(PP_nVar,nRP)
 REAL                    :: l_eta_zeta_RP
+CHARACTER(LEN=255)             :: FileString
 !----------------------------------------------------------------------------------------------------------------------------------
 IF(MOD(iter,RP_SamplingOffset).NE.0 .AND. .NOT. forceSampling) RETURN
 IF(.NOT.ALLOCATED(RP_Data))THEN
   ! Compute required buffersize from timestep and add 20% tolerance
   ! +1 is added to ensure a minimum buffersize of 2
+  IF(iSequentialRun .GT. 1 .AND. iSample .EQ. 1) THEN
+    FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_RP',tWriteData))//'.h5'
+#if USE_MPI
+    CALL MPI_BARRIER(RP_COMM,iError)
+    CALL OpenDataFile(Filestring,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=RP_COMM)
+#else
+    CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
+#endif
+    CALL GetDataSize(File_ID,'RP_Data',nDims,HSize)
+    RP_MaxBuffersize=HSize(3)
+    CALL CloseDataFile()
+  END IF
   RP_Buffersize = MIN(CEILING((1.2*WriteData_dt)/(dt*RP_SamplingOffset))+1,RP_MaxBuffersize)
   ALLOCATE(RP_Data(0:PP_nVar,nRP,RP_Buffersize))
 END IF
@@ -414,8 +432,9 @@ SUBROUTINE WriteRP(OutputTime,resetCounters)
 USE MOD_PreProc
 USE MOD_Globals
 USE HDF5
-USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
+USE MOD_IO_HDF5           
 USE MOD_Equation_Vars     ,ONLY: StrVarNames
+USE MOD_HDF5_Input        ,ONLY: GetDataSize
 USE MOD_HDF5_Output       ,ONLY: WriteAttribute,WriteArray,MarkWriteSuccessfull
 USE MOD_Output_Vars       ,ONLY: ProjectName
 USE MOD_Mesh_Vars         ,ONLY: MeshFile
@@ -443,9 +462,9 @@ END IF
 
 FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_RP',OutputTime))//'.h5'
 ! init file or just update time
-IF(myRPrank.EQ.0)THEN
+IF(myRPrank.EQ.0 .AND. iSequentialRun .EQ. 1)THEN
   CALL OpenDataFile(Filestring,create=.NOT.RP_fileExists,single=.TRUE.,readOnly=.FALSE.)
-  IF(.NOT.RP_fileExists)THEN
+  IF(.NOT.RP_fileExists )THEN
     ! Create dataset attributes
     CALL WriteAttribute(File_ID,'File_Type'  ,1,StrScalar=(/'RecordPoints_Data'/))
     CALL WriteAttribute(File_ID,'MeshFile'   ,1,StrScalar=(/MeshFile/))
@@ -468,13 +487,13 @@ IF(iSample.GT.0)THEN
   IF(.NOT.RP_fileExists) chunkSamples=iSample
   ! write buffer into file, we need two offset dimensions (one buffer, one processor)
   nSamples=nSamples+iSample
-  CALL WriteArray(DataSetName='RP_Data', rank=3,&
-                        nValGlobal=(/PP_nVar+1,nGlobalRP,nSamples/),&
-                        nVal=      (/PP_nVar+1,nRP      ,iSample/),&
-                        offset=    (/0        ,offsetRP ,nSamples-iSample/),&
-                        resizeDim= (/.FALSE.  ,.FALSE.  ,.TRUE./),&
-                        chunkSize= (/PP_nVar+1,nGlobalRP,chunkSamples/),&
-                        RealArray=RP_Data(:,:,1:iSample),&
+  CALL WriteArray(DataSetName='RP_Data', rank=4,&
+                        nValGlobal=(/PP_nVar+1,nGlobalRP,nSamples,nGlobalRuns/),&
+                        nVal=      (/PP_nVar+1,nRP      ,iSample,1/),&
+                        offset=    (/0        ,offsetRP ,nSamples-iSample,iGlobalRun-1/),&
+                        resizeDim= (/.FALSE.  ,.FALSE.  ,.TRUE.,.FALSE./),&
+                        chunkSize= (/PP_nVar+1,nGlobalRP,chunkSamples,1/),&
+                        RealArray= RP_Data(:,:,1:iSample),&
                         collective=.TRUE.)
   lastSample=RP_Data(:,:,iSample)
 END IF
