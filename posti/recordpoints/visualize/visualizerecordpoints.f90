@@ -13,141 +13,24 @@
 !=================================================================================================================================
 #include "flexi.h"
 
-!===================================================================================================================================
-!> Postprocessing tool used to visualize the solution at the record points that has been recorded during a simulation.
-!> The tool takes several of the files and combines them into a single time series. From the conservative variables
-!> that are stored during the simulation, all available derived quantities can be computed.
-!> Additionally, several more advanced postprocessing algorithms are available. This includes calculation of time averages,
-!> FFT and PSD values and specific boundary layer properties.
-!===================================================================================================================================
-PROGRAM postrec
-! MODULES
-USE MOD_Globals
-USE MOD_PreProc
-USE MOD_Commandline_Arguments
-USE MOD_StringTools                 ,ONLY:STRICMP, GetFileExtension
-USE MOD_ReadInTools                 ,ONLY:prms,PrintDefaultParameterFile
-USE MOD_ParametersVisu              ,ONLY:equiTimeSpacing,doSpec,doFluctuations,doTurb,doFilter
-USE MOD_ParametersVisu              ,ONLY:Plane_doBLProps
-USE MOD_RPSetVisu                   ,ONLY:InitRPSet,FinalizeRPSet
-USE MOD_RPData                      ,ONLY:ReadRPData,AssembleRPData,FinalizeRPData
-USE MOD_OutputRPVisu
-USE MOD_RPInterpolation
-USE MOD_RPInterpolation_Vars        ,ONLY:CalcTimeAverage
-USE MOD_EquationRP
-USE MOD_FilterRP                    ,ONLY:FilterRP
-USE MOD_Spec                        ,ONLY:InitSpec,Spec,FinalizeSpec
-USE MOD_Turbulence
-USE MOD_MPI                         ,ONLY:DefineParametersMPI,InitMPI
-USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5
-USE MOD_EOS                         ,ONLY:DefineParametersEOS,InitEOS
+MODULE MOD_VisualizeRP
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER                            :: iArg,iExt,nDataFiles
-LOGICAL                            :: success=.TRUE.
-CHARACTER(LEN=255)                 :: InputDataFile
-CHARACTER(LEN=255),ALLOCATABLE     :: DataFiles(:)
-!===================================================================================================================================
-CALL SetStackSizeUnlimited()
-CALL InitMPI() ! NO PARALLELIZATION, ONLY FOR COMPILING WITH MPI FLAGS ON SOME MACHINES OR USING MPI-DEPENDANT HDF5
-IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
-  'This tool is designed for single execution only!')
-WRITE(UNIT_stdOut,'(A)') " ||======================================||"
-WRITE(UNIT_stdOut,'(A)') " || Postprocessing for Flexi Recordpoints||"
-WRITE(UNIT_stdOut,'(A)') " ||======================================||"
-WRITE(UNIT_stdOut,'(A)')
+PRIVATE
 
-CALL ParseCommandlineArguments()
-IF(nArgs .LT. 2) success=.FALSE.
+INTERFACE DefineParameters
+  MODULE PROCEDURE DefineParameters
+END INTERFACE
+  
+INTERFACE InitParameters
+  MODULE PROCEDURE InitParameters
+END INTERFACE
 
-IF(success)THEN
-  ParameterFile = Args(1)
-  IF (.NOT.STRICMP(GetFileExtension(ParameterFile), "ini")) success=.FALSE.
-END IF
-IF(.NOT.success.AND.doPrintHelp.LE.0)THEN
-  ! Print out error message containing valid syntax
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: postrec parameter.ini RPdatafiles.h5')
-END IF
+INTERFACE Build_mapCalc_mapVisu
+  MODULE PROCEDURE Build_mapCalc_mapVisu
+END INTERFACE
 
-CALL DefineParameters()
-CALL DefineParametersMPI()
-CALL DefineParametersIO_HDF5()
-CALL DefineParametersEOS()
-
-! check for command line argument --help or --markdown
-IF (doPrintHelp.GT.0) THEN
-  CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, Args(1))
-  STOP
-END IF
-CALL prms%read_options(ParameterFile)
-
-CALL InitParameters()
-CALL InitIOHDF5()
-
-nDataFiles=nArgs-1
-ALLOCATE(DataFiles(1:nDataFiles))
-
-! get list of input files
-DO iArg=2,nArgs
-  CALL GET_COMMAND_ARGUMENT(iArg,DataFiles(iArg-1))
-END DO
-
-! readin RP Data from all input files
-DO iArg=1,nDataFiles
-  InputDataFile=DataFiles(iArg)
-  WRITE(UNIT_stdOut,'(132("="))')
-  WRITE(UNIT_stdOut,'(A,I5,A,I5,A)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES.'
-  WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
-  WRITE(UNIT_stdOut,'(132("="))')
-
-  ! Get start index of file extension to check if it is a h5 file
-  iExt=INDEX(InputDataFile,'.',BACK = .TRUE.)
-  IF(InputDataFile(iExt+1:iExt+2) .NE. 'h5') &
-    CALL CollectiveStop(__STAMP__,'ERROR - Invalid file extension!')
-  ! Read in main attributes from given HDF5 State File
-  WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(InputDataFile), """"
-  IF(iArg.EQ.1) THEN
-    CALL ReadRPData(InputDataFile,firstFile=.TRUE.)
-  ELSE
-    CALL ReadRPData(InputDataFile)
-  END IF
-END DO
-
-! assemble data to one global array
-CALL AssembleRPData()
-
-CALL InitEquationRP()
-CALL InitInterpolation()
-IF(doSpec)             CALL InitSpec()
-CALL InitOutput()
-IF(equiTimeSpacing)    CALL InterpolateEquiTime()
-CALL CalcEquationRP()
-IF(calcTimeAverage)    CALL CalcTimeAvg()
-IF(doFluctuations)     CALL CalcFluctuations()
-IF(doFilter)           CALL FilterRP()
-IF(doSpec)             CALL Spec()
-IF(Plane_doBLProps)    CALL Plane_BLProps()
-CALL OutputRP()
-IF(doTurb)             CALL Turbulence()
-CALL FinalizeInterpolation()
-CALL FinalizeEquationRP()
-CALL FinalizeOutput()
-CALL FinalizeRPSet()
-CALL FinalizeRPData()
-CALL FinalizeSpec()
-CALL FinalizeCommandlineArguments()
-#if USE_MPI
-CALL MPI_FINALIZE(iError)
-IF(iError .NE. 0) &
-  CALL CollectiveStop(__STAMP__,'MPI finalize error',iError)
-#endif
-WRITE(UNIT_stdOut,'(132("="))')
-WRITE(UNIT_stdOut,'(A)') ' RECORDPOINTS POSTPROC FINISHED! '
-WRITE(UNIT_stdOut,'(132("="))')
-
-END PROGRAM postrec
-
+PUBLIC::DefineParameters,InitParameters,Build_mapCalc_mapVisu
+CONTAINS
 
 !===================================================================================================================================
 !> Initialize parameter variables of Posti tool
@@ -423,3 +306,4 @@ WRITE (*,'(A,'//format//'I3)') "mapVisu ",mapVisu
 
 END SUBROUTINE Build_mapCalc_mapVisu
 
+END MODULE MOD_VisualizeRP

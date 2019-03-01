@@ -51,6 +51,7 @@ CONTAINS
 SUBROUTINE InitEquationRP()
 ! MODULES
 USE MOD_Globals
+USE MOD_VisualizeRP       ,ONLY:Build_mapCalc_mapVisu
 USE MOD_RPData_Vars       ,ONLY:VarNames_HDF5,nVar_HDF5
 USE MOD_ParametersVisu
 USE MOD_EquationRP_Vars
