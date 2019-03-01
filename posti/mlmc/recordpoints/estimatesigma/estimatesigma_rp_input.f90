@@ -54,8 +54,8 @@ CHARACTER(LEN=255)               :: DataSetName
 CHARACTER(LEN=255)               :: GroupName
 LOGICAL                          :: DataSetFound=.FALSE.
 !===================================================================================================================================
-WRITE(UNIT_stdOut,'(A,A,A)',ADVANCE='NO')" READ SUMS OF MLMC RP DATA FROM HDF5 FILE '",TRIM(FileNameSumsIn),"'..."
-CALL OpenDataFile(FileNameSumsIn,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+WRITE(UNIT_stdOut,'(A,A,A)',ADVANCE='NO')" READ SUMS OF MLMC RP DATA FROM HDF5 FILE '",TRIM(FileNameSums),"'..."
+CALL OpenDataFile(FileNameSums,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 
 !! Write dataset attributes
 CALL ReadAttribute(File_ID,'File_Type'   ,1,StrScalar=FileType_tmp)

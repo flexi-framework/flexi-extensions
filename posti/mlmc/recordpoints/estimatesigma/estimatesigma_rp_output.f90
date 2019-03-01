@@ -17,10 +17,6 @@ INTERFACE WriteMeanAndVarianceToHDF5
   MODULE PROCEDURE WriteMeanAndVarianceToHDF5
 END INTERFACE
 
-INTERFACE WriteSigmaSq
-  MODULE PROCEDURE WriteSigmaSq
-END INTERFACE
-
 
 PUBLIC:: WriteSumsToHDF5
 PUBLIC:: WriteMeanAndVarianceToHDF5
@@ -34,6 +30,8 @@ CONTAINS
 SUBROUTINE WriteSumsToHDF5()
 ! MODULES
 USE MOD_Globals
+USE MOD_IO_HDF5
+USE MOD_HDF5_Output           ,ONLY: WriteAttribute
 USE MOD_RPSetVisuVisu_Vars   ,ONLY:  nPoints
 USE MOD_EstimateSigma_RP_Vars
 USE MOD_spec_Vars             ,ONLY: nSamples_spec,RPData_freq

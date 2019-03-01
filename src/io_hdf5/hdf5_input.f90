@@ -70,7 +70,7 @@ END INTERFACE
 PUBLIC :: Plist_File_ID,File_ID,HSize,nDims        ! Variables from MOD_IO_HDF5 that need to be public
 PUBLIC :: OpenDataFile,CloseDataFile ! Subroutines from MOD_IO_HDF5 that need to be public
 PUBLIC :: ISVALIDHDF5FILE,ISVALIDMESHFILE,GetDataSize,GetAttributeSize,GetDataProps,GetNextFileName
-PUBLIC :: ReadArray,ReadAttribute
+PUBLIC :: ReadArray,ReadAttribute,ReadArrayNOffsets
 PUBLIC :: GetArrayAndName
 PUBLIC :: GetVarnames
 PUBLIC :: DatasetExists
@@ -532,6 +532,78 @@ LOGWRITE(*,*)'...DONE!'
 END SUBROUTINE ReadArray
 
 
+!==================================================================================================================================
+!> Subroutine to read arrays of rank "Rank" with dimensions "Dimsf(1:Rank)".
+!==================================================================================================================================
+SUBROUTINE ReadArrayNOffsets(ArrayName,Rank,nVal,nOffsets,Offset_in,Offset_dim,RealArray,IntArray,StrArray)
+! MODULES
+USE MOD_Globals
+USE,INTRINSIC :: ISO_C_BINDING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER                        :: Rank                  !< number of dimensions of the array
+INTEGER                        :: nOffsets              !< number of dimensions that have an offset
+INTEGER                        :: offset_in(nOffsets)   !< offset =0, start at beginning of the array
+INTEGER                        :: offset_dim(nOffsets)  !< which dimension is the offset (only one dimension possible here)
+INTEGER                        :: nVal(Rank)            !< local size of array to read
+CHARACTER(LEN=*),INTENT(IN)    :: ArrayName             !< name of array to be read
+REAL              ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: RealArray    !< only if real array shall be read
+INTEGER           ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: IntArray     !< only if integer array shall be read
+CHARACTER(LEN=255),DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: StrArray     !< only if real string shall be read
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER(HID_T)                 :: DSet_ID,Type_ID,MemSpace,FileSpace,PList_ID
+INTEGER(HSIZE_T)               :: Offset(Rank),Dimsf(Rank)
+TYPE(C_PTR)                    :: buf
+INTEGER(HID_T)                 :: driver
+INTEGER                        :: iOffset
+!==================================================================================================================================
+LOGWRITE(*,'(A,I1.1,A,A,A)')'    READ ',Rank,'D ARRAY "',TRIM(ArrayName),'"'
+Dimsf=nVal
+LOGWRITE(*,*)'Dimsf,Offset=',Dimsf,Offset_in
+CALL H5SCREATE_SIMPLE_F(Rank, Dimsf, MemSpace, iError)
+CALL H5DOPEN_F(File_ID, TRIM(ArrayName) , DSet_ID, iError)
+
+IF(iError.NE.0) &
+  CALL Abort(__STAMP__,'Array '//TRIM(ArrayName)//' does not exist.')
+
+! Define and select the hyperslab to use for reading.
+CALL H5DGET_SPACE_F(DSet_ID, FileSpace, iError)
+Offset(:)=0
+DO iOffset = 1, nOffsets
+  Offset(offset_dim(iOffset))=Offset_in(iOffset)
+END DO 
+CALL H5SSELECT_HYPERSLAB_F(FileSpace, H5S_SELECT_SET_F, Offset, Dimsf, iError)
+! Create property list
+CALL H5PCREATE_F(H5P_DATASET_XFER_F, PList_ID, iError)
+#if USE_MPI
+! Set property list to collective dataset read
+CALL H5PGET_DRIVER_F(Plist_File_ID,driver,iError)
+IF(driver.EQ.H5FD_MPIO_F) CALL H5PSET_DXPL_MPIO_F(PList_ID, H5FD_MPIO_COLLECTIVE_F, iError)
+#endif
+
+IF(PRESENT(RealArray)) Type_ID=H5T_NATIVE_DOUBLE
+IF(PRESENT(IntArray))  Type_ID=H5T_NATIVE_INTEGER
+IF(PRESENT(StrArray))  CALL H5DGET_TYPE_F(DSet_ID, Type_ID, iError)
+
+buf=C_NULL_PTR
+IF(PRESENT(RealArray)) buf=C_LOC(RealArray)
+IF(PRESENT(IntArray))  buf=C_LOC(IntArray)
+IF(PRESENT(StrArray))  buf=C_LOC(StrArray(1))
+
+! Read the data
+CALL H5DREAD_F(DSet_ID,Type_ID,buf,iError,mem_space_id=MemSpace,file_space_id=FileSpace,xfer_prp=PList_ID)
+
+! Close the datatype, property list, dataspaces and dataset.
+IF(PRESENT(StrArray)) CALL H5TCLOSE_F(Type_ID, iError)
+CALL H5PCLOSE_F(PList_ID,iError)
+CALL H5SCLOSE_F(FileSpace,iError)
+CALL H5DCLOSE_F(DSet_ID, iError)
+CALL H5SCLOSE_F(MemSpace,iError)
+
+LOGWRITE(*,*)'...DONE!'
+END SUBROUTINE ReadArrayNOffsets
 
 !==================================================================================================================================
 !> Subroutine to read attributes from HDF5 file.

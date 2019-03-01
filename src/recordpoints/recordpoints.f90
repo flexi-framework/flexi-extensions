@@ -438,6 +438,7 @@ USE MOD_HDF5_Input        ,ONLY: GetDataSize
 USE MOD_HDF5_Output       ,ONLY: WriteAttribute,WriteArray,MarkWriteSuccessfull
 USE MOD_Output_Vars       ,ONLY: ProjectName
 USE MOD_Mesh_Vars         ,ONLY: MeshFile
+USE MOD_BatchInput_Vars   ,ONLY: nPreviousRuns
 #if USE_MPI
 USE MOD_Recordpoints_Vars ,ONLY: RP_COMM
 #endif
@@ -472,6 +473,8 @@ IF(myRPrank.EQ.0 .AND. iSequentialRun .EQ. 1)THEN
     CALL WriteAttribute(File_ID,'RPDefFile'  ,1,StrScalar=(/RPDefFile/))
     CALL WriteAttribute(File_ID,'VarNames'   ,PP_nVar,StrArray=StrVarNames)
     CALL WriteAttribute(File_ID,'Time'       ,1,RealScalar=OutputTime)
+    CALL WriteAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
+    CALL WriteAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
   END IF
   CALL CloseDataFile()
 END IF

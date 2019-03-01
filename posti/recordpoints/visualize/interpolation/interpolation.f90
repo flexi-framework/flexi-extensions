@@ -137,8 +137,8 @@ REAL                    :: RPData_right(nVar_HDF5,nRP_global),RPData_left(nVar_H
 WRITE(UNIT_stdOut,'(132("-"))')
 WRITE(UNIT_stdOut,'(A)',ADVANCE='NO')' Linear interpolation on equidistant time grid...'
 
-RPTime_tmp(:)     = RPTime(:)
-RPData_tmp(:,:,:) = RPData(:,:,:)
+RPTime_tmp(:)     = RPTime(1:nSamples_global)
+RPData_tmp(:,:,:) = RPData(:,:,1:nSamples_global)
 DEALLOCATE(RPTime,RPData,dt)
 ALLOCATE(RPTime(1:nSamples_out))
 ALLOCATE(RPData(1:nVar_HDF5,1:nRP_global,1:nSamples_out))

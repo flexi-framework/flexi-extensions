@@ -42,7 +42,7 @@ CONTAINS
 !===================================================================================================================================
 !> Read in the RP data from a single .h5 file
 !===================================================================================================================================
-SUBROUTINE ReadRPData(FileString,firstFile)
+SUBROUTINE ReadRPData(FileString,firstFile,stochOffset)
 ! MODULES
 USE MOD_Globals
 USE MOD_HDF5_Input
@@ -57,6 +57,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255),INTENT(IN) :: FileString
 LOGICAL,INTENT(IN),OPTIONAL   :: firstFile
+INTEGER,INTENT(IN),OPTIONAL   :: stochOffset
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 LOGICAL                       :: firstFile_loc
@@ -65,8 +66,9 @@ CHARACTER(LEN=255)            :: RP_DefFile_loc
 INTEGER                       :: nSamples_loc,nSamples_skip
 INTEGER                       :: iSample
 REAL,ALLOCATABLE              :: temparray(:,:,:)
+INTEGER                       :: offset(2)
 #ifdef MPI
-INTEGER                       :: nChunks,iChunk,nSamples_chunk,offset
+INTEGER                       :: nChunks,iChunk,nSamples_chunk
 REAL                          :: nTotal,limit
 #endif
 !===================================================================================================================================
@@ -144,6 +146,11 @@ END IF
 DEALLOCATE(HSize)
 
 ALLOCATE(temparray(0:nVar_HDF5,1:nRP_HDF5,1:nSamples_loc)) ! storing complete sample set
+IF (PRESENT(stochOffset)) THEN
+  offset(2)=stochOffset
+ELSE
+  offset(2)=0
+END IF
 #ifdef MPI
 ! check array data size.
 nTotal=REAL((nVar_HDF5+1)*nRP_HDF5*nSamples_loc)
@@ -153,16 +160,16 @@ IF(nTotal.GT.limit)THEN
   ! read in chunkwise
   nChunks=2*CEILING(nTotal/limit)
   nSamples_chunk=CEILING(REAL(nSamples_loc)/REAL(nChunks))
-  offset=0
+  offset(1)=0
   DO iChunk=1,nChunks
     IF(iChunk.EQ.nChunks) nSamples_chunk=nSamples_loc-offset
-    CALL ReadArray('RP_Data',3,(/nVar_HDF5+1,nRP_HDF5,nSamples_chunk/),offset,3, &
+    CALL ReadArrayNOffsets('RP_Data',4,(/nVar_HDF5+1,nRP_HDF5,nSamples_chunk,1/),offset,(/3,4/), &
                    RealArray=temparray(:,:,offset+1:offset+nSamples_chunk))
-    offset=offset+nSamples_chunk
+    offset(1)=offset(1)+nSamples_chunk
   END DO
 ELSE
 #endif
-CALL ReadArray('RP_Data',3,(/nVar_HDF5+1,nRP_HDF5,nSamples_loc/),0,3,RealArray=temparray)
+CALL ReadArray('RP_Data',4,(/nVar_HDF5+1,nRP_HDF5,nSamples_loc,1/),offset(2),4,RealArray=temparray)
 #ifdef MPI
 END IF
 #endif
@@ -196,7 +203,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                  :: nSamples_loc
-INTEGER                  :: iStart,iEnd
+INTEGER                  :: iStart,iEnd,zeros
 !===================================================================================================================================
 WRITE(UNIT_stdOut,'(132("-"))')
 WRITE(UNIT_stdOut,'(A)')  ' Assemble recordpoint data...'
@@ -211,9 +218,11 @@ IF(skip.EQ.1) THEN
   DO WHILE(ASSOCIATED(actualset))
     IF(RPTime(iStart).EQ.actualset%data(0,1,1)) THEN          ! dataset only valid if its first sample has same time as the last
       nSamples_loc=actualset%nSamples                         ! sample of its precursor
-      iEnd=MIN(iStart-1+nSamples_loc,nSamples_global)
-      RPData(1:nVar_HDF5,:,iStart:iEnd)=actualset%data(1:nVar_HDF5,:,1:nSamples_loc)
-      RPTime(iStart:iEnd)=actualset%data(0,1,1:nSamples_loc)  ! each RP has same time...
+      zeros=count(actualset%data(0,1,2:nSamples_loc)==0.)
+      iEnd=MIN(iStart-1+nSamples_loc,nSamples_global)-zeros
+      RPData(1:nVar_HDF5,:,iStart:iEnd)=actualset%data(1:nVar_HDF5,:,1:(nSamples_loc-zeros))
+      RPTime(iStart:iEnd)=actualset%data(0,1,1:(nSamples_loc-zeros))  ! each RP has same time...
+      nSamples_global=nSamples_global-zeros
       iStart=iEnd
       actualset=>actualset%nextset
     ELSE
@@ -231,6 +240,7 @@ ELSE
   END DO
 END IF
 
+WRITE(UNIT_stdOut,'(A,I8)')'  Updated total number of samples : ',nSamples_global
 WRITE(UNIT_stdOut,'(A)')' done.'
 END SUBROUTINE AssembleRPData
 

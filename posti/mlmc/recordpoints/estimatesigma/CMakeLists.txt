@@ -11,6 +11,7 @@ FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/estimatesigma_rp.f90
                           ${TOOL_DIR}/estimatesigma_rp_vars.f90
                           ${TOOL_DIR}/estimatesigma_rp_output.f90
                           ${TOOL_DIR}/estimatesigma_rp_input.f90
+                          ${TOOL_DIR}/../../../common/vtkOutput/vtkStructuredOutput.f90
                           ${TOOL_DIR}/../../../recordpoints/visualize/rpdata/*.f90
                           ${TOOL_DIR}/../../../recordpoints/visualize/rpset/*.f90
                           ${TOOL_DIR}/../../../recordpoints/visualize/parameters.f90
@@ -24,13 +25,16 @@ FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/estimatesigma_rp.f90
 ADD_LIBRARY(${TOOL_NAME}libF90 OBJECT ${${TOOL_NAME}F90})
 SET_TARGET_PROPERTIES(${TOOL_NAME}libF90 PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS}) 
 ADD_LIBRARY(${TOOL_NAME}lib STATIC $<TARGET_OBJECTS:${TOOL_NAME}libF90>)
-ADD_DEPENDENCIES(${TOOL_NAME}libF90 flexilibF90 HDF5 fftw)
+ADD_DEPENDENCIES(${TOOL_NAME}libF90 libflexishared)
 TARGET_INCLUDE_DIRECTORIES(${TOOL_NAME}libF90 PRIVATE ${FFTW_INCLUDE_DIR})
 
+#check whether these two lines are correct (why link externals to lib AND exec??)
+TARGET_LINK_LIBRARIES(${TOOL_NAME}lib ${FFTW_LIBRARIES})
 
 # Standalone Posti executable
 add_exec(              ${TOOL_NAME} ${TOOL_DIR}/estimatesigma_rp.f90)
-TARGET_LINK_LIBRARIES( ${TOOL_NAME} ${TOOL_NAME}lib flexilib userblocklib_dummy ${linkedlibs} ${LAPACK_LIBRARIES} ${CGNS_LIBRARY} ${FFTW_LIBRARIES})
+TARGET_LINK_LIBRARIES( ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
 
-ADD_DEPENDENCIES(      ${TOOL_NAME} ${TOOL_NAME}lib flexilib userblocklib_dummy ${linkedlibs} HDF5 fftw)
-SET_TARGET_PROPERTIES( ${TOOL_NAME} PROPERTIES LINKER_LANGUAGE Fortran)
+
+ADD_DEPENDENCIES(      ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
+#SET_TARGET_PROPERTIES( ${TOOL_NAME} PROPERTIES LINKER_LANGUAGE Fortran)

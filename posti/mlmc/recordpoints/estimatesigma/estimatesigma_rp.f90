@@ -14,7 +14,8 @@ USE MOD_ReadInTools
 USE MOD_EstimateSigma_RP_Vars
 USE MOD_EstimateSigma_RP_Output
 USE MOD_EstimateSigma_RP_Input
-USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5
+USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5,File_ID
+USE MOD_HDF5_Input                  ,ONLY:OpenDataFile,ReadAttribute,CloseDataFile
 USE MOD_Spec                        ,ONLY:InitSpec,spec,FinalizeSpec
 USE MOD_spec_Vars
 USE MOD_RPSetVisuVisu_Vars
@@ -25,22 +26,25 @@ USE MOD_RPInterpolation_Vars        ,ONLY:CalcTimeAverage,dt
 USE MOD_ParametersVisu              ,ONLY: nVarVisu,VarNameVisu
 USE MOD_EquationRP
 USE MOD_EOS                         ,ONLY:DefineParametersEOS,InitEOS
+USE MOD_Stringtools                 ,ONLY:STRICMP,getfileextension
 !#ifdef MPI
 USE MOD_MPI                         ,ONLY:DefineParametersMPI,InitMPI
 !#endif /* MPI */
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                            :: iArg,
-INTEGER:                           :: iExt,iSample
+INTEGER                            :: iArg
+INTEGER                            :: iExt,iSample
 REAL                               :: df
 CHARACTER(LEN=255),ALLOCATABLE     :: DataFilesFine(:)
 CHARACTER(LEN=255),ALLOCATABLE     :: DataFilesCoarse(:)
+CHARACTER(LEN=255)                 :: InputDataFile,ProjectName
 LOGICAL                            :: hasCoarse, validInput
 INTEGER                            :: nStartCoarse
 INTEGER                            :: nFiles
 INTEGER                            :: nDataFiles
 INTEGER                            :: nPrevious
+INTEGER                            :: stochOffset
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI() ! NO PARALLELIZATION, ONLY FOR COMPILING WITH MPI FLAGS ON SOME MACHINES OR USING MPI-DEPENDANT HDF5
@@ -75,12 +79,12 @@ IF (.NOT.validInput) THEN
 END IF
 
 CALL prms%read_options(Args(1))
-nFiles=Args(2)
+read (Args(2),'(I10)') nFiles
 nDataFiles=nArgs-2
 
 ALLOCATE(DataFilesFine(1:nFiles))
 DO iArg=3,3+(nFiles-1)
-  CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-1))
+  CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-2))
 END DO
 
 hasCoarse = (MOD(nDataFiles,nFiles).EQ.2)
@@ -88,7 +92,7 @@ IF(hasCoarse) THEN
   nStartCoarse = (2+ nFiles) + 1
   ALLOCATE(DataFilesCoarse(1:nDataFiles))
   DO iArg=nStartCoarse,nDataFiles
-    CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-1))
+    CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-2))
   END DO
 END IF
 
@@ -97,7 +101,7 @@ CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPrevious)
 nStart=nPrevious+1
 CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
 nEnd=nEnd+nPrevious
-CALL ReadAttribute(File_ID,'Project_Name',1,StrScalar=ProjectName)
+CALL ReadAttribute(File_ID,'ProjectName',1,StrScalar=ProjectName)
 FileNameSums = 'postproc_'//TRIM(ProjectName)//'.h5'
 CALL CloseDataFile()
 
@@ -108,7 +112,6 @@ snSamples  =1./REAL(nEnd)
 snSamplesM1=1./(REAL(nEnd)-1.)
 
 DO iSample=nStart,nEnd
-   WRITE(sample_string,"(I0)") iSample
 
    ! readin RP Data from all input files
    DO iArg=1,nDataFiles
@@ -121,8 +124,7 @@ DO iSample=nStart,nEnd
 
      ! Get start index of file extension to check if it is a h5 file
      iExt=INDEX(InputDataFile,'.',BACK = .TRUE.)
-     IF(InputDataFile(iExt+1:iExt+2) .NE. 'h5') &
-       CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
+     !IF(STRICMP(InputDataFile(iExt+1:iExt+2),'h5')) CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
      WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(InputDataFile), """"
      IF(iArg.EQ.1) THEN
        CALL ReadRPData(InputDataFile,firstFile=.TRUE.)
@@ -174,7 +176,7 @@ DO iSample=nStart,nEnd
      CALL FinalizeRPSet()
   END IF
 
-   IF (hasCoarse.GT.1) THEN
+   IF (hasCoarse) THEN
      ! readin RP Data from all input files
      DO iArg=1,nDataFiles
        InputDataFile=DataFilesCoarse(iArg)
@@ -186,16 +188,12 @@ DO iSample=nStart,nEnd
 
        ! Get start index of file extension to check if it is a h5 file
        iExt=INDEX(InputDataFile,'.',BACK = .TRUE.)
-       IF(InputDataFile(iExt+1:iExt+2) .NE. 'h5') &
-         CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
        ! Read in main attributes from given HDF5 State File
-       InputDataFile='level_'//TRIM(level_string)//'/c/sample_'//TRIM(sample_string)//'/'//&
-        TRIM(InputDataFile)
        WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(InputDataFile), """"
        IF(iArg.EQ.1) THEN
-         CALL ReadRPData(InputDataFile,firstFile=.TRUE.)
+         CALL ReadRPData(InputDataFile,firstFile=.TRUE.,stochOffset=iSample-nStart)
        ELSE
-         CALL ReadRPData(InputDataFile)
+         CALL ReadRPData(InputDataFile,firstFile=.FALSE.,stochOffset=iSample-nStart)
        END IF
      END DO
 
@@ -225,7 +223,7 @@ END DO
 
 ! SigmaSq Computation
 df=RPData_freq(nSamples_spec)/(nSamples_Spec-1)
-Bias=Sum(df*snSamples*ABS(UFineSum-UCoarseSum)))
+Bias=Sum(df*snSamples*ABS(UFineSum-UCoarseSum))
 CALL WriteSumsToHDF5()
 
 SigmaSqSpec = snSamplesM1*( DUSqSum - snSamples*(UFineSum-UCoarseSum) * (UFineSum - UCoarseSum) )
@@ -374,7 +372,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLESIABLES
-INTEGER             :: iVar,iVar2
+INTEGER             :: iVar,iVar2,nVarVisuTotal
 CHARACTER(LEN=20)   :: format
 !===================================================================================================================================
 ! Read Varnames from parameter file and fill
