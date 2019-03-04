@@ -1,7 +1,7 @@
 #include "flexi.h"
 
 !===================================================================================================================================
-!> This tool will take pre-averaged files (TimeAvg, Flucs) or simple state files 
+!> This tool will take pre-averaged files (TimeAvg, Flucs) or simple state files
 !> and perform global temporal averaging
 !===================================================================================================================================
 PROGRAM Combinelevels
@@ -58,7 +58,7 @@ DO iArg=1,nArgs
   snSamplesM1=1./(nSamples_Sums-1)
 
   Mean = Mean + snSamples*(UFineSum-UCoarseSum)
-  StdDev = StdDev + snSamplesM1*((UFineSqSum-UCoarseSum)   - snSamples*(UFineSum**2-UCoarseSum**2))
+  StdDev = StdDev + snSamplesM1*(DUSqSum   - snSamples*(UFineSum-UCoarseSum)*(UFineSum-UCoarseSum))
 END DO
 StdDev = SQRT(ABS(StdDev))
 
@@ -71,7 +71,7 @@ SDEALLOCATE(UCoarseSqSum)
 SDEALLOCATE(DUSqSum)
 SDEALLOCATE(Mean)
 SDEALLOCATE(StdDev)
- 
+
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A)') "Merging DONE!"
 SWRITE(UNIT_stdOut,'(132("="))')
