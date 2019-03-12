@@ -120,6 +120,9 @@ IF(RP_onProc)THEN
 END IF
 
 
+iSample=0
+nSamples=0
+chunkSamples=0
 RecordPointsInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT RECORDPOINTS DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -345,7 +348,7 @@ USE MOD_Output_Vars      ,ONLY: ProjectName
 USE MOD_Timedisc_Vars,    ONLY: dt
 USE MOD_Analyze_Vars,     ONLY: WriteData_dt,tWriteData
 USE MOD_RecordPoints_Vars,ONLY: RP_Data,RP_ElemID
-USE MOD_RecordPoints_Vars,ONLY: RP_Buffersize,RP_MaxBuffersize,RP_SamplingOffset,iSample
+USE MOD_RecordPoints_Vars,ONLY: RP_Buffersize,RP_MaxBuffersize,RP_SamplingOffset,iSample,RP_OldSize
 USE MOD_RecordPoints_Vars,ONLY: l_xi_RP,l_eta_RP,nRP
 USE MOD_RecordPoints_Vars,ONLY: RP_onProc,myRPrank,RP_COMM,nRP_Procs
 USE MOD_IO_HDF5           
@@ -368,13 +371,15 @@ LOGICAL,INTENT(IN)             :: forceSampling           !< force sampling (e.g
 INTEGER                 :: i,j,k,iRP
 REAL                    :: u_RP(PP_nVar,nRP)
 REAL                    :: l_eta_zeta_RP
+INTEGER                 :: RP_MaxBuffersizeTmp
 CHARACTER(LEN=255)             :: FileString
 !----------------------------------------------------------------------------------------------------------------------------------
 IF(MOD(iter,RP_SamplingOffset).NE.0 .AND. .NOT. forceSampling) RETURN
 IF(.NOT.ALLOCATED(RP_Data))THEN
   ! Compute required buffersize from timestep and add 20% tolerance
   ! +1 is added to ensure a minimum buffersize of 2
-  IF(iSequentialRun .GT. 1 .AND. iSample .EQ. 1) THEN
+  RP_MaxBuffersizeTmp=RP_MaxBuffersize
+  IF(iSequentialRun .GT. 1 .AND. iSample .EQ. 0) THEN
     FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_RP',tWriteData))//'.h5'
 #if USE_MPI
     CALL MPI_BARRIER(RP_COMM,iError)
@@ -383,11 +388,13 @@ IF(.NOT.ALLOCATED(RP_Data))THEN
     CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
 #endif
     CALL GetDataSize(File_ID,'RP_Data',nDims,HSize)
-    RP_MaxBuffersize=HSize(3)
+    RP_OldSize=HSize(3)
+    RP_MaxBuffersizeTmp=MIN(RP_MaxBuffersize,RP_OldSize)
     CALL CloseDataFile()
   END IF
-  RP_Buffersize = MIN(CEILING((1.2*WriteData_dt)/(dt*RP_SamplingOffset))+1,RP_MaxBuffersize)
+  RP_Buffersize = MIN(CEILING((1.2*WriteData_dt)/(dt*RP_SamplingOffset))+1,RP_MaxBuffersizeTmp)
   ALLOCATE(RP_Data(0:PP_nVar,nRP,RP_Buffersize))
+  RP_Data=0.
 END IF
 
 ! evaluate state at RP
@@ -443,9 +450,9 @@ USE MOD_BatchInput_Vars   ,ONLY: nPreviousRuns
 USE MOD_Recordpoints_Vars ,ONLY: RP_COMM
 #endif
 USE MOD_Recordpoints_Vars ,ONLY: myRPrank,lastSample
-USE MOD_Recordpoints_Vars ,ONLY: RPDefFile,RP_Data,iSample,nSamples
+USE MOD_Recordpoints_Vars ,ONLY: RPDefFile,RP_Data,iSample,nSamples,nSamplesGlob
 USE MOD_Recordpoints_Vars ,ONLY: offsetRP,nRP,nGlobalRP
-USE MOD_Recordpoints_Vars ,ONLY: RP_Buffersize,RP_Maxbuffersize,RP_fileExists,chunkSamples
+USE MOD_Recordpoints_Vars ,ONLY: RP_Buffersize,RP_Maxbuffersize,RP_fileExists,chunkSamples,RP_OldSize
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,   INTENT(IN)             :: OutputTime            !< time
@@ -487,11 +494,15 @@ CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
 #endif
 
 IF(iSample.GT.0)THEN
-  IF(.NOT.RP_fileExists) chunkSamples=iSample
-  ! write buffer into file, we need two offset dimensions (one buffer, one processor)
   nSamples=nSamples+iSample
+  nSamplesGlob=nSamples
+  IF(.NOT.RP_fileExists) THEN
+    chunkSamples=iSample
+    nSamplesGlob=MAX(nSamples,RP_OldSize)
+  END IF
+  ! write buffer into file, we need two offset dimensions (one buffer, one processor)
   CALL WriteArray(DataSetName='RP_Data', rank=4,&
-                        nValGlobal=(/PP_nVar+1,nGlobalRP,nSamples,nGlobalRuns/),&
+                        nValGlobal=(/PP_nVar+1,nGlobalRP,nSamplesGlob,nGlobalRuns/),&
                         nVal=      (/PP_nVar+1,nRP      ,iSample,1/),&
                         offset=    (/0        ,offsetRP ,nSamples-iSample,iGlobalRun-1/),&
                         resizeDim= (/.FALSE.  ,.FALSE.  ,.TRUE.,.FALSE./),&
@@ -508,9 +519,10 @@ RP_fileExists=.TRUE.
 IF(resetCounters)THEN
   ! Recompute required buffersize from timestep and add 10% tolerance
   IF((nSamples.GE.RP_Buffersize).AND.(RP_Buffersize.LT.RP_Maxbuffersize))THEN
-    RP_Buffersize=MIN(CEILING(1.1*nSamples)+1,RP_MaxBuffersize)
+    RP_Buffersize=MIN(CEILING(1.1*nSamples)+1,RP_MaxBuffersize,RP_OldSize)
     DEALLOCATE(RP_Data)
     ALLOCATE(RP_Data(0:PP_nVar,nRP,RP_Buffersize))
+    RP_Data=0.
   END IF
   RP_fileExists=.FALSE.
   iSample=1
