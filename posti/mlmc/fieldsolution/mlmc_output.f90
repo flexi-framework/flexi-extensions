@@ -68,7 +68,7 @@ VarNames( 8)='VelocityZ'
 VarNames( 9)='Pressure'
 VarNames(10)='Temperature'
 
-CALL GenerateFileSkeleton(TRIM(FileNameSums),'EstSigSum',1,NNew,(/'DUMMY_DO_NOT_VISUALIZE'/),&
+CALL GenerateFileSkeleton(TRIM(FileNameSums),'EstSigSum',nVarTotal,NNew,(/'DUMMY_DO_NOT_VISUALIZE'/),&
                           MeshFileNew,Time_State,Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
 
 DataSetNames(1)='UFineSum'
@@ -80,7 +80,7 @@ DataSetNames(5)='DUSqSum'
 DO i=1,5
   CALL GenerateFileSkeleton(TRIM(FileNameSums),'EstSigSum',nVarTotal,NNew,VarNames,&
                             MeshFileNew,Time_State,Time_State,create=.FALSE.,Dataset=DataSetNames(i),batchMode=.FALSE.)
-END DO 
+END DO
 
 DataSetPtrs(1)%ptr=>UFineSum
 DataSetPtrs(2)%ptr=>UCoarseSum
@@ -97,7 +97,7 @@ DO i=1,5
                   offset=(/0,0,0,0,0/),&
                   collective=.FALSE.,&
                   RealArray=DataSetPtrs(i)%ptr)
-END DO 
+END DO
 
 CALL WriteAttribute(File_ID,'nSamples',1,IntScalar=NEnd)
 
