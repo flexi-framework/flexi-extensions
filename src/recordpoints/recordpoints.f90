@@ -379,7 +379,7 @@ IF(.NOT.ALLOCATED(RP_Data))THEN
   ! Compute required buffersize from timestep and add 20% tolerance
   ! +1 is added to ensure a minimum buffersize of 2
   RP_MaxBuffersizeTmp=RP_MaxBuffersize
-  IF(iSequentialRun .GT. 1 .AND. iSample .EQ. 0) THEN
+  IF(iSequentialRun .GT. 1 ) THEN
     FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_RP',tWriteData))//'.h5'
 #if USE_MPI
     CALL MPI_BARRIER(RP_COMM,iError)
