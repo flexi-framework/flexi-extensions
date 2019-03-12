@@ -379,19 +379,6 @@ IF(.NOT.ALLOCATED(RP_Data))THEN
   ! Compute required buffersize from timestep and add 20% tolerance
   ! +1 is added to ensure a minimum buffersize of 2
   RP_MaxBuffersizeTmp=RP_MaxBuffersize
-  IF(iSequentialRun .GT. 1 ) THEN
-    FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_RP',tWriteData))//'.h5'
-#if USE_MPI
-    CALL MPI_BARRIER(RP_COMM,iError)
-    CALL OpenDataFile(Filestring,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=RP_COMM)
-#else
-    CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
-#endif
-    CALL GetDataSize(File_ID,'RP_Data',nDims,HSize)
-    RP_OldSize=HSize(3)
-    RP_MaxBuffersizeTmp=MIN(RP_MaxBuffersize,RP_OldSize)
-    CALL CloseDataFile()
-  END IF
   RP_Buffersize = MIN(CEILING((1.2*WriteData_dt)/(dt*RP_SamplingOffset))+1,RP_MaxBuffersizeTmp)
   ALLOCATE(RP_Data(0:PP_nVar,nRP,RP_Buffersize))
   RP_Data=0.
@@ -484,6 +471,20 @@ IF(myRPrank.EQ.0 .AND. iSequentialRun .EQ. 1)THEN
     CALL WriteAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
   END IF
   CALL CloseDataFile()
+END IF
+
+IF(iSample.GT.0)THEN
+  IF(iSequentialRun .GT. 1 ) THEN
+#if USE_MPI
+    CALL MPI_BARRIER(RP_COMM,iError)
+    CALL OpenDataFile(Filestring,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=RP_COMM)
+#else
+    CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
+#endif
+    CALL GetDataSize(File_ID,'RP_Data',nDims,HSize)
+    RP_OldSize=HSize(3)
+    CALL CloseDataFile()
+  END IF
 END IF
 
 #if USE_MPI
