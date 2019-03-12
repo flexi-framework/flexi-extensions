@@ -496,10 +496,8 @@ CALL OpenDataFile(Filestring,create=.FALSE.,single=.TRUE. ,readOnly=.FALSE.)
 IF(iSample.GT.0)THEN
   nSamples=nSamples+iSample
   nSamplesGlob=nSamples
-  IF(.NOT.RP_fileExists) THEN
-    chunkSamples=iSample
-    nSamplesGlob=MAX(nSamples,RP_OldSize)
-  END IF
+  IF(.NOT.RP_fileExists) chunkSamples=iSample
+  IF(iSequentialRun .GT. 1)  nSamplesGlob=MAX(nSamples,RP_OldSize)
   ! write buffer into file, we need two offset dimensions (one buffer, one processor)
   CALL WriteArray(DataSetName='RP_Data', rank=4,&
                         nValGlobal=(/PP_nVar+1,nGlobalRP,nSamplesGlob,nGlobalRuns/),&
