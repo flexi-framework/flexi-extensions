@@ -158,9 +158,9 @@ df = 1./Time_Block
 
 ALLOCATE(in(nSamples_block))
 ALLOCATE(out(nSamples_block))
-ALLOCATE(RPData_spec(1:nVarVisu,nRP_global,nSamples_spec))
+IF(.NOT.ALLOCATED(RPData_spec)) ALLOCATE(RPData_spec(1:nVarVisu,nRP_global,nSamples_spec))
 ALLOCATE(RPData_tmp(nSamples_out))
-ALLOCATE(RPData_freq(nSamples_spec))
+IF(.NOT.ALLOCATED(RPDAta_freq) )ALLOCATE(RPData_freq(nSamples_spec))
 DO iSample=1,nSamples_spec
   RPData_freq(iSample)=(iSample-1)*df
 END DO

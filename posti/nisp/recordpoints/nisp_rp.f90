@@ -58,6 +58,10 @@ CALL prms%CreateRealOption   (  'u_inf'              , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'chord'              , "TODO",multiple=.TRUE.)
 CALL prms%CreateStringOption (  'VarName'            , "TODO",multiple=.TRUE.)
 CALL prms%CreateIntOption    (  'OutputFormat'       , "TODO",multiple=.TRUE.)
+CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
+CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
+CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
+CALL prms%CreateRealOption   (  'mu0'                , "TODO",multiple=.TRUE.)
 END SUBROUTINE DefineParametersNisp_RP
 
 !===================================================================================================================================
@@ -114,7 +118,7 @@ equiTimeSpacing=.TRUE.
 !======================================================
 CALL GET_COMMAND_ARGUMENT(2,StochFile)
 CALL OpenDataFile(StochFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
-CALL ReadAttribute(File_ID,'ProjectName'  ,1,StrScalar   = ProjectName)
+!CALL ReadAttribute(File_ID,'ProjectName'  ,1,StrScalar   = ProjectName)
 !CALL ReadAttribute(File_ID,'polyDeg'      ,1,IntScalar   = M)
 CALL ReadAttribute(File_ID,'nGlobalRuns'  ,1,IntScalar   = nStochSamples)
 CALL ReadAttribute(File_ID,'nStochVars'   ,1,IntScalar   = nStochVars)
@@ -149,7 +153,7 @@ CALL ReadArray(ArrayName  = 'DistributionProps',&
                RealArray  = DistributionProps)
 
 CALL CloseDataFile()
-M = 5
+M = 4
 
 !======================================================
 ! Readin RP Files
