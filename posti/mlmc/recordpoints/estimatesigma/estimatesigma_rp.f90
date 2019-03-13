@@ -75,28 +75,29 @@ IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))    validInput=.FALSE.
 IF(.NOT.(STRICMP(GetFileExtension(Args(3)),'h5')))     validInput=.FALSE.
 IF(.NOT.(STRICMP(GetFileExtension(Args(nArgs)),'h5'))) validInput=.FALSE.
 IF (.NOT.validInput) THEN
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file [number of Files] statefiles')
+  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file input.h5 [number of Files] statefiles')
 END IF
 
 CALL prms%read_options(Args(1))
-read (Args(2),'(I10)') nFiles
+read (Args(3),'(I10)') nFiles
 nDataFiles=nArgs-2
 
 ALLOCATE(DataFilesFine(1:nFiles))
-DO iArg=3,3+(nFiles-1)
+DO iArg=4,4+(nFiles-1)
   CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-2))
 END DO
 
 hasCoarse = (MOD(nDataFiles,nFiles).EQ.2)
 IF(hasCoarse) THEN
-  nStartCoarse = (2+ nFiles) + 1
+  nStartCoarse = (3+ nFiles) + 1
   ALLOCATE(DataFilesCoarse(1:nDataFiles))
   DO iArg=nStartCoarse,nDataFiles
     CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-2))
   END DO
 END IF
 
-CALL OpenDataFile(DataFilesFine(1),create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL GET_COMMAND_ARGUMENT(2,InputDataFile)
+CALL OpenDataFile(InputDataFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPrevious)
 nStart=nPrevious+1
 CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
