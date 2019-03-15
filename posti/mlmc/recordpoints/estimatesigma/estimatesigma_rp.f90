@@ -15,6 +15,7 @@ USE MOD_EstimateSigma_RP_Vars
 USE MOD_EstimateSigma_RP_Output
 USE MOD_EstimateSigma_RP_Input
 USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5,File_ID
+USE MOD_IO_HDF5                     ,ONLY:InitMPIInfo
 USE MOD_HDF5_Input                  ,ONLY:OpenDataFile,ReadAttribute,CloseDataFile
 USE MOD_Spec                        ,ONLY:InitSpec,spec,FinalizeSpec
 USE MOD_spec_Vars
@@ -48,6 +49,7 @@ INTEGER                            :: stochOffset
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI() ! NO PARALLELIZATION, ONLY FOR COMPILING WITH MPI FLAGS ON SOME MACHINES OR USING MPI-DEPENDANT HDF5
+CALL InitMPIInfo()
 IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
      'This tool is designed only for single execution!')
 

@@ -11,6 +11,7 @@ USE MOD_Commandline_Arguments
 USE MOD_ReadInTools
 USE MOD_CombineLevels_RP_Vars
 USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5
+USE MOD_IO_HDF5                     ,ONLY:InitMPIInfo
 !USE MOD_RPSetVisuVisu_Vars                        
 USE MOD_RPSetVisu                        
 !USE MOD_OutputRPVisu                      
@@ -31,6 +32,7 @@ CHARACTER(LEN=255),ALLOCATABLE     :: DataFiles(:)
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI() ! NO PARALLELIZATION, ONLY FOR COMPILING WITH MPI FLAGS ON SOME MACHINES OR USING MPI-DEPENDANT HDF5
+CALL InitMPIInfo()
 IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
      'This tool is designed only for single execution!')
 

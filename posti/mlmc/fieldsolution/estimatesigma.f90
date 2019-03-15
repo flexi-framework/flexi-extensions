@@ -39,7 +39,7 @@ USE MOD_MLMC_Vars
 USE MOD_MLMC_SwapMesh_Vars
 USE MOD_MLMC_Input,              ONLY: ReadSums,ReadStateFile
 USE MOD_MLMC_Output
-USE MOD_IO_HDF5                 ,ONLY: AddToFieldData
+USE MOD_IO_HDF5                 ,ONLY: AddToFieldData,InitMPIInfo
 USE MOD_HDF5_Input,              ONLY: OpenDataFile,CloseDataFile,ReadAttribute
 USE MOD_Mesh                    ,ONLY: DefineParametersMesh,InitMesh
 USE MOD_Exactfunc               ,ONLY: ExactFunc
@@ -50,7 +50,7 @@ USE MOD_Output_Vars             ,ONLY: ProjectName
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-CHARACTER(LEN=255)  :: tmp
+CHARACTER(LEN=255)  :: tmp,H5PrmFile
 INTEGER             :: i,j,k,iElem
 REAL,ALLOCATABLE    :: UPrim(:,:,:,:,:)
 LOGICAL             :: validInput,hasCoarse
@@ -58,6 +58,7 @@ INTEGER             :: nPrevious
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI()
+CALL InitMPIInfo()
 
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(1("**********************************"))')
@@ -87,10 +88,11 @@ END IF
 
 ! check if correct command line argumtns are given
 validInput = .TRUE.
-IF((nArgs.LT.2) .OR. (nArgs.GT.3))                     validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))    validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(2)),'h5')))     validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(nArgs)),'h5'))) validInput=.FALSE.
+IF((nArgs.LT.3) .OR. (nArgs.GT.4))                   validInput=.FALSE.
+IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))  validInput=.FALSE.
+DO i=2,nArgs
+  IF(.NOT.(STRICMP(GetFileExtension(Args(i)),'h5'))) validInput=.FALSE.
+END DO 
 IF (.NOT.validInput) THEN
   CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file statefile_f [statefile_c]')
 END IF
@@ -101,9 +103,10 @@ SWRITE(UNIT_stdOut,'(132("L"))')
 
 SWRITE(UNIT_stdOut,'(132("="))')
 
-StateFileFine=TRIM(Args(2))
+H5PrmFile=TRIM(Args(2))
+StateFileFine=TRIM(Args(3))
 
-CALL OpenDataFile(StateFileFine,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL OpenDataFile(H5PrmFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPrevious)
 nStart=nPrevious+1
 CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
@@ -114,8 +117,8 @@ CALL CloseDataFile()
 varAna       = GETINT('varAna')
 nAna         = GETINT('nAna')
 
-hasCoarse = nArgs.EQ.3
-IF(hasCoarse) StateFileCoarse=TRIM(Args(3))
+hasCoarse = nArgs.EQ.4
+IF(hasCoarse) StateFileCoarse=TRIM(Args(4))
 
 
 !Swapmesh

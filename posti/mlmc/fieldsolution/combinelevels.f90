@@ -24,6 +24,7 @@ CHARACTER(LEN=255)  :: FileNameDummy=".dummy.ini"
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI()
+CALL InitMPIInfo()
 OPEN(NEWUNIT= iniUnit,        &
      FILE   = FileNameDummy, &
      STATUS = 'NEW',          &

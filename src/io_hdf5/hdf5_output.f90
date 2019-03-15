@@ -715,7 +715,6 @@ USE MOD_Interpolation_Vars ,ONLY: NodeType
 #if FV_ENABLED
 USE MOD_FV_Vars            ,ONLY: FV_X,FV_w
 #endif
-USE MOD_BatchInput_Vars    ,ONLY: nPreviousRuns
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -796,9 +795,6 @@ IF(create_loc)THEN
   CALL WriteAttribute(File_ID,'FV_w',PP_N+1,RealArray=FV_w_array)
 #endif
   CALL WriteAttribute(File_ID,'NComputation',1,IntScalar=PP_N)
-
-  CALL WriteAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
-  CALL WriteAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
 END IF
 
 CALL CloseDataFile()

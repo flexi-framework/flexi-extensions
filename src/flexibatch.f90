@@ -81,7 +81,7 @@ CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iErr
 
 !We now allow nGlobalRuns not to fit perfectly.
 !IF(MOD(nGlobalRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nGlobalRuns has to be a multiple of nParallelRuns')
-nSequentialRuns = nGlobalRuns / nParallelRuns
+nSequentialRuns = (nGlobalRuns-1) / nParallelRuns + 1
 
 ! run FLEXI in loop
 GlobalStartTime=FLEXITIME()
