@@ -192,7 +192,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems,nGlobalRuns/),&
                         nVal=(/nVal,1/)                                              ,&
                         offset=    (/0,      0,     0,     0,     offsetElem  ,iGlobalRun-1/),&
-                        collective=.TRUE.,RealArray=(/UOut,1.0/))
+                        collective=.TRUE.,RealArray=UOut)
 
 ! Deallocate UOut only if we did not point to U
 IF((PP_N .NE. NOut).OR.((PP_dim .EQ. 2).AND.(.NOT.output2D))) DEALLOCATE(UOut)
