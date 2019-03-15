@@ -29,7 +29,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER                        :: nArgsLoc,iArg,Color
 CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
-LOGICAL                        :: exists
+LOGICAL                        :: exists,isActive
 REAL                           :: GlobalStartTime,GlobalEndTime
 !==================================================================================================================================
 
@@ -92,8 +92,10 @@ DO iSequentialRun=1,nSequentialRuns
 
   ! During last sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
   IF(iSequentialRun.EQ.nSequentialRuns)THEN
-    Color=MERGE(0,MPI_UNDEFINED,iGlobalRun.LE.nGlobalRuns)
+    isActive=iGlobalRun.LE.nGlobalRuns
+    Color=MERGE(0,MPI_UNDEFINED,isActive)
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
+    IF(.NOT.isActive) EXIT
   END IF 
 
   ! Initialize
