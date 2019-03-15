@@ -284,7 +284,7 @@ SWRITE(UNIT_StdOut,'(A14,ES16.7)')' Sim time   : ',Time
 ! Calculate error norms
 IF(doCalcErrorNorms)THEN
   CALL CalcErrorNorms(Time,L_2_Error,L_Inf_Error)
-  IF(MPIroot) THEN
+  IF(MPIGlobalRoot) THEN
     WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES18.9)'
     WRITE(UNIT_StdOut,formatStr)' L_2        : ',L_2_Error
     WRITE(UNIT_StdOut,formatStr)' L_inf      : ',L_Inf_Error
@@ -299,7 +299,7 @@ END IF  ! ErrorNorms
 CALL AnalyzeEquation(Time)
 CALL Benchmarking()
 
-IF(MPIroot .AND. (Time.GT.0.)) THEN
+IF(MPIGlobalRoot .AND. (Time.GT.0.)) THEN
   WRITE(UNIT_StdOut,'(132("."))')
   WRITE(UNIT_stdOut,'(A,A,A,F8.2,A)') ' FLEXI RUNNING ',TRIM(ProjectName),'... [',RunTime,' sec ]'
   WRITE(UNIT_StdOut,'(132("-"))')

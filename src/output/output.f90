@@ -165,7 +165,7 @@ WriteStateFiles=GETLOGICAL("WriteStateFiles")
 IF (.NOT.WriteStateFiles) CALL PrintWarning("Write of state files disabled!")
 
 
-IF (MPIRoot) THEN
+IF (MPIGlobalRoot) THEN
   ! prepare userblock file
   CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(ParameterFile)//C_NULL_CHAR)
   INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
@@ -244,7 +244,7 @@ IF(.NOT.doPrintStatusLine) RETURN
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,FVcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
 
-IF(MPIroot)THEN
+IF(MPIGlobalRoot)THEN
 #ifdef INTEL
   OPEN(UNIT_stdOut,CARRIAGECONTROL='fortran')
 #endif

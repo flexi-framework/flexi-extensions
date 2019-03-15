@@ -150,7 +150,7 @@ color=MPI_UNDEFINED
 IF(RP_onProc) color=2
 
 ! create ranks for RP communicator
-IF(MPIRoot) THEN
+IF(MPIGlobalRoot) THEN
   RPrank=-1
   noRPrank=-1
   myRPRank=0
@@ -211,7 +211,7 @@ INTEGER                       :: iElem,iRP,iRP_glob
 INTEGER                       :: OffsetRPArray(2,nElems)
 REAL,ALLOCATABLE              :: xi_RP(:,:)
 !==================================================================================================================================
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   IF(.NOT.FILEEXISTS(FileString))  CALL abort(__STAMP__, &
           'RPList from data file "'//TRIM(FileString)//'" does not exist')
 END IF

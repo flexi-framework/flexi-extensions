@@ -289,7 +289,7 @@ IF(gatheredWrite)THEN
   SDEALLOCATE(UStr)
 ELSE
 #endif
-  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.)
+  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=MPI_COMM_ACTIVE)
   IF(PRESENT(RealArray)) CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
                                                offset,collective,RealArray=RealArray)
   IF(PRESENT(IntArray))  CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
@@ -423,7 +423,7 @@ END DO
 ! First the variable size arrays or arrays that should always be written as a separate dataset
 ! --------------------------------------------------------------------------------------------- !
 ! Write the attributes
-IF(MPIRoot.AND.(nVarTotal.NE.nVar))THEN
+IF(MPIGlobalRoot.AND.(nVarTotal.NE.nVar))THEN
   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
   f=>FieldList
   DO WHILE(ASSOCIATED(f))
@@ -465,7 +465,7 @@ ALLOCATE(VarNames(nVar))
 ALLOCATE(tmp(nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 
 ! Write the attributes
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   nVar=0
   f=>FieldList
   DO WHILE(ASSOCIATED(f))
@@ -532,7 +532,7 @@ INTEGER                        :: NZ_loc
 INTEGER                        :: iElem,i,j,iVar
 #endif
 !==================================================================================================================================
-IF(MPIROOT)THEN
+IF(MPIGlobalRoot)THEN
   WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE BASE FLOW TO HDF5 FILE...'
   GETTIME(StartT)
 END IF
@@ -575,7 +575,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
 #if PP_dim == 2
 IF(.NOT.output2D) DEALLOCATE(UOut)
 #endif
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   CALL MarkWriteSuccessfull(FileName)
   GETTIME(EndT)
   WRITE(UNIT_stdOut,'(A,F0.3,A)',ADVANCE='YES')'DONE  [',EndT-StartT,'s]'
@@ -625,7 +625,7 @@ INTEGER                        :: nVar_loc, nVal_loc(6), nVal_glob(6), i
 !==================================================================================================================================
 IF(ANY(nVal(1:PP_dim).EQ.0)) RETURN ! no time averaging
 IF(nVarAvg.EQ.0.AND.nVarFluc.EQ.0) RETURN ! no time averaging
-IF(MPIROOT)THEN
+IF(MPIGlobalRoot)THEN
   WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE TIME AVERAGED STATE TO HDF5 FILE...'
   GETTIME(StartT)
 END IF

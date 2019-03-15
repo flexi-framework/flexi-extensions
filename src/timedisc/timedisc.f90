@@ -336,7 +336,7 @@ DO
     CalcTimeEnd=FLEXITIME()
 
 
-    IF(MPIroot)THEN
+    IF(MPIGlobalRoot)THEN
       ! Get calculation time per DOF
       CalcTimeEnd=(CalcTimeEnd-CalcTimeStart)*REAL(nProcessors)/(REAL(nGlobalElems)*REAL((PP_N+1)**PP_dim)*REAL(iter_loc))/nRKStages
       CALL DATE_AND_TIME(values=TimeArray) ! get System time

@@ -152,8 +152,6 @@ output2D = .FALSE.
 #else
 output2D = GETLOGICAL('output2D','.FALSE.')
 #endif
-
-CALL InitMPIInfo()
 END SUBROUTINE InitIOHDF5
 
 !==================================================================================================================================

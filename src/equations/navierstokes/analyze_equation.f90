@@ -127,7 +127,7 @@ IF(.NOT.ANY(isWall))THEN
 END IF
 
 ! Initialize eval routines
-IF(MPIRoot)THEN
+IF(MPIGlobalRoot)THEN
   IF(doCalcBodyForces.AND.doWriteBodyForces)THEN
     ALLOCATE(Filename_BodyForce(nBCs))
     DO i=1,nBCs
@@ -209,7 +209,7 @@ IF(doCalcBulkState)    CALL CalcBulkState(bulkPrim,bulkCons)
 IF(doCalcTotalStates)  CALL CalcKessel(meanTotals)
 
 
-IF(MPIRoot.AND.doCalcBodyforces)THEN
+IF(MPIGlobalRoot.AND.doCalcBodyforces)THEN
   WRITE(UNIT_StdOut,*)'BodyForces (Pressure, Friction) : '
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',6ES18.9)'
   DO i=1,nBCs
@@ -219,7 +219,7 @@ IF(MPIRoot.AND.doCalcBodyforces)THEN
     WRITE(UNIT_StdOut,formatStr) ' '//TRIM(BoundaryName(i)),Fp(:,i),Fv(:,i)
   END DO
 END IF
-IF(MPIRoot.AND.doCalcWallVelocity)THEN
+IF(MPIGlobalRoot.AND.doCalcWallVelocity)THEN
   WRITE(UNIT_StdOut,*)'Wall Velocities (mean/min/max)  : '
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',3ES18.9)'
   DO i=1,nBCs
@@ -230,7 +230,7 @@ IF(MPIRoot.AND.doCalcWallVelocity)THEN
   END DO
 END IF
 
-IF(MPIRoot.AND.doCalcMeanFlux)THEN
+IF(MPIGlobalRoot.AND.doCalcMeanFlux)THEN
   WRITE(formatStr,'(A,I2,A,I2,A)')'(A',maxlen,',',PP_nVar,'ES18.9)'
   WRITE(UNIT_StdOut,*)'MeanFlux through boundaries     : '
   DO i=1,nBCs
@@ -241,7 +241,7 @@ IF(MPIRoot.AND.doCalcMeanFlux)THEN
   END DO
 END IF  !(doCalcBodyforces)
 
-IF(MPIRoot.AND.doCalcBulkState)THEN
+IF(MPIGlobalRoot.AND.doCalcBulkState)THEN
   IF (doWriteBulkState) &
     CALL OutputToFile(FileName_Bulk,(/Time/),(/PP_nVarPrim+PP_nVar-1,1/),(/BulkPrim,BulkCons(2:PP_nVar)/))
   WRITE(formatStr,'(A,I2,A)')'(A14,',PP_nVarPrim,'ES18.9)'
@@ -250,7 +250,7 @@ IF(MPIRoot.AND.doCalcBulkState)THEN
   WRITE(UNIT_StdOut,formatStr)' Bulk Cons  : ',bulkCons
 END IF
 
-IF(MPIRoot.AND.doCalcTotalStates)THEN
+IF(MPIGlobalRoot.AND.doCalcTotalStates)THEN
   WRITE(UNIT_StdOut,*)'Mean total states at boundaries : '
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',4ES18.9)'
   DO i=1,nBCs

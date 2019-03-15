@@ -21,7 +21,7 @@ PROGRAM FlexiBatch
 USE MOD_Globals
 USE MOD_Flexi
 USE MOD_TimeDisc   ,ONLY: TimeDisc
-USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID
+USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID,InitMPIInfo
 USE MOD_HDF5_Input ,ONLY: ReadAttribute,DatasetExists
 USE MOD_BatchInput_Vars, ONLY: StochFile,nPreviousRuns
 IMPLICIT NONE
@@ -58,6 +58,7 @@ nGlobalProcessors=1
 #endif
 MPIGlobalRoot=(myGlobalRank .EQ. 0)
 
+CALL InitMPIInfo()
 
 ! open StochFile, get attributes nGlobalRuns, nParallelRuns
 CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
