@@ -87,6 +87,7 @@ INTEGER               :: maxRP
 !==================================================================================================================================
 ! check if recordpoints are activated
 RP_inUse=(GETLOGICAL('RP_inUse','.FALSE.') .OR. PRESENT(RPDefFileOpt))
+!IF(.NOT.RP_inUse) RETURN
 IF(.NOT.RP_inUse) RETURN
 
 IF((.NOT.InterpolationInitIsDone) .OR. RecordPointsInitIsDone)THEN
@@ -159,7 +160,7 @@ IF(MPIGlobalRoot) THEN
   ELSE
     noRPrank=0
   END IF
-  DO iProc=1,nProcessors-1
+  DO iProc=1,nGlobalProcessors-1
     CALL MPI_RECV(hasRP,1,MPI_LOGICAL,iProc,0,MPI_COMM_ACTIVE,MPIstatus,iError)
     IF(hasRP) THEN
       RPrank=RPrank+1
@@ -170,8 +171,8 @@ IF(MPIGlobalRoot) THEN
     END IF
   END DO
 ELSE
-    CALL MPI_SEND(RP_onProc,1,MPI_LOGICAL,0,0,MPI_COMM_ACTIVE,iError)
-    CALL MPI_RECV(myRPrank,1,MPI_INTEGER,0,0,MPI_COMM_ACTIVE,MPIstatus,iError)
+  CALL MPI_SEND(RP_onProc,1,MPI_LOGICAL,0,0,MPI_COMM_ACTIVE,iError)
+  CALL MPI_RECV(myRPrank,1,MPI_INTEGER,0,0,MPI_COMM_ACTIVE,MPIstatus,iError)
 END IF
 
 ! create new RP communicator for RP output
