@@ -47,7 +47,7 @@ CALL prms%CreateLogicalOption(  "UseNonDimensionalEqn"              , "Perform d
 CALL prms%CreateIntOption    (  "SkipSample"         , "TODO",multiple=.TRUE.)
 CALL prms%CreateIntOption    (  "nBlocks"            , "TODO",multiple=.TRUE.)
 CALL prms%CreateIntOption    (  "BlockSize"          , "TODO",multiple=.TRUE.)
-CALL prms%CreateIntOption    (  "RP_specified"       , "TODO",multiple=.TRUE.)
+!CALL prms%CreateIntOption    (  "RP_specified"       , "TODO",multiple=.TRUE.)
 CALL prms%CreateLogicalOption(  "doFFT"              , "TODO",multiple=.TRUE.)
 CALL prms%CreateLogicalOption(  "hanning"            , "TODO",multiple=.TRUE.)
 CALL prms%CreateLogicalOption(  'fourthDeriv'        , "TODO",multiple=.TRUE.)
@@ -86,7 +86,7 @@ INTEGER                 :: iArg
 ! Read in parameter.ini
 ! =============================================================================== !
 RP_DefFile   = GETSTR('RP_DefFile','')
-RP_specified = GETINT('RP_specified')
+!RP_specified = GETINT('RP_specified')
 OutputPoints = GETLOGICAL('OutputPoints','.TRUE.')
 OutputFormat = GETINT('OutputFormat','2')
 skip         = GETINT('SkipSample','1')
@@ -119,9 +119,9 @@ equiTimeSpacing=.TRUE.
 CALL GET_COMMAND_ARGUMENT(2,StochFile)
 CALL OpenDataFile(StochFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
 !CALL ReadAttribute(File_ID,'ProjectName'  ,1,StrScalar   = ProjectName)
-!CALL ReadAttribute(File_ID,'polyDeg'      ,1,IntScalar   = M)
 CALL ReadAttribute(File_ID,'nGlobalRuns'  ,1,IntScalar   = nStochSamples)
 CALL ReadAttribute(File_ID,'nStochVars'   ,1,IntScalar   = nStochVars)
+CALL ReadAttribute(File_ID,'polyDeg'      ,1,IntScalar   = M)
 
 ALLOCATE(StochVarNames(nStochVars))
 ALLOCATE(Distributions(nStochVars))
@@ -153,7 +153,6 @@ CALL ReadArray(ArrayName  = 'DistributionProps',&
                RealArray  = DistributionProps)
 
 CALL CloseDataFile()
-M = 4
 
 !======================================================
 ! Readin RP Files
@@ -188,7 +187,7 @@ USE MOD_ParametersVisu
 USE MOD_RPSetVisuVisu_Vars          ,ONLY: nRP_global 
 USE MOD_OutputRPVisu_Vars           ,ONLY: RPData_out,nSamples_out
 USE MOD_OutputRPVisu                ,ONLY: InitOutput
-USE MOD_Spec                        ,ONLY: InitSpec,spec
+USE MOD_Spec                        ,ONLY: InitSpec,spec,FinalizeSpec
 USE MOD_spec_Vars                        
 USE MOD_RPInterpolation
 USE MOD_RPInterpolation_Vars
@@ -263,6 +262,7 @@ DO iStochSample=1,nStochSamples
    IF(iStochSample.LT.nStochSamples) THEN
      CALL FinalizeRPSet()
      CALL FinalizeRPData()
+     CALL FinalizeSpec()
    END IF
 END DO
 time = RPTime
@@ -305,11 +305,11 @@ DO iStochCoeff=0,nStochCoeffs
       DO iStochVar=1, nStochVars
         IF(STRICMP(Distributions(iStochVar),"Uniform")) THEN 
           CALL LegendrePolynomialAndDerivative(MultiIndex(iStochCoeff,iStochVar), &
-              (2*StochPoints(jStochSample,iStochVar)-(DistributionProps(2,iStochVar)+DistributionProps(1,iStochVar)))&
+              (2*StochPoints(iStochVar,jStochSample)-(DistributionProps(2,iStochVar)+DistributionProps(1,iStochVar)))&
               /(DistributionProps(2,iStochVar)-DistributionProps(1,iStochVar)),y_out,y_out_dummy)
         ELSE !Hermite
           CALL EvaluateHermitePoly(MultiIndex(iStochCoeff,iStochVar),&
-              (StochPoints(jStochSample,iStochVar)-DistributionProps(1,iStochVar))/DistributionProps(2,iStochVar),y_out)
+              (StochPoints(iStochVar,jStochSample)-DistributionProps(1,iStochVar))/DistributionProps(2,iStochVar),y_out)
         END IF
         evalPoly = evalPoly*y_out
       END DO

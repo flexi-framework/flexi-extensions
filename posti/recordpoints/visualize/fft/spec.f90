@@ -156,11 +156,14 @@ nSamples_spec  = INT((nSamples_block)/2)+1
 Time_Block     = dt_out*REAL(nSamples_block)
 df = 1./Time_Block
 
+IF(cutoffFreq.NE.-999)THEN
+  nSamples_spec=MIN(NINT(cutoffFreq/dF)+1,nSamples_spec)
+END IF
 ALLOCATE(in(nSamples_block))
 ALLOCATE(out(nSamples_block))
-IF(.NOT.ALLOCATED(RPData_spec)) ALLOCATE(RPData_spec(1:nVarVisu,nRP_global,nSamples_spec))
+ALLOCATE(RPData_spec(1:nVarVisu,nRP_global,nSamples_spec))
 ALLOCATE(RPData_tmp(nSamples_out))
-IF(.NOT.ALLOCATED(RPDAta_freq) )ALLOCATE(RPData_freq(nSamples_spec))
+ALLOCATE(RPData_freq(nSamples_spec))
 DO iSample=1,nSamples_spec
   RPData_freq(iSample)=(iSample-1)*df
 END DO
@@ -171,11 +174,11 @@ WRITE(UNIT_stdOut,'(A,F16.7)')'              Time interval block:',Time_Block
 WRITE(UNIT_stdOut,'(A,F16.7)')'             Frequency resolution:',df
 IF(cutoffFreq.NE.-999)THEN
   WRITE(UNIT_stdOut,'(A,F16.7)')'    User defined Cutoff Frequency:',cutoffFreq
-  nSamples_spec=MIN(NINT(cutoffFreq/dF)+1,nSamples_spec)
 END IF
 WRITE(UNIT_stdOut,'(A,I8)')   '  No. spectrum output samples FFT:',nSamples_spec
 WRITE(UNIT_stdOut,'(A,F16.7)')'                Nyquist frequency:',0.5*df*REAL(nSamples_block-1)
 WRITE(UNIT_stdOut,'(A,F16.7)')'          Max. resolved frequency:',RPData_freq(nSamples_spec)
+
 
 CALL DFFTW_PLAN_DFT_1D(plan,nSamples_block,in,out,FFTW_FORWARD,FFTW_ESTIMATE)
 GETTIME(StartTime)
@@ -215,6 +218,19 @@ IF(doPSD .OR. doFFT) THEN
         ! MS value on the first index
         RPData_spec(iVar,iRP,1)=SQRT(SUM(RPData_spec(iVar,iRP,2:nSamples_spec))*df)
         RMS_PSD=SQRT(SUM(RPData_spec(iVar,iRP,2:nSamples_spec))*df)
+
+        !  !calculate RMS with time signal
+        M_t=SUM(RPData_tmp(1:nSamples_out))/nSamples_out
+        RMS_t=SQRT(SUM((RPData_tmp(1:nSamples_out)-M_t)*(RPData_tmp(1:nSamples_out)-M_t))/nSamples_out)
+        WRITE(*,*)RMS_PSD
+        !  WRITE(UNIT_stdOut,*)'------------------------------'
+        !  WRITE(UNIT_stdOut,*)' mean timedata',SUM(RPData_tmp(1:nSamples_out))/nSamples_out
+        !  WRITE(UNIT_stdOut,*)' mean PSD     ',SQRT(RPData_spec(iVar,iRP,1))
+        !  WRITE(UNIT_stdOut,*)' RMS timedata ',RMS_t
+        !  WRITE(UNIT_stdOut,*)' RMS from PSD ',RMS_PSD
+        maxdev=MAX(maxdev,(RMS_t-RMS_PSD)**2/RMS_t**2)
+        WRITE(UNIT_stdOut,*)'------------------------------'
+        WRITE(UNIT_stdOut,*)' Max. relative error in RMS: ', SQRT(maxdev)
       ELSE
         RPData_spec(iVar,iRP,:)=RPData_spec(iVar,iRP,:)/nBlocks
         IF (fourthDeriv) THEN
@@ -224,21 +240,12 @@ IF(doPSD .OR. doFFT) THEN
       !  RPData_spec(iVar,iRP,1)=SUM(RPData_spec(iVar,iRP,2:nSamples_spec))**2/nSamples_spec
         RPData_spec(iVar,iRP,1)=SQRT(SUM(RPData_spec(iVar,iRP,2:nSamples_spec)**2))
       END IF
-    !  !calculate RMS with time signal
-      M_t=SUM(RPData_tmp(1:nSamples_out))/nSamples_out
-      RMS_t=SQRT(SUM((RPData_tmp(1:nSamples_out)-M_t)*(RPData_tmp(1:nSamples_out)-M_t))/nSamples_out)
-    !  WRITE(UNIT_stdOut,*)'------------------------------'
-    !  WRITE(UNIT_stdOut,*)' mean timedata',SUM(RPData_tmp(1:nSamples_out))/nSamples_out
-    !  WRITE(UNIT_stdOut,*)' mean PSD     ',SQRT(RPData_spec(iVar,iRP,1))
-    !  WRITE(UNIT_stdOut,*)' RMS timedata ',RMS_t
-    !  WRITE(UNIT_stdOut,*)' RMS from PSD ',RMS_PSD
-      maxdev=MAX(maxdev,(RMS_t-RMS_PSD)**2/RMS_t**2)
+
     END DO ! iVar
   END DO   ! iRP
   GETTIME(Time)
-  WRITE(UNIT_stdOut,*)'------------------------------'
-  WRITE(UNIT_stdOut,*)' Max. relative error in RMS: ', SQRT(maxdev)
   WRITE(UNIT_stdOut,'(A,F8.2,A)')' DONE! [',Time-StartTime,' sec ]'
+
 END IF!(doPSD .OR. doFFT)
 
 !1/3 octave average

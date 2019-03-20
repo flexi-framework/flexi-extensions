@@ -22,7 +22,7 @@ USE MOD_Globals
 USE MOD_Commandline_Arguments
 USE MOD_Nisp_RP_Vars
 USE MOD_Nisp_RP                     ,ONLY: DefineParametersNisp_RP,InitNisp_RP,PerformSampleFFT,ComputeModes,FinalizeNisp_RP
-USE MOD_Nisp_RP_Output              ,ONLY: WriteMeanAndVarianceToHDF5
+USE MOD_Nisp_RP_Output              ,ONLY: WriteMeanAndVarianceToHDF5!,SamplesToHDF5
 !USE MOD_ReadInTools
 USE MOD_IO_HDF5                     ,ONLY: DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_StringTools                 ,ONLY: STRICMP,GetFileExtension
@@ -76,6 +76,7 @@ CALL InitNisp_RP()
 CALL PerformSampleFFT()
 CALL ComputeModes()
 CALL WriteMeanAndVarianceToHDF5()
+!CALL WriteSamplesToHDF5()
 
 !======================================================
 ! Finalize
