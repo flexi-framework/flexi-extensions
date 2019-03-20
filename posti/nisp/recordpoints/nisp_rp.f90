@@ -15,15 +15,27 @@
 
 MODULE MOD_NISP_RP
 
+INTERFACE DefineParametersNisp_RP
+  MODULE PROCEDURE DefineParametersNisp_RP
+END INTERFACE
+
+INTERFACE InitNisp_RP
+  MODULE PROCEDURE InitNisp_RP
+END INTERFACE
+
 INTERFACE computeModes
   MODULE PROCEDURE computeModes
+END INTERFACE
+
+INTERFACE computeSPL
+  MODULE PROCEDURE computeSPL
 END INTERFACE
 
 INTERFACE FinalizeNisp_RP
   MODULE PROCEDURE FinalizeNisp_RP
 END INTERFACE
 
-PUBLIC::DefineParametersNisp_RP,InitNisp_RP,PerformSampleFFT,computeModes,FinalizeNisp_RP
+PUBLIC::DefineParametersNisp_RP,InitNisp_RP,PerformSampleFFT,computeModes,computeSPL,FinalizeNisp_RP
 CONTAINS
 
 !===================================================================================================================================
@@ -62,6 +74,7 @@ CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'mu0'                , "TODO",multiple=.TRUE.)
+CALL prms%CreateLogicalOption(  "doSPL"              , "TODO",multiple=.FALSE.)
 END SUBROUTINE DefineParametersNisp_RP
 
 !===================================================================================================================================
@@ -75,12 +88,12 @@ USE MOD_Readintools
 USE MOD_Nisp_RP_Vars
 USE MOD_ParametersVisu
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
-USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray
+USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray,ReadAttributeBatchScalar
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)      :: StochFile
-INTEGER                 :: iArg
+INTEGER                 :: iArg,nLevelVarsStr
 !===================================================================================================================================
 ! =============================================================================== !
 ! Read in parameter.ini
@@ -92,6 +105,7 @@ OutputFormat = GETINT('OutputFormat','2')
 skip         = GETINT('SkipSample','1')
 doFFT        = GETLOGICAL('doFFT','F')
 doPSD        = GETLOGICAL('doPSD','T')
+doSPL        = GETLOGICAL('doSPL','F')
 IF(doFFT.OR.doPSD) doSpec=.TRUE.
 IF(doSpec) THEN
   ! two readin "modes" for spectrum averaging:
@@ -122,6 +136,7 @@ CALL OpenDataFile(StochFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'nGlobalRuns'  ,1,IntScalar   = nStochSamples)
 CALL ReadAttribute(File_ID,'nStochVars'   ,1,IntScalar   = nStochVars)
 CALL ReadAttribute(File_ID,'polyDeg'      ,1,IntScalar   = M)
+CALL ReadAttributeBatchScalar(File_ID,'ProjectName',StrScalar = ProjectName)
 
 ALLOCATE(StochVarNames(nStochVars))
 ALLOCATE(Distributions(nStochVars))
@@ -248,17 +263,24 @@ DO iStochSample=1,nStochSamples
    
    CALL spec()
    IF (iStochSample .EQ. 1) THEN
-     ALLOCATE(UFFT(1:nStochSamples,1:nVarVisu,nRP_global,nSamples_spec))
-     ALLOCATE(UMeanFFT(1:nVarVisu,nRP_global,nSamples_spec))
-     ALLOCATE(UVarFFT(1:nVarVisu,nRP_global,nSamples_spec))
-     ALLOCATE(UModeFFT(1:nVarVisu,nRP_global,nSamples_spec))
-     UFFT =0.
+     IF (doSPL) THEN
+       ALLOCATE(UFFT(1:nStochSamples,1:nVarVisu+1,nRP_global,nSamples_spec))
+       ALLOCATE(UMeanFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
+       ALLOCATE(UVarFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
+       ALLOCATE(UModeFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
+     ELSE
+       ALLOCATE(UFFT(1:nStochSamples,1:nVarVisu,nRP_global,nSamples_spec))
+       ALLOCATE(UMeanFFT(1:nVarVisu,nRP_global,nSamples_spec))
+       ALLOCATE(UVarFFT(1:nVarVisu,nRP_global,nSamples_spec))
+       ALLOCATE(UModeFFT(1:nVarVisu,nRP_global,nSamples_spec))
+     END IF
+     UFFT     =0.
      UMeanFFT =0.
-     UVarFFT =0.
+     UVarFFT  =0.
      UModeFFT =0.
    END IF
      
-   UFFT(iStochSample,:,:,:)=RPData_spec
+   UFFT(iStochSample,1:nVarVisu,:,:)=RPData_spec
    IF(iStochSample.LT.nStochSamples) THEN
      CALL FinalizeRPSet()
      CALL FinalizeRPData()
@@ -321,6 +343,43 @@ DO iStochCoeff=0,nStochCoeffs
   UVarFFT = UVarFFT + UModeFFT*UModeFFT
 END DO
 END SUBROUTINE ComputeModes
+
+!----------------------------------------------------------------------------------------------------------------------------------!
+! Compute stochastic modes
+!----------------------------------------------------------------------------------------------------------------------------------!
+SUBROUTINE ComputeSPL()
+!----------------------------------------------------------------------------------------------------------------------------------!
+USE MOD_Globals
+USE MOD_StringTools    ,ONLY: STRICMP
+USE MOD_Nisp_RP_Vars
+USE MOD_EOS            ,ONLY: DefineParametersEOS,InitEOS, ConsToPrim
+USE MOD_HDF5_Input     ,ONLY: OpenDataFile,CloseDataFile,DatasetExists,GetDataProps,ReadAttribute, ReadArray, GetDataSize
+USE MOD_Basis          ,ONLY: LegendrePolynomialAndDerivative
+USE MOD_ParametersVisu ,ONLY: nVarVisu,VarNameVisu,doFFT,doPSD
+IMPLICIT NONE
+! INPUT / OUTPUT VARIABLES 
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                              :: i,iVar,jStochSample,iStochVar,l,iElem,iStochCoeff,j
+REAL                                 :: evalPoly, y_out, y_out_dummy
+!-----------------------------------------------------------------------------------------------------------------------------------
+IF(.NOT. (doFFT .OR. doPSD) .OR. .NOT. doSPL) RETURN
+iVar=0
+DO i=1,nVarVisu
+  IF(STRICMP(VarNameVisu(i),"Pressure")) THEN
+    iVar=i
+    EXIT
+  END IF 
+END DO 
+IF(iVar .EQ. 0) &
+       CALL Abort(__STAMP__,'ERROR - Pressure is not analyzed to compute SPL!')
+
+IF(doFFT .AND. doSPL) THEN
+  UFFT(:,nVarVisu+1,:,:)=20*LOG10(UFFT(:,iVar,:,:)/(2*10E-5))
+ELSE IF (doPSD .AND. doSPL) THEN
+  UFFT(:,nVarVisu+1,:,:)=10*LOG10(UFFT(:,iVar,:,:)/(4*10E-5))
+END IF
+END SUBROUTINE ComputeSPL
 
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! Finalize all parameters of NISP RP tool

@@ -12,10 +12,10 @@ SAVE
 REAL,ALLOCATABLE                   :: UMeanTimeseries(:,:,:), UVarTimeseries(:,:,:), UModeTimeseries(:,:,:) 
 REAL,ALLOCATABLE                   :: UFFT(:,:,:,:),UMeanFFT(:,:,:), UVarFFT(:,:,:), UModeFFT(:,:,:), time(:)
 REAL,ALLOCATABLE                   :: UTimeseries(:,:,:,:)
-CHARACTER(LEN=255)                 ::  FileNameMeanTS = 'mean_timeseries.h5' ,FileNameVarianceTS = 'variance_timeseries.h5'
-CHARACTER(LEN=255)                 ::  FileNameMeanFFT = 'mean_spec.h5' ,FileNameVarianceFFT = 'variance_spec.h5' 
+CHARACTER(LEN=255)                 :: FileNameTS 
+CHARACTER(LEN=255)                 :: FileNameFFT 
 
-INTEGER                             :: RP_specified
+INTEGER                            :: RP_specified
 
 INTEGER                            :: M 
 INTEGER                            :: nStochSamples 
@@ -31,4 +31,6 @@ CHARACTER(LEN=255),ALLOCATABLE     :: RPFiles(:)
 REAL, ALLOCATABLE                  :: HermiteCoeffs(:,:)
 INTEGER                            :: nStochCoeffs 
 INTEGER,ALLOCATABLE                :: MultiIndex(:,:)
+
+LOGICAL                            :: doSPL
 END MODULE MOD_Nisp_RP_Vars
