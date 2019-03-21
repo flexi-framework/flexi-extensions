@@ -264,12 +264,12 @@ DO iStochSample=1,nStochSamples
    CALL spec()
    IF (iStochSample .EQ. 1) THEN
      IF (doSPL) THEN
-       ALLOCATE(UFFT(1:nStochSamples,1:nVarVisu+1,nRP_global,nSamples_spec))
+       ALLOCATE(UFFT(1:nVarVisu+1,nRP_global,nSamples_spec,nStochSamples))
        ALLOCATE(UMeanFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
        ALLOCATE(UVarFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
        ALLOCATE(UModeFFT(1:nVarVisu+1,nRP_global,nSamples_spec))
      ELSE
-       ALLOCATE(UFFT(1:nStochSamples,1:nVarVisu,nRP_global,nSamples_spec))
+       ALLOCATE(UFFT(1:nVarVisu,nRP_global,nSamples_spec,nStochSamples))
        ALLOCATE(UMeanFFT(1:nVarVisu,nRP_global,nSamples_spec))
        ALLOCATE(UVarFFT(1:nVarVisu,nRP_global,nSamples_spec))
        ALLOCATE(UModeFFT(1:nVarVisu,nRP_global,nSamples_spec))
@@ -280,7 +280,7 @@ DO iStochSample=1,nStochSamples
      UModeFFT =0.
    END IF
      
-   UFFT(iStochSample,1:nVarVisu,:,:)=RPData_spec
+   UFFT(1:nVarVisu,:,:,iStochSample)=RPData_spec
    IF(iStochSample.LT.nStochSamples) THEN
      CALL FinalizeRPSet()
      CALL FinalizeRPData()
@@ -316,7 +316,7 @@ DO iStochCoeff=0,nStochCoeffs
   IF(iStochCoeff==0) THEN
     DO j=1, nStochSamples
       UMeanTimeseries = UMeanTimeseries + uTimeseries(j,:,:,:)*StochWeights(j)
-      UMeanFFT        = UMeanFFT        + UFFT(j,:,:,:)*StochWeights(j)
+      UMeanFFT        = UMeanFFT        + UFFT(:,:,:,j)*StochWeights(j)
     END DO
   ELSE
     y_out=0.
@@ -336,7 +336,7 @@ DO iStochCoeff=0,nStochCoeffs
         evalPoly = evalPoly*y_out
       END DO
       UModeTimeseries = UModeTimeseries+ uTimeseries(jStochSample,:,:,:)*evalPoly*StochWeights(jStochSample)
-      UModeFFT = UModeFFT+ UFFT(jStochSample,:,:,:)*evalPoly*StochWeights(jStochSample)
+      UModeFFT = UModeFFT+ UFFT(:,:,:,jStochSample)*evalPoly*StochWeights(jStochSample)
     END DO  
   END IF
   UVarTimeseries = UVarTimeseries + UModeTimeseries*UModeTimeseries
@@ -375,9 +375,9 @@ IF(iVar .EQ. 0) &
        CALL Abort(__STAMP__,'ERROR - Pressure is not analyzed to compute SPL!')
 
 IF(doFFT .AND. doSPL) THEN
-  UFFT(:,nVarVisu+1,:,:)=20*LOG10(UFFT(:,iVar,:,:)/(SQRT(2.0)*2*10E-5))
+  UFFT(nVarVisu+1,:,:,:)=20*LOG10(UFFT(iVar,:,:,:)/(SQRT(2.0)*2*10E-5))
 ELSE IF (doPSD .AND. doSPL) THEN
-  UFFT(:,nVarVisu+1,:,:)=10*LOG10(UFFT(:,iVar,:,:)/(2*4*10E-10))
+  UFFT(nVarVisu+1,:,:,:)=10*LOG10(UFFT(iVar,:,:,:)/(2*4*10E-10))
 END IF
 END SUBROUTINE ComputeSPL
 

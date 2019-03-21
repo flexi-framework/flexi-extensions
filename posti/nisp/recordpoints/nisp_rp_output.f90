@@ -60,6 +60,7 @@ ELSE
 END IF
 
 ALLOCATE (VarNames_tmp(nVarVisu_loc))
+VarNames_tmp(1:nVarVisu)=VarNameVisu
 ALLOCATE (MeanAndVarianceSpec(nVarVisu_loc,nPoints,nSamples_spec,2))
 ALLOCATE (MeanAndVarianceTS(nVarVisu,nPoints,nSamples_out,2))
 IF(doSPL) VarNames_tmp(nVarVisu_loc) = 'SPL'
@@ -91,50 +92,6 @@ SDEALLOCATE (MeanAndVarianceTS)
 SDEALLOCATE (MeanAndVarianceSpec)
 
 END SUBROUTINE WriteMeanAndVarianceToHDF5
-
-!===================================================================================================================================
-!> Subroutine to write mean and variance of the RP data spectrum to HDF5 format for a specififc level
-!===================================================================================================================================
-!SUBROUTINE WriteRPToHDF5(UFFT)
-!! MODULES
-!USE MOD_Globals
-!USE MOD_RPData_Vars     
-
-!USE MOD_RPSetVisuVisu_Vars                        
-!USE MOD_OutputRPVisu_Vars
-!USE MOD_RPSetVisu                        
-!USE MOD_OutputRPVisu 
-!USE MOD_Nisp_RP_Vars         ,ONLY: time, FileNameMeanTS,FileNameVarianceTS,FileNameMeanFFT,FileNameVarianceFFT, UMeanTimeseries,UMeanFFT, UVarTimeseries, UVarFFT
-!USE MOD_spec_Vars             ,ONLY: nSamples_spec,RPData_freq
-!USE MOD_ParametersVisu        ,ONLY: nVarVisu,VarNameVisu
-!USE MOD_OutputRPVisu_HDF5     ,ONLY: WriteDataToHDF5
-!USE MOD_HDF5_Output         ,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
-!USE MOD_Output_Vars,ONLY:ProgramName,FileVersion,ProjectName
-!IMPLICIT NONE
-!!-----------------------------------------------------------------------------------------------------------------------------------
-!REAL, INTENT(IN)                 :: UFFT(1:nVarVisu,nRP_global,nSamples_spec)
-!!-----------------------------------------------------------------------------------------------------------------------------------
-!! LOCAL VARIABLES
-!INTEGER                          :: i
-!CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_tmp(:), Filename
-!REAL,ALLOCATABLE                 :: tmp(:,:,:)
-!!===================================================================================================================================
-!! Output spectra
-!!CoordNames(1)='Frequency'
-!ALLOCATE (VarNames_tmp(nVarVisu))
-!ALLOCATE (tmp(nVarVisu,nPoints,nSamples_spec))
-!DO i=1,nVarVisu
-  !VarNames_tmp(i)=TRIM(VarNameVisu(i))//'_FFT'
-!END DO
-!!-----------------------------------------------------------------------------------------------------------------------------------
-!Filename= 'UFFT'
-!WRITE(UNIT_StdOut,'(132("-"))')
-  !WRITE(UNIT_stdOut,'(A,A)')' WRITING FFT OF TIMESERIES TO ', Filename
-  !CALL WriteDataToHDF5(nSamples_out,nPoints,nVarVisu,VarNames_tmp,time,UMeanTimeseries,FileNameMeanTS)
-!WRITE(UNIT_StdOut,'(132("-"))')
-
-
-!END SUBROUTINE WriteRPToHDF5
 
 !===================================================================================================================================
 !> Subroutine to write record point data to HDF5 file
