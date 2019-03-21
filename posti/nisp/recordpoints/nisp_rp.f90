@@ -375,9 +375,9 @@ IF(iVar .EQ. 0) &
        CALL Abort(__STAMP__,'ERROR - Pressure is not analyzed to compute SPL!')
 
 IF(doFFT .AND. doSPL) THEN
-  UFFT(:,nVarVisu+1,:,:)=20*LOG10(UFFT(:,iVar,:,:)/(2*10E-5))
+  UFFT(:,nVarVisu+1,:,:)=20*LOG10(UFFT(:,iVar,:,:)/(SQRT(2.0)*2*10E-5))
 ELSE IF (doPSD .AND. doSPL) THEN
-  UFFT(:,nVarVisu+1,:,:)=10*LOG10(UFFT(:,iVar,:,:)/(4*10E-5))
+  UFFT(:,nVarVisu+1,:,:)=10*LOG10(UFFT(:,iVar,:,:)/(2*4*10E-10))
 END IF
 END SUBROUTINE ComputeSPL
 

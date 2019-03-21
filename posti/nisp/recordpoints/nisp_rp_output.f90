@@ -46,7 +46,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                          :: i,nVarVisu_loc
+INTEGER                          :: nVarVisu_loc
 CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_tmp(:)
 REAL,ALLOCATABLE                 :: MeanAndVarianceTS(:,:,:,:)
 REAL,ALLOCATABLE                 :: MeanAndVarianceSpec(:,:,:,:)
@@ -183,8 +183,10 @@ REAL                 :: PointDataMeanAndVar(1:nVal,nSamples,2)
 REAL                 :: PointData(1:nVal,nSamples,nStSamples)
 TYPE(tLine),POINTER  :: Line
 TYPE(tPlane),POINTER :: Plane
-REAL,ALLOCATABLE     :: LineData(:,:,:)
-REAL,ALLOCATABLE     :: PlaneData(:,:,:,:)
+REAL,ALLOCATABLE     :: LineDataMeanAndVar(:,:,:,:)
+REAL,ALLOCATABLE     :: PlaneDataMeanAndVar(:,:,:,:,:)
+REAL,ALLOCATABLE     :: LineData(:,:,:,:)
+REAL,ALLOCATABLE     :: PlaneData(:,:,:,:,:)
 REAL,ALLOCATABLE     :: PlaneCoord(:,:,:)
 !===================================================================================================================================
 WRITE(UNIT_stdOut,'(A,A,A)',ADVANCE='NO')" WRITE RP DATA TO HDF5 FILE '",TRIM(FileString),"'..."
@@ -236,82 +238,93 @@ IF(OutputPoints)THEN
 END IF!OutputPoint
 
 ! Lines
-!IF(OutputLines)THEN
-  !DO iLine=1,nLines
-    !Line=>Lines(iLine)
-    !IF(.NOT.OutputGroup(Line%GroupID)) CYCLE
-    !GroupName=GroupNames(Line%GroupID)
+IF(OutputLines)THEN
+  DO iLine=1,nLines
+    Line=>Lines(iLine)
+    IF(.NOT.OutputGroup(Line%GroupID)) CYCLE
+    GroupName=GroupNames(Line%GroupID)
 
-    !!coordinates
-    !WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Line%Name),'_X'
-    !size_offsetdim=3
-    !OffsetVar=0
-    !! local coord if required
-    !IF(Line_LocalCoords) THEN
-      !size_offsetdim=size_offsetdim+1
-      !CALL WriteArray(TRIM(ZoneTitle),2,(/size_offsetDim,Line%nRP/),(/1,Line%nRP/),(/OffsetVar,0/),.FALSE.,RealArray=Line%LocalCoord(:))
-      !OffsetVar=1
-    !END IF!(Line_LocalCoords)
-    !CALL WriteArray(  TRIM(ZoneTitle),2,(/size_offsetDim,Line%nRP/),(/3,Line%nRP/),(/OffsetVar,0/),.FALSE.,RealArray=xF_RP(:,Line%IDlist(:)))
+    !coordinates
+    WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Line%Name),'_X'
+    size_offsetdim=3
+    OffsetVar=0
+    ! local coord if required
+    IF(Line_LocalCoords) THEN
+      size_offsetdim=size_offsetdim+1
+      CALL WriteArray(TRIM(ZoneTitle),2,(/size_offsetDim,Line%nRP/),(/1,Line%nRP/),(/OffsetVar,0/),.FALSE.,RealArray=Line%LocalCoord(:))
+      OffsetVar=1
+    END IF!(Line_LocalCoords)
+    CALL WriteArray(  TRIM(ZoneTitle),2,(/size_offsetDim,Line%nRP/),(/3,Line%nRP/),(/OffsetVar,0/),.FALSE.,RealArray=xF_RP(:,Line%IDlist(:)))
 
-    !!values
-    !WRITE(ZoneTitle,'(A,A,A)')TRIM(GroupName),'_',TRIM(Line%Name)
-    !size_offsetdim=nVal
-    !OffsetVar=0
-    !ALLOCATE(LineData(1:nVal,nSamples,Line%nRP))
-    !DO iPoint=1,Line%nRP
-      !LineData(:,:,iPoint)=Value(:,Line%IDlist(iPoint),:)
-    !END DO ! iPoint
-    !CALL WriteArray(TRIM(ZoneTitle),3,(/nVal,nSamples,Line%nRP/),(/nVal,nSamples,Line%nRP/),(/0,0,0/),.FALSE.,RealArray=LineData)
-    !DEALLOCATE(LineData)
-  !END DO ! iLine
-!END IF !OutputLines
+    !values
+    WRITE(ZoneTitleMean,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Line%Name),'_MeanAndVariance'
+    WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Line%Name),'_Samples'
+    size_offsetdim=nVal
+    OffsetVar=0
+    ALLOCATE(LineDataMeanAndVar(1:nVal,nSamples,Line%nRP,2))
+    ALLOCATE(LineData(1:nVal,nSamples,Line%nRP,nStSamples))
+    DO iPoint=1,Line%nRP
+      LineDataMeanAndVar(:,:,iPoint,:)=MeanAndVariance(:,Line%IDlist(iPoint),:,:)
+      LineData(:,:,iPoint,:)=Value(:,Line%IDlist(iPoint),:,:)
+    END DO ! iPoint
+    CALL WriteArray(TRIM(ZoneTitle),4,(/nVal,nSamples,Line%nRP,2/),(/nVal,nSamples,Line%nRP,2/),(/0,0,0,0/),.FALSE.,RealArray=LineDataMeanAndVar)
+    CALL WriteArray(TRIM(ZoneTitle),4,(/nVal,nSamples,Line%nRP,nStSamples/),(/nVal,nSamples,Line%nRP,nStSamples/),(/0,0,0,0/),.FALSE.,RealArray=LineData)
+    DEALLOCATE(LineDataMeanAndVar)
+    DEALLOCATE(LineData)
+  END DO ! iLine
+END IF !OutputLines
 
-!! Planes
-!IF(OutputPlanes)THEN
-  !DO iPlane=1,nPlanes
-    !Plane=>Planes(iPlane)
-    !IF(.NOT.OutputGroup(Plane%GroupID)) CYCLE
-    !GroupName=GroupNames(Plane%GroupID)
-    !ZoneTitle(1:255)=' '
+! Planes
+IF(OutputPlanes)THEN
+  DO iPlane=1,nPlanes
+    Plane=>Planes(iPlane)
+    IF(.NOT.OutputGroup(Plane%GroupID)) CYCLE
+    GroupName=GroupNames(Plane%GroupID)
+    ZoneTitle(1:255)=' '
 
 
-    !!coordinates
-    !WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Plane%Name),'_X'
-    !size_offsetdim=3
-    !OffsetVar=0
-    !! local coord if required
-    !IF(Plane_LocalCoords.AND.ALLOCATED(Plane%LocalCoord)) THEN
-      !size_offsetdim=size_offsetdim+2
-      !CALL WriteArray(TRIM(ZoneTitle),3,(/size_offsetdim,Plane%nRP(1),Plane%nRP(2)/),(/2,Plane%nRP(1),Plane%nRP(2)/),(/OffsetVar,0,0/),.FALSE.,RealArray=Plane%LocalCoord(:,:,:))
-      !OffsetVar=2
-    !END IF!(Line_LocalCoords)
-    !ALLOCATE(PlaneCoord(3,Plane%nRP(1),Plane%nRP(2)))
-    !! global xyz coordinates
-    !DO j=1,Plane%nRP(2)
-      !DO i=1,Plane%nRP(1)
-        !PlaneCoord(:,i,j)=xF_RP(:,Plane%IDlist(i,j))
-      !END DO ! i
-    !END DO ! j
-    !CALL WriteArray(TRIM(ZoneTitle),3,(/size_offsetdim,Plane%nRP(1),Plane%nRP(2)/),(/3,Plane%nRP(1),Plane%nRP(2)/),&
-                                 !(/OffsetVar,0,0/),.FALSE.,RealArray=PlaneCoord)
-    !DEALLOCATE(PlaneCoord)
+    !coordinates
+    WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Plane%Name),'_X'
+    size_offsetdim=3
+    OffsetVar=0
+    ! local coord if required
+    IF(Plane_LocalCoords.AND.ALLOCATED(Plane%LocalCoord)) THEN
+      size_offsetdim=size_offsetdim+2
+      CALL WriteArray(TRIM(ZoneTitle),3,(/size_offsetdim,Plane%nRP(1),Plane%nRP(2)/),(/2,Plane%nRP(1),Plane%nRP(2)/),(/OffsetVar,0,0/),.FALSE.,RealArray=Plane%LocalCoord(:,:,:))
+      OffsetVar=2
+    END IF!(Line_LocalCoords)
+    ALLOCATE(PlaneCoord(3,Plane%nRP(1),Plane%nRP(2)))
+    ! global xyz coordinates
+    DO j=1,Plane%nRP(2)
+      DO i=1,Plane%nRP(1)
+        PlaneCoord(:,i,j)=xF_RP(:,Plane%IDlist(i,j))
+      END DO ! i
+    END DO ! j
+    CALL WriteArray(TRIM(ZoneTitle),3,(/size_offsetdim,Plane%nRP(1),Plane%nRP(2)/),(/3,Plane%nRP(1),Plane%nRP(2)/),&
+                                 (/OffsetVar,0,0/),.FALSE.,RealArray=PlaneCoord)
+    DEALLOCATE(PlaneCoord)
 
-    !!values
-    !WRITE(ZoneTitle,'(A,A,A)')TRIM(GroupName),'_',TRIM(Plane%Name)
-    !size_offsetdim=nVal
-    !OffsetVar=0
-    !ALLOCATE(PlaneData(1:nVal,nSamples,Plane%nRP(1),Plane%nRP(2)))
-    !DO j=1,Plane%nRP(2)
-      !DO i=1,Plane%nRP(1)
-        !PlaneData(:,:,i,j)=Value(:,Plane%IDlist(i,j),:)
-      !END DO ! i
-    !END DO ! j
-    !CALL WriteArray(TRIM(ZoneTitle),4,(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2)/),(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2)/),&
-                    !(/0,0,0,0/),.FALSE.,RealArray=PlaneData)
-    !DEALLOCATE(PlaneData)
-  !END DO ! iPlane
-!END IF!OutputPlanes
+    !values
+    WRITE(ZoneTitleMean,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Plane%Name),'_MeanAndVariance'
+    WRITE(ZoneTitle,'(A,A,A,A)')TRIM(GroupName),'_',TRIM(Plane%Name),'_Samples'
+    size_offsetdim=nVal
+    OffsetVar=0
+    ALLOCATE(PlaneDataMeanAndVar(1:nVal,nSamples,Plane%nRP(1),Plane%nRP(2),2))
+    ALLOCATE(PlaneData(1:nVal,nSamples,Plane%nRP(1),Plane%nRP(2),nStSamples))
+    DO j=1,Plane%nRP(2)
+      DO i=1,Plane%nRP(1)
+        PlaneDataMeanAndVar(:,:,i,j,:)=MeanAndVariance(:,Plane%IDlist(i,j),:,:)
+        PlaneData(:,:,i,j,:)=Value(:,Plane%IDlist(i,j),:,:)
+      END DO ! i
+    END DO ! j
+    CALL WriteArray(TRIM(ZoneTitleMean),5,(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2),2/),(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2),2/),&
+                    (/0,0,0,0,0/),.FALSE.,RealArray=PlaneDataMeanAndVar)
+    CALL WriteArray(TRIM(ZoneTitle),5,(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2),nStSamples/),(/nVal,nSamples,Plane%nRP(1),Plane%nRP(2),nStSamples/),&
+                    (/0,0,0,0,0/),.FALSE.,RealArray=PlaneDataMeanAndVar)
+    DEALLOCATE(PlaneDataMeanAndVar)
+    DEALLOCATE(PlaneData)
+  END DO ! iPlane
+END IF!OutputPlanes
 
 ! Close the file.
 CALL CloseDataFile()

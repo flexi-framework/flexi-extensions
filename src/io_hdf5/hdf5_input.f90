@@ -865,6 +865,8 @@ IF(PRESENT(IntScalar)) THEN
       EXIT
     END IF
   END DO 
+  SDEALLOCATE(LevelVarNamesIntLoc)
+  SDEALLOCATE(LevelVarsIntLoc)
 END IF 
 
 IF(PRESENT(RealScalar)) THEN
@@ -881,6 +883,8 @@ IF(PRESENT(RealScalar)) THEN
       END IF
     END DO 
   END IF 
+  SDEALLOCATE(LevelVarNamesRealLoc)
+  SDEALLOCATE(LevelVarsRealLoc)
 END IF 
 
 IF(PRESENT(StrScalar)) THEN
@@ -897,6 +901,8 @@ IF(PRESENT(StrScalar)) THEN
       END IF
     END DO 
   END IF 
+  SDEALLOCATE(LevelVarNamesStrLoc)
+  SDEALLOCATE(LevelVarsStrLoc)
 END IF 
 END SUBROUTINE ReadAttributeBatchScalar
 
