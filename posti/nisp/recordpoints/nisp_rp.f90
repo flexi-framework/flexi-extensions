@@ -1,9 +1,9 @@
 !=================================================================================================================================
-! Copyright (c) 2016  Prof. Claus-Dieter Munz 
+! Copyright (c) 2016  Prof. Claus-Dieter Munz
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
 ! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
 !
-! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
+! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 !
 ! FLEXI is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
@@ -45,7 +45,7 @@ SUBROUTINE DefineParametersNisp_RP()
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! MODULES                                                                                                                          !
 !----------------------------------------------------------------------------------------------------------------------------------!
-USE MOD_ReadInTools 
+USE MOD_ReadInTools
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -84,7 +84,7 @@ SUBROUTINE InitNisp_RP()
 ! MODULES
 USE MOD_Globals
 USE MOD_Commandline_Arguments
-USE MOD_Readintools         
+USE MOD_Readintools
 USE MOD_Nisp_RP_Vars
 USE MOD_ParametersVisu
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
@@ -115,7 +115,7 @@ IF(doSpec) THEN
   samplingFreq=GETREAL('SamplingFreq','-999')
   cutoffFreq=GETREAL('cutoffFreq','-999.')
   IF(samplingFreq.GT.0.) THEN
-    BlockSize=GETINT('BlockSize') 
+    BlockSize=GETINT('BlockSize')
   END IF
   doHanning   = GETLOGICAL('hanning','F')
   fourthDeriv = GETLOGICAL('fourthDeriv','F')
@@ -136,7 +136,7 @@ CALL OpenDataFile(StochFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'nGlobalRuns'  ,1,IntScalar   = nStochSamples)
 CALL ReadAttribute(File_ID,'nStochVars'   ,1,IntScalar   = nStochVars)
 CALL ReadAttribute(File_ID,'polyDeg'      ,1,IntScalar   = M)
-CALL ReadAttributeBatchScalar(File_ID,'ProjectName',StrScalar = ProjectName)
+CALL ReadAttributeBatchScalar('ProjectName',StrScalar = ProjectName)
 
 ALLOCATE(StochVarNames(nStochVars))
 ALLOCATE(Distributions(nStochVars))
@@ -190,27 +190,27 @@ END SUBROUTINE InitNisp_RP
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! Perform FFT of each RPFile and for each stochastic sample
 !----------------------------------------------------------------------------------------------------------------------------------!
-SUBROUTINE PerformSampleFFT() 
+SUBROUTINE PerformSampleFFT()
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! MODULES                                                                                                                          !
 !----------------------------------------------------------------------------------------------------------------------------------!
 USE MOD_Globals
 USE MOD_RPData                      ,ONLY: ReadRPData,AssembleRPData,FinalizeRPData
-USE MOD_RPData_Vars                 
+USE MOD_RPData_Vars
 USE MOD_Nisp_RP_Vars
 USE MOD_ParametersVisu
-USE MOD_RPSetVisuVisu_Vars          ,ONLY: nRP_global 
+USE MOD_RPSetVisuVisu_Vars          ,ONLY: nRP_global
 USE MOD_OutputRPVisu_Vars           ,ONLY: RPData_out,nSamples_out
 USE MOD_OutputRPVisu                ,ONLY: InitOutput
 USE MOD_Spec                        ,ONLY: InitSpec,spec,FinalizeSpec
-USE MOD_spec_Vars                        
+USE MOD_spec_Vars
 USE MOD_RPInterpolation
 USE MOD_RPInterpolation_Vars
 USE MOD_EquationRP
 USE MOD_RPSetVisu                   ,ONLY: FinalizeRPSet
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES 
+! INPUT / OUTPUT VARIABLES
 ! Space-separated list of input and output types. Use: (int|real|logical|...)_(in|out|inout)_dim(n)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -234,18 +234,18 @@ DO iStochSample=1,nStochSamples
      ! Read in main attributes from given HDF5 State File
      IF(iRPFile.EQ.1) THEN
        CALL ReadRPData(InputRPFile,firstFile=.TRUE.,stochOffset=iStochSample-1)
-     ELSE 
+     ELSE
        CALL ReadRPData(InputRPFile,firstFile=.FALSE.,stochOffset=iStochSample-1)
      END IF
    END DO
-   
+
    CALL AssembleRPData()
    IF (iStochSample .EQ. 1) THEN
      CALL InitEquationRP()
      CALL InitInterpolation()
      CALL InitSpec()
      CALL InitOutput()
-     
+
      ALLOCATE(UTimeseries(1:nStochSamples,1:nVarVisu,nRP_global,nSamples_out))
      ALLOCATE(UMeanTimeseries(1:nVarVisu,nRP_global,nSamples_out))
      ALLOCATE(UVarTimeseries(1:nVarVisu,nRP_global,nSamples_out))
@@ -260,7 +260,7 @@ DO iStochSample=1,nStochSamples
    CALL InterpolateEquiTime() !RPData
    CALL CalcEquationRP() !RPData_out
    uTimeseries(iStochSample,:,:,:)= RPData_out
-   
+
    CALL spec()
    IF (iStochSample .EQ. 1) THEN
      IF (doSPL) THEN
@@ -279,7 +279,7 @@ DO iStochSample=1,nStochSamples
      UVarFFT  =0.
      UModeFFT =0.
    END IF
-     
+
    UFFT(1:nVarVisu,:,:,iStochSample)=RPData_spec
    IF(iStochSample.LT.nStochSamples) THEN
      CALL FinalizeRPSet()
@@ -303,7 +303,7 @@ USE MOD_EOS            ,ONLY: DefineParametersEOS,InitEOS, ConsToPrim
 USE MOD_HDF5_Input     ,ONLY: OpenDataFile,CloseDataFile,DatasetExists,GetDataProps,ReadAttribute, ReadArray, GetDataSize
 USE MOD_Basis          ,ONLY: LegendrePolynomialAndDerivative
 IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES 
+! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                              :: jStochSample,iStochVar,l,iElem,iStochCoeff,j
@@ -325,7 +325,7 @@ DO iStochCoeff=0,nStochCoeffs
     DO jStochSample=1, nStochSamples
       evalPoly = 1.
       DO iStochVar=1, nStochVars
-        IF(STRICMP(Distributions(iStochVar),"Uniform")) THEN 
+        IF(STRICMP(Distributions(iStochVar),"Uniform")) THEN
           CALL LegendrePolynomialAndDerivative(MultiIndex(iStochCoeff,iStochVar), &
               (2*StochPoints(iStochVar,jStochSample)-(DistributionProps(2,iStochVar)+DistributionProps(1,iStochVar)))&
               /(DistributionProps(2,iStochVar)-DistributionProps(1,iStochVar)),y_out,y_out_dummy)
@@ -337,7 +337,7 @@ DO iStochCoeff=0,nStochCoeffs
       END DO
       UModeTimeseries = UModeTimeseries+ uTimeseries(jStochSample,:,:,:)*evalPoly*StochWeights(jStochSample)
       UModeFFT = UModeFFT+ UFFT(:,:,:,jStochSample)*evalPoly*StochWeights(jStochSample)
-    END DO  
+    END DO
   END IF
   UVarTimeseries = UVarTimeseries + UModeTimeseries*UModeTimeseries
   UVarFFT = UVarFFT + UModeFFT*UModeFFT
@@ -357,7 +357,7 @@ USE MOD_HDF5_Input     ,ONLY: OpenDataFile,CloseDataFile,DatasetExists,GetDataPr
 USE MOD_Basis          ,ONLY: LegendrePolynomialAndDerivative
 USE MOD_ParametersVisu ,ONLY: nVarVisu,VarNameVisu,doFFT,doPSD
 IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES 
+! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                              :: i,iVar,jStochSample,iStochVar,l,iElem,iStochCoeff,j
@@ -369,8 +369,8 @@ DO i=1,nVarVisu
   IF(STRICMP(VarNameVisu(i),"Pressure")) THEN
     iVar=i
     EXIT
-  END IF 
-END DO 
+  END IF
+END DO
 IF(iVar .EQ. 0) &
        CALL Abort(__STAMP__,'ERROR - Pressure is not analyzed to compute SPL!')
 
@@ -384,11 +384,11 @@ END SUBROUTINE ComputeSPL
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! Finalize all parameters of NISP RP tool
 !----------------------------------------------------------------------------------------------------------------------------------!
-SUBROUTINE FinalizeNisp_RP() 
+SUBROUTINE FinalizeNisp_RP()
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! MODULES                                                                                                                          !
 !----------------------------------------------------------------------------------------------------------------------------------!
-USE MOD_Nisp_RP_Vars 
+USE MOD_Nisp_RP_Vars
 USE MOD_Spec            ,ONLY: FinalizeSpec
 USE MOD_EquationRP      ,ONLY: FinalizeEquationRP
 USE MOD_RPInterpolation ,ONLY: FinalizeInterpolation
@@ -403,7 +403,7 @@ CALL FinalizeSpec()
 
 SDEALLOCATE(UMeanTimeseries)
 SDEALLOCATE(UVarTimeseries)
-SDEALLOCATE(UModeTimeseries) 
+SDEALLOCATE(UModeTimeseries)
 SDEALLOCATE(UFFT)
 SDEALLOCATE(UMeanFFT)
 SDEALLOCATE(UVarFFT)
@@ -433,7 +433,7 @@ USE MOD_Nisp_RP_Vars, ONLY: MultiIndex, nStochVars, M, nStochCoeffs
 IMPLICIT NONE!
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! LOCAL VARIABLES
-INTEGER           :: i,j,k,p,q,r 
+INTEGER           :: i,j,k,p,q,r
 INTEGER           :: p2(1:M,1:nStochVars)
 !----------------------------------------------------------------------------------------------------------------------------------!
 ALLOCATE(MultiIndex(0:nStochCoeffs,1:nStochVars))
@@ -490,7 +490,7 @@ END SUBROUTINE GetHermiteCoefficients
 !===================================================================================================================================
 SUBROUTINE EvaluateHermitePoly(pStoch,xEval,y_out)
 ! MODULES
-USE MOD_Nisp_RP_Vars, ONLY:HermiteCoeffs 
+USE MOD_Nisp_RP_Vars, ONLY:HermiteCoeffs
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -503,7 +503,7 @@ INTEGER            :: p
 !==================================================================================================================================
 y_out=0.
 DO p=0,pStoch
-  y_out=y_out+HermiteCoeffs(p,pStoch)*xEval**p  
+  y_out=y_out+HermiteCoeffs(p,pStoch)*xEval**p
 END DO
 END SUBROUTINE EvaluateHermitePoly
 
@@ -514,7 +514,7 @@ END SUBROUTINE EvaluateHermitePoly
 SUBROUTINE Binom(n, k, resu)
 ! MODULES
 IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES 
+! INPUT / OUTPUT VARIABLES
 INTEGER , INTENT(IN)   :: n,k
 INTEGER , INTENT(OUT)  :: resu
 !-----------------------------------------------------------------------------------------------------------------------------------

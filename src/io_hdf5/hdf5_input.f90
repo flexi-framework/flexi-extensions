@@ -578,7 +578,7 @@ CALL H5DGET_SPACE_F(DSet_ID, FileSpace, iError)
 Offset(:)=0
 DO iOffset = 1, nOffsets
   Offset(offset_dim(iOffset))=Offset_in(iOffset)
-END DO 
+END DO
 CALL H5SSELECT_HYPERSLAB_F(FileSpace, H5S_SELECT_SET_F, Offset, Dimsf, iError)
 ! Create property list
 CALL H5PCREATE_F(H5P_DATASET_XFER_F, PList_ID, iError)
@@ -793,7 +793,7 @@ IF(nLevelVarsInt.GT.0)THEN
   CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsInt,StrArray=LevelVarNamesInt)
   ALLOCATE(LevelVarsInt(nLevelVarsInt))
   CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsInt,IntArray=LevelVarsInt)
-END IF 
+END IF
 
 CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsReal)
 IF(nLevelVarsReal.GT.0)THEN
@@ -801,7 +801,7 @@ IF(nLevelVarsReal.GT.0)THEN
   CALL ReadAttribute(File_ID,'LevelVarNamesReal',nLevelVarsReal,StrArray=LevelVarNamesReal)
   ALLOCATE(LevelVarsReal(nLevelVarsReal))
   CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsReal,RealArray=LevelVarsReal)
-END IF 
+END IF
 
 CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStr)
 IF(nLevelVarsStr.GT.0)THEN
@@ -809,7 +809,7 @@ IF(nLevelVarsStr.GT.0)THEN
   CALL ReadAttribute(File_ID,'LevelVarNamesStr',nLevelVarsStr,StrArray=LevelVarNamesStr)
   ALLOCATE(LevelVarsStr(nLevelVarsStr))
   CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
-END IF 
+END IF
 
 ALLOCATE(iStochSample(nStochVars))
 CALL ReadArray(ArrayName  = 'Samples',&
@@ -826,14 +826,14 @@ END SUBROUTINE BatchInput
 !==================================================================================================================================
 !> Reads input variables which differ between runs (such as stochastic input parameters) from HDF5 input file
 !==================================================================================================================================
-SUBROUTINE ReadAttributeBatchScalar(File_ID,AttributeName,RealScalar,IntScalar,StrScalar)
+SUBROUTINE ReadAttributeBatchScalar(AttributeName,RealScalar,IntScalar,StrScalar)
 ! MODULES
 USE MOD_Globals
 USE MOD_StringTools    ,ONLY: STRICMP
+USE MOD_IO_HDF5        ,ONLY: File_ID
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-INTEGER    ,INTENT(IN)                  :: File_ID           !< HDF5 file id of opened file
 CHARACTER(LEN=*),INTENT(IN)             :: AttributeName     !< Name of Attribute to be read
 REAL              ,INTENT(OUT),OPTIONAL,TARGET :: RealScalar        !< Scalar real attribute
 INTEGER           ,INTENT(OUT),OPTIONAL,TARGET :: IntScalar         !< Scalar integer attribute
@@ -858,16 +858,16 @@ IF(PRESENT(IntScalar)) THEN
     CALL ReadAttribute(File_ID,'LevelVarNamesInt',nLevelVarsIntLoc,StrArray=LevelVarNamesIntLoc)
     ALLOCATE(LevelVarsIntLoc(nLevelVarsIntLoc))
     CALL ReadAttribute(File_ID,'LevelVarsInt',nLevelVarsIntLoc,IntArray=LevelVarsIntLoc)
-  END IF 
+  END IF
   DO i=1,nLevelVarsIntLoc
-    IF(STRICMP(LevelVarNamesIntLoc(i),AttributeName)) THEN 
+    IF(STRICMP(LevelVarNamesIntLoc(i),AttributeName)) THEN
       IntScalar=LevelVarsIntLoc(i)
       EXIT
     END IF
-  END DO 
+  END DO
   SDEALLOCATE(LevelVarNamesIntLoc)
   SDEALLOCATE(LevelVarsIntLoc)
-END IF 
+END IF
 
 IF(PRESENT(RealScalar)) THEN
   CALL ReadAttribute(File_ID,'nLevelVarsReal',1,IntScalar=nLevelVarsRealLoc)
@@ -877,15 +877,15 @@ IF(PRESENT(RealScalar)) THEN
     ALLOCATE(LevelVarsRealLoc(nLevelVarsRealLoc))
     CALL ReadAttribute(File_ID,'LevelVarsReal',nLevelVarsRealLoc,RealArray=LevelVarsRealLoc)
     DO i=1,nLevelVarsRealLoc
-      IF(STRICMP(LevelVarNamesRealLoc(i),AttributeName)) THEN 
+      IF(STRICMP(LevelVarNamesRealLoc(i),AttributeName)) THEN
         RealScalar=LevelVarsRealLoc(i)
         EXIT
       END IF
-    END DO 
-  END IF 
+    END DO
+  END IF
   SDEALLOCATE(LevelVarNamesRealLoc)
   SDEALLOCATE(LevelVarsRealLoc)
-END IF 
+END IF
 
 IF(PRESENT(StrScalar)) THEN
   CALL ReadAttribute(File_ID,'nLevelVarsStr',1,IntScalar=nLevelVarsStrLoc)
@@ -895,15 +895,15 @@ IF(PRESENT(StrScalar)) THEN
     ALLOCATE(LevelVarsStrLoc(nLevelVarsStrLoc))
     CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStrLoc,StrArray=LevelVarsStrLoc)
     DO i=1,nLevelVarsStrLoc
-      IF(STRICMP(LevelVarNamesStrLoc(i),AttributeName)) THEN 
+      IF(STRICMP(LevelVarNamesStrLoc(i),AttributeName)) THEN
         StrScalar=LevelVarsStrLoc(i)
         EXIT
       END IF
-    END DO 
-  END IF 
+    END DO
+  END IF
   SDEALLOCATE(LevelVarNamesStrLoc)
   SDEALLOCATE(LevelVarsStrLoc)
-END IF 
+END IF
 END SUBROUTINE ReadAttributeBatchScalar
 
 !==================================================================================================================================

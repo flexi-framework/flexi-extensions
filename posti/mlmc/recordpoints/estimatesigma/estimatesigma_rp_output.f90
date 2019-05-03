@@ -31,8 +31,8 @@ SUBROUTINE WriteSumsToHDF5()
 ! MODULES
 USE MOD_Globals
 USE MOD_IO_HDF5
-USE MOD_HDF5_Output           ,ONLY: WriteAttribute
-USE MOD_RPSetVisuVisu_Vars   ,ONLY:  nPoints
+USE MOD_HDF5_Output
+USE MOD_RPSetVisuVisu_Vars    ,ONLY:  nPoints
 USE MOD_EstimateSigma_RP_Vars
 USE MOD_spec_Vars             ,ONLY: nSamples_spec,RPData_freq
 USE MOD_ParametersVisu        ,ONLY: nVarVisu,VarNameVisu
@@ -66,9 +66,12 @@ WRITE(UNIT_StdOut,'(132("-"))')
   WRITE(UNIT_stdOut,'(A,A)')' WRITING SUMS OF SPECTRA TO ', FileNameSums
   CALL WriteDataToHDF5(nSamples_spec,nPoints,5*nVarVisu,VarNames_tmp,RPData_freq,tmp,FileNameSums)
 WRITE(UNIT_StdOut,'(132("-"))')
+CALL OpenDataFile(FileNameSums,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
 CALL WriteAttribute(File_ID,'SigmaSq',1,RealScalar=SigmaSq)
 CALL WriteAttribute(File_ID,'SigmaSqFine',1,RealScalar=SigmaSqFine)
 CALL WriteAttribute(File_ID,'Bias',1,RealScalar=Bias)
+CALL WriteAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
+CALL CloseDataFile()
 
 
 SDEALLOCATE (tmp)

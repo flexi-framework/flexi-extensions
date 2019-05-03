@@ -10,8 +10,7 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! tate File Attribute --------------------------------------------------------------------------------------------------------------
 
-CHARACTER(LEN=255)                  :: FilenameMean
-CHARACTER(LEN=255)                  :: FilenameVariance
+CHARACTER(LEN=255)                  :: Filename
 CHARACTER(LEN=255),ALLOCATABLE      :: VarNamesRP(:)
 
 INTEGER                             :: nF

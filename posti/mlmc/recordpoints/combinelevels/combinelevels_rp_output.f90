@@ -6,7 +6,7 @@
 MODULE MOD_CombineLevels_RP_Output
 ! MODULES
 !-----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
+! GLOBAL VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 
 INTERFACE WriteMeanAndVarianceToHDF5
@@ -25,7 +25,7 @@ SUBROUTINE WriteMeanAndVarianceToHDF5()
 ! MODULES
 USE MOD_Globals
 USE MOD_RPSetVisuVisu_Vars   ,ONLY:  nPoints
-USE MOD_CombineLevels_RP_Vars 
+USE MOD_CombineLevels_RP_Vars
 USE MOD_OutputRPVisu_HDF5
 USE MOD_OutputRPVisu_Vars     ,ONLY: nCoords,CoordNames
 
@@ -35,6 +35,8 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER                          :: i
 CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_tmp(:)
+CHARACTER(LEN=255)               :: FileNameMean
+CHARACTER(LEN=255)               :: FileNameVariance
 !===================================================================================================================================
 ! Output spectra
 !CoordNames(1)='Frequency'
@@ -56,7 +58,7 @@ END DO
 FileNameMean='mean_spec.h5'
 WRITE(UNIT_StdOut,'(132("-"))')
   WRITE(UNIT_stdOut,'(A,A)')' WRITING MEAN OF SPECTRA TO ', FileNameMean
-  CALL WriteDataToHDF5(nF,nPoints,nVal,VarNames_tmp,RP_freq,UMean,FileNameMean)
+  CALL WriteDataToHDF5(nF,1,nVal,VarNames_tmp,RP_freq,UMean,FileNameMean)
 WRITE(UNIT_StdOut,'(132("-"))')
 
 DO i=1,nVal
@@ -66,7 +68,7 @@ END DO
 FileNameVariance='variance_spec.h5'
 WRITE(UNIT_StdOut,'(132("-"))')
   WRITE(UNIT_stdOut,'(A,A)')' WRITING VARIANCE OF SPECTRA TO ', FileNameVariance
-  CALL WriteDataToHDF5(nF,nPoints,nVal,VarNames_tmp,RP_freq,UVariance,FileNameVariance)
+  CALL WriteDataToHDF5(nF,1,nVal,VarNames_tmp,RP_freq,UVariance,FileNameVariance)
 WRITE(UNIT_StdOut,'(132("-"))')
 
 SDEALLOCATE (VarNames_tmp)

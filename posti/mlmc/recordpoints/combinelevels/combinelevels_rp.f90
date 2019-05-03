@@ -12,9 +12,9 @@ USE MOD_ReadInTools
 USE MOD_CombineLevels_RP_Vars
 USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_IO_HDF5                     ,ONLY:InitMPIInfo
-!USE MOD_RPSetVisuVisu_Vars                        
-USE MOD_RPSetVisu                        
-!USE MOD_OutputRPVisu                      
+!USE MOD_RPSetVisuVisu_Vars
+USE MOD_RPSetVisu
+!USE MOD_OutputRPVisu
 USE MOD_CombineLevels_RP_Output
 USE MOD_CombineLevels_RP_Input
 USE MOD_ParametersVisu              ,ONLY: RP_DefFile
@@ -70,6 +70,12 @@ CALL InitParameters()
 CALL InitIOHDF5()
 
 CALL InitRPSet(RP_DefFile)
+ALLOCATE(DataFiles(1:nLevels))
+
+DO iArg=2, nArgs
+	  CALL GET_COMMAND_ARGUMENT(iArg,DataFiles(iArg-1))
+END DO
+
 !-----------------------------------------------------------------------------------------------------------------------------------
 
 DO iLevel=1,nLevels
@@ -78,24 +84,14 @@ DO iLevel=1,nLevels
    WRITE(UNIT_stdOut,'(132("="))')
    WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING Level ',iLevel,' of ',nLevels,'Levels.'
    WRITE(UNIT_stdOut,'(132("="))')
-  
+
 
    ! Get start index of file extension to check if it is a h5 file
    !WRITE(iter_string,"(I0)") nIter
-   FileNameMean='level_'//TRIM(level_string)//'/mean_spec.h5'
-   iExt=INDEX(FileNameMean,'.',BACK = .TRUE.)
-   IF(FileNameMean(iExt+1:iExt+2) .NE. 'h5') &
-     CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
-
-
-   FileNameVariance='level_'//TRIM(level_string)//'/variance_spec.h5'
-   iExt=INDEX(FileNameVariance,'.',BACK = .TRUE.)
-   IF(FileNameVariance(iExt+1:iExt+2) .NE. 'h5') &
-     CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
-
-
-   ! Read in main attributes from given HDF5 State File
-   !WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(FileNameMean), """"
+   FileName = DataFiles(iLevel)
+   ! iExt=INDEX(FileName,'.',BACK = .TRUE.)
+   ! IF(FileName(iExt+1:iExt+2) .NE. 'h5') &
+   !   CALL Abort(__STAMP__,'ERROR - Invalid file extension!')
 
    IF (iLevel .EQ. 1) CALL InitReadSumsFromHDF5()
    CALL ReadSumsFromHDF5()
@@ -129,7 +125,7 @@ END PROGRAM EstimateSigma_RP
 !===================================================================================================================================
 SUBROUTINE DefineParameters()
 ! MODULES
-USE MOD_ReadInTools 
+USE MOD_ReadInTools
 IMPLICIT NONE
 !===================================================================================================================================
 

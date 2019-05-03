@@ -16,7 +16,7 @@ USE MOD_EstimateSigma_RP_Output
 USE MOD_EstimateSigma_RP_Input
 USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5,File_ID
 USE MOD_IO_HDF5                     ,ONLY:InitMPIInfo
-USE MOD_HDF5_Input                  ,ONLY:OpenDataFile,ReadAttribute,CloseDataFile
+USE MOD_HDF5_Input                  ,ONLY:OpenDataFile,ReadAttribute,CloseDataFile,ReadAttributeBatchScalar
 USE MOD_Spec                        ,ONLY:InitSpec,spec,FinalizeSpec
 USE MOD_spec_Vars
 USE MOD_RPSetVisuVisu_Vars
@@ -72,40 +72,40 @@ WRITE(UNIT_stdOut,'(A)') " || Compute sigmaSq based on RP data!    ||"
   STOP
 END IF
 validInput = .TRUE.
-IF(nArgs.LT.3)                                         validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))    validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(3)),'h5')))     validInput=.FALSE.
-IF(.NOT.(STRICMP(GetFileExtension(Args(nArgs)),'h5'))) validInput=.FALSE.
-IF (.NOT.validInput) THEN
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file input.h5 [number of Files] statefiles')
-END IF
+!TODO: fix validation check
+! IF(nArgs.LT.3)                                         validInput=.FALSE.
+! IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))    validInput=.FALSE.
+! IF(.NOT.(STRICMP(GetFileExtension(Args(3)),'h5')))     validInput=.FALSE.
+! IF(.NOT.(STRICMP(GetFileExtension(Args(nArgs-1)),'h5'))) validInput=.FALSE.
+! IF (.NOT.validInput) THEN
+!   CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file input.h5 [number of Files] statefiles')
+! END IF
 
 CALL prms%read_options(Args(1))
 read (Args(3),'(I10)') nFiles
-nDataFiles=nArgs-2
+nDataFiles=nArgs-3
 
 ALLOCATE(DataFilesFine(1:nFiles))
 DO iArg=4,4+(nFiles-1)
-  CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-2))
+  CALL GET_COMMAND_ARGUMENT(iArg,DataFilesFine(iArg-3))
 END DO
 
-hasCoarse = (MOD(nDataFiles,nFiles).EQ.2)
+hasCoarse = (nDataFiles.GT.nFiles)
 IF(hasCoarse) THEN
   nStartCoarse = (3+ nFiles) + 1
-  ALLOCATE(DataFilesCoarse(1:nDataFiles))
-  DO iArg=nStartCoarse,nDataFiles
-    CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-2))
+  ALLOCATE(DataFilesCoarse(1:nFiles))
+  DO iArg=nStartCoarse,nArgs
+    CALL GET_COMMAND_ARGUMENT(iArg,DataFilesCoarse(iArg-nStartCoarse+1))
   END DO
 END IF
-
 CALL GET_COMMAND_ARGUMENT(2,InputDataFile)
 CALL OpenDataFile(InputDataFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPrevious)
 nStart=nPrevious+1
 CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nEnd)
 nEnd=nEnd+nPrevious
-CALL ReadAttribute(File_ID,'ProjectName',1,StrScalar=ProjectName)
-FileNameSums = 'postproc_'//TRIM(ProjectName)//'.h5'
+CALL ReadAttributeBatchScalar('ProjectName',StrScalar = ProjectName)
+FileNameSums = 'postproc_'//TRIM(ProjectName)//'_recordpoints.h5'
 CALL CloseDataFile()
 
 CALL InitParameters()
@@ -117,10 +117,10 @@ snSamplesM1=1./(REAL(nEnd)-1.)
 DO iSample=nStart,nEnd
 
    ! readin RP Data from all input files
-   DO iArg=1,nDataFiles
+   DO iArg=1,nFiles
      InputDataFile=DataFilesFine(iArg)
      WRITE(UNIT_stdOut,'(132("="))')
-     WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the fine grid of Level.'
+     WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nFiles,' FILES on the fine grid of Level.'
      WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
      WRITE(UNIT_stdOut,'(132("="))')
 
@@ -171,7 +171,6 @@ DO iSample=nStart,nEnd
        CALL ReadSumsFromHDF5()
      END IF
    END IF
-
    UFine(:,:,:)=RPData_spec(:,:,:)
    CALL FinalizeRPData()
    IF (hasCoarse .OR. iSample .LT. nEnd) THEN
@@ -181,10 +180,10 @@ DO iSample=nStart,nEnd
 
    IF (hasCoarse) THEN
      ! readin RP Data from all input files
-     DO iArg=1,nDataFiles
+     DO iArg=1,nFiles
        InputDataFile=DataFilesCoarse(iArg)
        WRITE(UNIT_stdOut,'(132("="))')
-       WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES on the coarse grid.'
+       WRITE(UNIT_stdOut,'(A,I5,A,I5,A,I5)') ' PROCESSING FILE ',iArg,' of ',nFiles,' FILES on the coarse grid.'
        WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
        WRITE(UNIT_stdOut,'(132("="))')
 
@@ -227,7 +226,7 @@ END DO
 ! SigmaSq Computation
 df=RPData_freq(nSamples_spec)/(nSamples_Spec-1)
 Bias=Sum(df*snSamples*ABS(UFineSum-UCoarseSum))
-CALL WriteSumsToHDF5()
+
 
 SigmaSqSpec = snSamplesM1*( DUSqSum - snSamples*(UFineSum-UCoarseSum) * (UFineSum - UCoarseSum) )
 SigmaSq = Sum(df*SigmaSqSpec(VarAna,RP_specified,3:nSamples_Spec))
@@ -237,6 +236,7 @@ SigmaSqFine = Sum(df*SigmaSqSpec(VarAna,RP_specified,3:nSamples_Spec))
 
 SigmaSqSpec = SigmaSqSpec - snSamplesM1*( UCoarseSqSum - snSamples * UCoarseSum*UCoarseSum )
 ! CALL WriteMeanAndVarianceToHDF5()
+CALL WriteSumsToHDF5()
 
 CALL FinalizeRPSet()
 CALL FinalizeSpec()
