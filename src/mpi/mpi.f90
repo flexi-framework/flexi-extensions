@@ -104,6 +104,7 @@ INTEGER,INTENT(IN),OPTIONAL      :: mpi_comm_IN !< MPI communicator
 ! LOCAL VARIABLES
 #if USE_MPI
 LOGICAL :: initDone
+INTEGER :: Color
 !==================================================================================================================================
 IF (PRESENT(mpi_comm_IN)) THEN
   MPI_COMM_FLEXI = mpi_comm_IN
@@ -121,6 +122,10 @@ CALL MPI_COMM_SIZE(MPI_COMM_FLEXI, nProcessors, iError)
 IF(iError .NE. 0) &
   CALL Abort(__STAMP__,'Could not get rank and number of processors',iError)
 MPIRoot=(myRank .EQ. 0)
+
+Color=MERGE(0,MPI_UNDEFINED,MPIRoot)
+CALL MPI_COMM_SPLIT(MPI_COMM_ACTIVE,Color,myGlobalRank,MPI_COMM_FLEXIROOTS,iError) 
+
 #else  /*USE_MPI*/
 myRank      = 0
 myLocalRank = 0

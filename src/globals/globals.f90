@@ -46,6 +46,7 @@ LOGICAL            :: MPIRoot                                           !< flag 
 LOGICAL            :: MPILocalRoot                                      !< flag whether process is root of MPI subgroup
 
 INTEGER            :: MPI_COMM_ACTIVE
+INTEGER            :: MPI_COMM_FLEXIROOTS
 INTEGER            :: myGlobalRank
 INTEGER            :: nGlobalProcessors
 INTEGER            :: nGlobalRuns

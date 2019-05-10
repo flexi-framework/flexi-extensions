@@ -216,7 +216,7 @@ END SUBROUTINE WriteState
 !> Subroutine to write the solution U to HDF5 format
 !> Is used for postprocessing and for restart
 !==================================================================================================================================
-SUBROUTINE WriteBodyForcesHDF5(OutputTime,bf)
+SUBROUTINE WriteBodyForcesHDF5(OutputTime,bf,BCName,isFirstWall)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
@@ -226,6 +226,8 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                :: OutputTime     !< simulation time when output is performed
 REAL,INTENT(IN)                :: bf(1:9)
+CHARACTER(LEN=*),INTENT(IN)    :: BCName
+LOGICAL,INTENT(IN)             :: isFirstWall
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: FileName
@@ -240,21 +242,24 @@ END IF
 
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM('BodyForces'),OutputTime))//'.h5'
-IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) THEN
-  CALL GenerateFileSkeletonBodyForces(TRIM(FileName))
+IF((iSequentialRun.EQ.1).AND.isFirstWall) THEN
+  IF(MPIGlobalRoot) THEN
+    CALL OpenDataFile(TRIM(FileName),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.,userblockSize=0)
+    CALL CloseDataFile()
+  END IF
+#if USE_MPI
+  CALL MPI_BARRIER(MPI_COMM_FLEXIROOTS,iError)
+#endif
 END IF
 
-! Reopen file and write DG solution
-#if USE_MPI
-CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
-#endif
 
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
-                        DataSetName='BodyForces', rank=2,&
+                        DataSetName='BodyForces_'//TRIM(BCName), rank=2,&
                         nValGlobal=(/9,nGlobalRuns/),&
                         nVal=(/9,1/),&
                         offset=    (/0  ,iGlobalRun-1/),&
-                        collective=.TRUE.,RealArray=bf)
+                        collective=.TRUE.,RealArray=bf,&
+                        communicatorOpt=MPI_COMM_FLEXIROOTS)
 
 
 IF(MPIGlobalRoot)THEN
@@ -270,7 +275,8 @@ END SUBROUTINE WriteBodyForcesHDF5
 !> This routine is a wrapper routine for WriteArray and first gathers all output arrays of an MPI sub group,
 !> then only the master will write the data. Significantly reduces IO overhead for a large number of processes!
 !==================================================================================================================================
-SUBROUTINE GatheredWriteArray(FileName,create,DataSetName,rank,nValGlobal,nVal,offset,collective,RealArray,IntArray,StrArray)
+SUBROUTINE GatheredWriteArray(FileName,create,DataSetName,rank,nValGlobal,nVal,offset,collective,RealArray,IntArray,StrArray,&
+                              communicatorOpt)
 ! MODULES
 USE MOD_Globals
 IMPLICIT NONE
@@ -287,15 +293,23 @@ INTEGER,INTENT(IN)             :: offset(rank)      !< Offset in each rank
 REAL              ,INTENT(IN),OPTIONAL,TARGET :: RealArray(PRODUCT(nVal)) !< Real array to write
 INTEGER           ,INTENT(IN),OPTIONAL,TARGET :: IntArray( PRODUCT(nVal)) !< Integer array to write
 CHARACTER(LEN=255),INTENT(IN),OPTIONAL,TARGET :: StrArray( PRODUCT(nVal)) !< String array to write
+INTEGER,INTENT(IN),OPTIONAL    :: communicatorOpt   !< optional communicator to be used for collective access
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if USE_MPI
 REAL,              ALLOCATABLE :: UReal(:)
 CHARACTER(LEN=255),ALLOCATABLE :: UStr(:)
 INTEGER,           ALLOCATABLE :: UInt(:)
-INTEGER                        :: i,nValGather(rank),nDOFLocal
+INTEGER                        :: i,nValGather(rank),nDOFLocal,comm
 INTEGER,DIMENSION(nLocalProcs) :: nDOFPerNode,offsetNode
 !==================================================================================================================================
+#if USE_MPI
+IF (PRESENT(communicatorOpt)) THEN
+  comm = communicatorOpt
+ELSE
+  comm = MPI_COMM_ACTIVE
+END IF
+#endif /*USE_MPI*/
 IF(gatheredWrite)THEN
   IF(ANY(offset(1:rank-1).NE.0)) &
     CALL abort(__STAMP__,'Offset only allowed in last dimension for gathered IO.')
@@ -346,7 +360,7 @@ IF(gatheredWrite)THEN
   SDEALLOCATE(UStr)
 ELSE
 #endif
-  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=MPI_COMM_ACTIVE)
+  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=comm)
   IF(PRESENT(RealArray)) CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
                                                offset,collective,RealArray=RealArray)
   IF(PRESENT(IntArray))  CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
@@ -860,60 +874,6 @@ CALL CloseDataFile()
 IF(withUserblock_loc) CALL copy_userblock(TRIM(FileName)//C_NULL_CHAR,TRIM(UserblockTmpFile)//C_NULL_CHAR)
 
 END SUBROUTINE GenerateFileSkeleton
-
-!==================================================================================================================================
-!> Subroutine that generates the output file on a single processor and writes all the necessary attributes (better MPI performance)
-!==================================================================================================================================
-SUBROUTINE GenerateFileSkeletonBodyForces(FileName,create,withUserblock,batchMode)
-! MODULES
-USE MOD_PreProc
-USE MOD_Globals
-USE MOD_Output_Vars        ,ONLY: ProjectName,UserBlockTmpFile,userblock_total_len
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT/OUTPUT VARIABLES
-CHARACTER(LEN=*),INTENT(IN)    :: FileName           !< Name of file to create
-LOGICAL,INTENT(IN),OPTIONAL    :: create             !< specify whether file should be newly created
-LOGICAL,INTENT(IN),OPTIONAL    :: withUserblock      !< specify whether userblock data shall be written or not
-LOGICAL,INTENT(IN),OPTIONAL    :: batchMode          !< specify whether userblock data shall be written or not
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
-INTEGER(HSIZE_T)               :: Dimsf(2)
-CHARACTER(LEN=255)             :: Dataset_Str
-LOGICAL                        :: withUserblock_loc,create_loc,batchMode_loc
-!==================================================================================================================================
-! Create file
-create_loc=.TRUE.
-withUserblock_loc=.FALSE.
-batchMode_loc=.TRUE.
-IF(PRESENT(create))                       create_loc       =create
-IF(PRESENT(withUserblock).AND.create_loc) withUserblock_loc=withUserblock
-IF(PRESENT(batchMode))                    batchMode_loc    =batchMode
-Dataset_Str='BodyForces'
-CALL OpenDataFile(TRIM(FileName),create=create_loc,single=.TRUE.,readOnly=.FALSE.,&
-                  userblockSize=MERGE(userblock_total_len,0,withUserblock_loc))
-
-! Preallocate the data space for the dataset.
-Dimsf=(/9,nGlobalRuns/)
-nDims=2
-
-CALL H5SCREATE_SIMPLE_F(nDims, Dimsf(1:nDims), FileSpace, iError)
-! Create the dataset with default properties.
-HDF5DataType=H5T_NATIVE_DOUBLE
-CALL H5DCREATE_F(File_ID,TRIM(Dataset_Str), HDF5DataType, FileSpace, DSet_ID, iError)
-! Close the filespace and the dataset
-CALL H5DCLOSE_F(Dset_id, iError)
-CALL H5SCLOSE_F(FileSpace, iError)
-
-
-CALL CloseDataFile()
-
-! Add userblock to hdf5-file (only if create)
-IF(withUserblock_loc) CALL copy_userblock(TRIM(FileName)//C_NULL_CHAR,TRIM(UserblockTmpFile)//C_NULL_CHAR)
-
-END SUBROUTINE GenerateFileSkeletonBodyForces
-
 
 !==================================================================================================================================
 !> Add time attribute, after all relevant data has been written to a file,

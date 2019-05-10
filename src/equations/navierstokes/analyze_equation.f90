@@ -221,10 +221,14 @@ IF(MPIGlobalRoot.AND.doCalcBodyforces)THEN
 	  END IF
   END DO
 END IF
-DO i=1,nBCs
-  IF(.NOT.isWall(i)) CYCLE
-  IF(doCalcBodyforces.AND.doWriteBodyForces)  CALL WriteBodyForcesHDF5(Time,(/BodyForce(:,i),Fp(:,i),Fv(:,i)/))
-END DO
+IF(MPIRoot)THEN
+  DO i=1,nBCs
+    IF(.NOT.isWall(i)) CYCLE
+    IF(doCalcBodyforces.AND.doWriteBodyForces) THEN
+      CALL WriteBodyForcesHDF5(Time,(/BodyForce(:,i),Fp(:,i),Fv(:,i)/),TRIM(BoundaryName(i)),isFirstWall=.NOT.ANY(isWall(1:i-1)))
+    END IF 
+  END DO
+END IF
 IF(MPIGlobalRoot.AND.doCalcWallVelocity)THEN
   WRITE(UNIT_StdOut,*)'Wall Velocities (mean/min/max)  : '
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',3ES18.9)'
