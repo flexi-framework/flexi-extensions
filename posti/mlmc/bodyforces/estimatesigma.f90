@@ -175,7 +175,8 @@ ELSEIF (TRIM(FileType)=='TimeAvg') THEN
 ELSE
   CALL CollectiveStop(__STAMP__,'ERROR - Invalid FileType')
 END IF
-DataSetNameBodyForces = 'BodyForces'
+! TODO
+DataSetNameBodyForces = 'BodyForces_BC_wall'
 
 FileNameSums = 'postproc_'//TRIM(ProjectName)//'_'//TRIM(suffix)//'.h5'
 FileNameSumsBF = 'postproc_'//TRIM(ProjectName)//'_'//'bodyforces'//'.h5'
