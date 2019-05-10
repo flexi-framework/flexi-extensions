@@ -83,6 +83,7 @@ CALL addStrListEntry('IniExactFunc','cavity'   ,9)
 CALL addStrListEntry('IniExactFunc','shock'    ,10)
 CALL addStrListEntry('IniExactFunc','sod'      ,11)
 CALL addStrListEntry('IniExactFunc','dmr'      ,13)
+CALL addStrListEntry('IniExactFunc','naca_angle',14)
 #if PARABOLIC
 CALL addStrListEntry('IniExactFunc','blasius'  ,1338)
 #endif
@@ -93,6 +94,7 @@ CALL prms%CreateRealArrayOption(    'IniCenter',    "Shu Vortex CASE(7) (x,y,z)"
 CALL prms%CreateRealArrayOption(    'IniAxis',      "Shu Vortex CASE(7) (x,y,z)")
 CALL prms%CreateRealOption(         'IniAmplitude', "Shu Vortex CASE(7)", '0.2')
 CALL prms%CreateRealOption(         'IniHalfwidth', "Shu Vortex CASE(7)", '0.2')
+CALL prms%CreateRealOption(         'angle',        "Naca angle of attack", '8.0')
 #if PARABOLIC
 CALL prms%CreateRealOption(         'delta99_in',   "Blasius boundary layer CASE(1338)")
 CALL prms%CreateRealArrayOption(    'x_in',         "Blasius boundary layer CASE(1338)")
@@ -138,6 +140,8 @@ CASE(8) ! couette-poiseuille flow
 CASE(10) ! shock
   MachShock    = GETREAL('MachShock','1.5')
   PreShockDens = GETREAL('PreShockDens','1.0')
+CASE(14)
+  angle        = GETREAL('angle','8.')
 #if PARABOLIC
 CASE(1338) ! Blasius boundary layer solution
   delta99_in      = GETREAL('delta99_in')
@@ -183,7 +187,7 @@ USE MOD_TestCase       ,ONLY: ExactFuncTestcase
 USE MOD_EOS            ,ONLY: PrimToCons,ConsToPrim
 #if PARABOLIC
 USE MOD_Eos_Vars       ,ONLY: mu0
-USE MOD_Exactfunc_Vars ,ONLY: delta99_in,x_in
+USE MOD_Exactfunc_Vars ,ONLY: delta99_in,x_in,angle
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -235,6 +239,11 @@ CASE(0)
   CALL ExactFuncTestcase(tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(:,RefState)
+CASE(14)
+  prim = RefStatePrim(:,RefState)
+  prim(2)= COS(angle*PP_Pi/180.)
+  prim(3)= SIN(angle*PP_Pi/180.)
+  CALL PrimToCons(prim,resu)
 CASE(2) ! sinus
   Frequency=0.5
   Amplitude=0.3

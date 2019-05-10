@@ -34,6 +34,7 @@ REAL              :: IniAmplitude      !< parameter used for Shu vortex
 REAL              :: IniHalfwidth      !< parameter used for Shu vortex
 REAL              :: P_Parameter       !< parameter for Couette-Poiseuille flow
 REAL              :: U_Parameter       !< parameter for Couette-Poiseuille flow
+REAL              :: angle             !< angle of attack for naca profile
 #if PARABOLIC
 REAL              :: delta99_in        !< boundary layer thickness for Blasius solution
 REAL              :: x_in(2)           !< inflow position for Blasius solution

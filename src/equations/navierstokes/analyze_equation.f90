@@ -184,9 +184,10 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars
 USE MOD_AnalyzeEquation_Vars
-USE MOD_Mesh_Vars,          ONLY: BoundaryName,nBCs,BoundaryType
+USE MOD_Mesh_Vars,          ONLY: BoundaryName,nBCs,BoundaryType, MeshFile
 USE MOD_CalcBodyForces,     ONLY: CalcBodyForces
 USE MOD_Output,             ONLY: OutputToFile
+USE MOD_HDF5_Output,        ONLY: WriteBodyForcesHDF5
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -214,11 +215,16 @@ IF(MPIGlobalRoot.AND.doCalcBodyforces)THEN
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',6ES18.9)'
   DO i=1,nBCs
     IF(.NOT.isWall(i)) CYCLE
-    IF (doWriteBodyForces) &
-      CALL OutputToFile(FileName_BodyForce(i),(/Time/),(/9,1/),(/BodyForce(:,i),Fp(:,i),Fv(:,i)/))
-    WRITE(UNIT_StdOut,formatStr) ' '//TRIM(BoundaryName(i)),Fp(:,i),Fv(:,i)
+		WRITE(UNIT_StdOut,formatStr) ' '//TRIM(BoundaryName(i)),Fp(:,i),Fv(:,i)
+		IF (doWriteBodyForces) THEN
+        CALL OutputToFile(FileName_BodyForce(i),(/Time/),(/9,1/),(/BodyForce(:,i),Fp(:,i),Fv(:,i)/))
+	  END IF
   END DO
 END IF
+DO i=1,nBCs
+  IF(.NOT.isWall(i)) CYCLE
+  IF(doCalcBodyforces.AND.doWriteBodyForces)  CALL WriteBodyForcesHDF5(Time,(/BodyForce(:,i),Fp(:,i),Fv(:,i)/))
+END DO
 IF(MPIGlobalRoot.AND.doCalcWallVelocity)THEN
   WRITE(UNIT_StdOut,*)'Wall Velocities (mean/min/max)  : '
   WRITE(formatStr,'(A,I2,A)')'(A',maxlen,',3ES18.9)'
@@ -260,6 +266,8 @@ IF(MPIGlobalRoot.AND.doCalcTotalStates)THEN
     WRITE(UNIT_StdOut,formatStr) ' '//TRIM(BoundaryName(i)),MeanTotals(:,i)
   END DO
 END IF
+
+
 END SUBROUTINE AnalyzeEquation
 
 
