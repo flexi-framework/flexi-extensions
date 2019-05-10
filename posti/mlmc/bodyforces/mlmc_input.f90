@@ -106,7 +106,7 @@ INTEGER,INTENT(IN)            :: offset
 ! LOCAL VARIABLES
 !===================================================================================================================================
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-CALL ReadArray(TRIM(DataSetName),2,(/9,1/),offset,0,RealArray=BodyForces)
+CALL ReadArray(TRIM(DataSetName),2,(/9,1/),offset,2,RealArray=BodyForces)
 CALL CloseDataFile()
 END SUBROUTINE ReadStateFileBF
 

@@ -115,7 +115,7 @@ nEnd=nEnd+nPrevious
 CALL CloseDataFile()
 
 varAna       = GETINT('varAna')
-nAna         = GETINT('nAna')
+! nAna         = GETINT('nAna')
 
 hasCoarse = nArgs.EQ.6
 IF(hasCoarse) THEN
@@ -156,7 +156,7 @@ IF (hasCoarse) THEN
 END IF
 
 CALL InitMesh(2,MeshFile_IN=MeshFileNew)
-CALL InitAnalyzeBasis(NNew,nAna,xGP,wBary)
+! CALL InitAnalyzeBasis(NNew,nAna,xGP,wBary)
 CALL InitEos()
 
 
@@ -237,9 +237,7 @@ DO iSample=nStart,nEnd
   SWRITE(UNIT_stdOut,'(132("-"))')
   SWRITE(UNIT_stdOut,"(A,I0)") 'START PROCESSING SAMPLE ',iSample
   SWRITE(UNIT_stdOut,'(132("-"))')
-
   ! Read state file for each sample COARSE
-  PRINT*, iSample-nStart,DataSetNameBodyForces
   CALL ReadStateFileBF(BodyFocesFileFine,DataSetNameBodyForces,iSample-nStart)
   CALL EstsigToSwapmesh(.TRUE.)
   CALL ReadStateFile(StateFileFine,DataSetName,iSample-nStart)
@@ -291,8 +289,12 @@ END DO
 SWRITE(UNIT_stdOut,'(132("="))')
 ! Bias:
 BiasBodyForces = ABS( snSamples*(BodyForcesFineSum-BodyForcesCoarseSum))
+Bias= BiasBodyForces(varAna)
 ! Stochastic Error:
 SigmaSqBodyForces = snSamplesM1*( DBodyForcesSqSum - snSamples* (BodyForcesFineSum-BodyForcesCoarseSum) * (BodyForcesFineSum  -BodyForcesCoarseSum)  )
+SigmaSq = SigmaSqBodyForces(varAna)
+SigmaSqBodyForces = snSamplesM1*( BodyForcesFineSqSum - snSamples* (BodyForcesFineSum) * (BodyForcesFineSum )  )
+SigmaSqFine = SigmaSqBodyForces(varAna)
 CALL WriteSumsToHDF5()
 CALL WriteBodyForcesSumsToHDF5()
 CALL FinalizeSwapMesh()
