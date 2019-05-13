@@ -42,28 +42,28 @@ TARGET_LINK_LIBRARIES(${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
 ADD_DEPENDENCIES(     ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
 
 
-#SET(TOOL_NAME "mlmc_combinelevels")
+SET(TOOL_NAME "mlmc_combinelevels_bf")
 #
-#MESSAGE(STATUS "Posti: building ${TOOL_NAME} tool.")
-#INCLUDE_DIRECTORIES( ${TOOL_DIR})
+MESSAGE(STATUS "Posti: building ${TOOL_NAME} tool.")
+INCLUDE_DIRECTORIES( ${TOOL_DIR})
 #
-#FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/combinelevels.f90
-#                          ${TOOL_DIR}/combinelevels_vars.f90
-#                          ${TOOL_DIR}/mlmc_vars.f90
-#                          ${TOOL_DIR}/mlmc_input.f90
-#                          ${TOOL_DIR}/mlmc_output.f90
-#                          ${TOOL_DIR_SWAPMESH}/swapmesh.f90
-#                          ${TOOL_DIR_SWAPMESH}/swapmesh_vars.f90
-#                          ${TOOL_DIR_SWAPMESH}/parametriccoords.f90
-#                          ${TOOL_DIR_SWAPMESH}/interpolatesolution.f90)
-#
-#
-#ADD_LIBRARY(${TOOL_NAME}libF90 OBJECT ${${TOOL_NAME}F90})
-#SET_TARGET_PROPERTIES(${TOOL_NAME}libF90 PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS})
-#ADD_LIBRARY(${TOOL_NAME}lib STATIC $<TARGET_OBJECTS:${TOOL_NAME}libF90>)
-#ADD_DEPENDENCIES(${TOOL_NAME}libF90 libflexishared)
+FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/combinelevels.f90
+                          ${TOOL_DIR}/combinelevels_vars.f90
+                          ${TOOL_DIR}/mlmc_vars.f90
+                          ${TOOL_DIR}/mlmc_input.f90
+                          ${TOOL_DIR}/mlmc_output.f90
+                          ${TOOL_DIR_SWAPMESH}/swapmesh.f90
+                          ${TOOL_DIR_SWAPMESH}/swapmesh_vars.f90
+                          ${TOOL_DIR_SWAPMESH}/parametriccoords.f90
+                          ${TOOL_DIR_SWAPMESH}/interpolatesolution.f90)
+
+
+ADD_LIBRARY(${TOOL_NAME}libF90 OBJECT ${${TOOL_NAME}F90})
+SET_TARGET_PROPERTIES(${TOOL_NAME}libF90 PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS})
+ADD_LIBRARY(${TOOL_NAME}lib STATIC $<TARGET_OBJECTS:${TOOL_NAME}libF90>)
+ADD_DEPENDENCIES(${TOOL_NAME}libF90 libflexishared)
 #
 ## Standalone Posti executable
-#add_exec(             ${TOOL_NAME} ${TOOL_DIR}/combinelevels.f90)
-#TARGET_LINK_LIBRARIES(${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
-#ADD_DEPENDENCIES(     ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
+add_exec(             ${TOOL_NAME} ${TOOL_DIR}/combinelevels.f90)
+TARGET_LINK_LIBRARIES(${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
+ADD_DEPENDENCIES(     ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)

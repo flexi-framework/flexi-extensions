@@ -23,8 +23,13 @@ INTERFACE WriteBodyForcesSumsToHDF5
   MODULE PROCEDURE WriteBodyForcesSumsToHDF5
 END INTERFACE
 
+INTERFACE WriteMeanAndVarianceToHDF5
+  MODULE PROCEDURE WriteMeanAndVarianceToHDF5
+END INTERFACE
+
 PUBLIC::WriteSumsToHDF5
 PUBLIC::WriteBodyForcesSumsToHDF5
+PUBLIC::WriteMeanAndVarianceToHDF5
 !===================================================================================================================================
 CONTAINS
 
@@ -168,6 +173,55 @@ CALL CloseDataFile()
 SWRITE(UNIT_stdOut,'(a)',ADVANCE='YES')'DONE'
 END SUBROUTINE WriteBodyForcesSumsToHDF5
 
+SUBROUTINE WriteMeanAndVarianceToHDF5()
+!===================================================================================================================================
+! Subroutine to write the time averaged solution U to HDF5 format
+!===================================================================================================================================
+! MODULES
+USE MOD_Globals
+USE MOD_IO_HDF5
+USE MOD_HDF5_Output,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
+USE MOD_MLMC_Vars
+USE MOD_Mesh_Vars,ONLY:nGlobalElems
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+CHARACTER(LEN=255)  :: FileName
+INTEGER             :: NLoc
+!===================================================================================================================================
+VarNames( 1)='Density'
+VarNames( 2)='MomentumX'
+VarNames( 3)='MomentumY'
+VarNames( 4)='MomentumZ'
+VarNames( 5)='EnergyStagnationDensity'
+VarNames( 6)='VelocityX'
+VarNames( 7)='Velocityy'
+VarNames( 8)='VelocityZ'
+VarNames( 9)='Pressure'
+VarNames(10)='Temperature'
+!-----------------------------------------------------------------------------------------------------------------------------------
+FileName = 'SOLUTION_State.h5'
+SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN AND STDDEV TO HDF5 FILE "',TRIM(FileName),'" ... \n'
 
+NLoc=nVal(2)-1
+nGlobalElems=nVal(5)
+CALL GenerateFileSkeleton(TRIM(FileName),'EstSigSum',1,NLoc,(/'DUMMY_DO_NOT_VISUALIZE'/),&
+                          MeshFile_Sums,Time_Sums,Time_Sums,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
+CALL GenerateFileSkeleton(TRIM(FileName),'EstSigSum',nVarTotal,NLoc,VarNames,&
+                          MeshFile_Sums,Time_Sums,Time_Sums,create=.FALSE.,Dataset='Mean',batchMode=.FALSE.)
+CALL GenerateFileSkeleton(TRIM(FileName),'EstSigSum',nVarTotal,NLoc,VarNames,&
+                          MeshFile_Sums,Time_Sums,Time_Sums,create=.FALSE.,Dataset='StandardDeviation',batchMode=.FALSE.)
+CALL OpenDataFile(TRIM(FileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
+CALL WriteArray('Mean',5,nVal,nVal,(/0,0,0,0,0/),.FALSE.,RealArray=Mean)
+CALL WriteArray('StandardDeviation',5,nVal,nVal,(/0,0,0,0,0/),.FALSE.,RealArray=StdDev)
+CALL CloseDataFile()
+
+SWRITE(UNIT_stdOut,'(a)',ADVANCE='YES')'DONE'
+END SUBROUTINE WriteMeanAndVarianceToHDF5
 
 END MODULE MOD_MLMC_Output
