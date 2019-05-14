@@ -10,7 +10,7 @@ USE HDF5
 IMPLICIT NONE
 PRIVATE
 !-----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
+! GLOBAL VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Private Part ---------------------------------------------------------------------------------------------------------------------
 ! Public Part ----------------------------------------------------------------------------------------------------------------------
@@ -32,7 +32,6 @@ USE MOD_PreProc
 USE MOD_IO_HDF5
 USE MOD_HDF5_Output         ,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
 USE MOD_Nisp_Vars
-USE MOD_Output_Vars,ONLY:ProgramName,FileVersion,ProjectName
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -43,19 +42,19 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)            :: Vars(2*nVar)
 CHARACTER(LEN=255)            :: TimeString
-Vars(1)='Density_Mean' 
-Vars(2)='MomentumX_Mean' 
-Vars(3)='MomentumY_Mean' 
+Vars(1)='Density_Mean'
+Vars(2)='MomentumX_Mean'
+Vars(3)='MomentumY_Mean'
 Vars(4)='MomentumZ_Mean'
-Vars(5)='EnergyStagnationDensity_Mean' 
-Vars(6)='VelocityX_Mean' 
-Vars(7)='VelocityY_Mean' 
-Vars(8)='VelocityZ_Mean' 
+Vars(5)='EnergyStagnationDensity_Mean'
+Vars(6)='VelocityX_Mean'
+Vars(7)='VelocityY_Mean'
+Vars(8)='VelocityZ_Mean'
 Vars(9)='Pressure_Mean'
 Vars(10)='Temperature_Mean'
 !===================================================================================================================================
 !-----------------------------------------------------------------------------------------------------------------------------------
-! MEAN: 
+! MEAN:
 FileNameMean=TRIM(TIMESTAMP('Mean',Time_State))//'.h5'
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN TO HDF5 FILE "',TRIM(FileNameMean),'" ... \n'
 CALL GenerateFileSkeleton(TRIM(FileNameMean),&
@@ -67,7 +66,7 @@ CALL GenerateFileSkeleton(TRIM(FileNameMean),&
                           Time_State,&
                           Time_State,&
                           withUserblock=.TRUE.)
-                          
+
 CALL OpenDataFile(TRIM(FileNameMean),.FALSE.,.TRUE.,readOnly=.FALSE.)
 ! WRITE DG SOLUTION ----------------------------------------------------------------------------------------------------------------
 CALL WriteArray('DG_Solution',5,(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
@@ -76,15 +75,15 @@ CALL CloseDataFile()
 
 
 ! !-----------------------------------------------------------------------------------------------------------------------------------
-! ! VARIANCE: 
-Vars(1)='Density_Variance' 
-Vars(2)='MomentumX_Variance' 
-Vars(3)='MomentumY_Variance' 
+! ! VARIANCE:
+Vars(1)='Density_Variance'
+Vars(2)='MomentumX_Variance'
+Vars(3)='MomentumY_Variance'
 Vars(4)='MomentumZ_Variance'
-Vars(5)='EnergyStagnationDensity_Variance' 
-Vars(6)='VelocityX_Variance' 
-Vars(7)='VelocityY_Variance' 
-Vars(8)='VelocityZ_Variance' 
+Vars(5)='EnergyStagnationDensity_Variance'
+Vars(6)='VelocityX_Variance'
+Vars(7)='VelocityY_Variance'
+Vars(8)='VelocityZ_Variance'
 Vars(9)='Pressure_Variance'
 Vars(10)='Temperature_Variance'
 
@@ -100,7 +99,7 @@ CALL GenerateFileSkeleton(TRIM(FileNameVariance),&
                           Time_State,&
                           Time_State,&
                           withUserblock=.TRUE.)
-! 
+!
 ! ! Open HDF5 file for write
 CALL OpenDataFile(TRIM(FileNameVariance),.FALSE.,.TRUE.,readOnly=.FALSE.)
 ! Write DG solution ----------------------------------------------------------------------------------------------------------------

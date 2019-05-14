@@ -16,28 +16,22 @@ ENDIF()
 
 
 SET(TOOL_NAME "nisp")
-SET(TOOL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/posti/nisp/computemodes")
-SET(TOOL_DIR_SWAPMESH "${CMAKE_CURRENT_SOURCE_DIR}/posti/swapmesh")
-
+SET(TOOL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/posti/nisp/fieldsolution")
 
 MESSAGE(STATUS "Posti: building ${TOOL_NAME} tool.")
-INCLUDE_DIRECTORIES( ${TOOL_DIR}) 
+INCLUDE_DIRECTORIES( ${TOOL_DIR})
 
-FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/nisp.f90
+FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/posti_nisp.f90
                           ${TOOL_DIR}/nisp_vars.f90
-                          ${TOOL_DIR}/nisp_output.f90
-                          ${TOOL_DIR_SWAPMESH}/swapmesh.f90
-                          ${TOOL_DIR_SWAPMESH}/swapmesh_vars.f90
-                          ${TOOL_DIR_SWAPMESH}/parametriccoords.f90
-                          ${TOOL_DIR_SWAPMESH}/interpolatesolution.f90)
+                          ${TOOL_DIR}/nisp.f90
+                          ${TOOL_DIR}/nisp_output.f90)
 
 ADD_LIBRARY(${TOOL_NAME}libF90 OBJECT ${${TOOL_NAME}F90})
-SET_TARGET_PROPERTIES(${TOOL_NAME}libF90 PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS}) 
+SET_TARGET_PROPERTIES(${TOOL_NAME}libF90 PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS})
 ADD_LIBRARY(${TOOL_NAME}lib STATIC $<TARGET_OBJECTS:${TOOL_NAME}libF90>)
-ADD_DEPENDENCIES(${TOOL_NAME}libF90 flexilibF90 HDF5)
+ADD_DEPENDENCIES(${TOOL_NAME}libF90 libflexishared)
 
 # Standalone Posti executable
 add_exec(             ${TOOL_NAME} ${TOOL_DIR}/nisp.f90)
-TARGET_LINK_LIBRARIES(${TOOL_NAME} ${TOOL_NAME}lib flexilib userblocklib ${linkedlibs})
-ADD_DEPENDENCIES(     ${TOOL_NAME} ${TOOL_NAME}lib flexilib userblocklib ${linkedlibs})
-
+TARGET_LINK_LIBRARIES( ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
+ADD_DEPENDENCIES(      ${TOOL_NAME} ${TOOL_NAME}lib libflexishared)
