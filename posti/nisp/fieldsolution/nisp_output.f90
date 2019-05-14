@@ -32,6 +32,7 @@ USE MOD_PreProc
 USE MOD_IO_HDF5
 USE MOD_HDF5_Output         ,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
 USE MOD_Nisp_Vars
+USE MOD_Mesh_Vars           ,ONLY:nGlobalElems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -55,22 +56,21 @@ Vars(10)='Temperature_Mean'
 !===================================================================================================================================
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! MEAN:
+! hack
+nGlobalElems = nElemsNew
 FileNameMean=TRIM(TIMESTAMP('Mean',Time_State))//'.h5'
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN TO HDF5 FILE "',TRIM(FileNameMean),'" ... \n'
-CALL GenerateFileSkeleton(TRIM(FileNameMean),&
-                          'State',&
-                          2*nVar,&
-                          NNew,&
-                          Vars,&
-                          'hopr_mesh.h5',&
-                          Time_State,&
-                          Time_State,&
-                          withUserblock=.TRUE.)
+CALL GenerateFileSkeleton(TRIM(FileNameMean),'State',2*nVar+1,NNew,Vars,'mesh_1.h5',Time_State,&
+                          Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
 
-CALL OpenDataFile(TRIM(FileNameMean),.FALSE.,.TRUE.,readOnly=.FALSE.)
-! WRITE DG SOLUTION ----------------------------------------------------------------------------------------------------------------
-CALL WriteArray('DG_Solution',5,(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-    (/0,0,0,0,0/),.FALSE.,RealArray=UMean(:,:,:,:,:))
+CALL OpenDataFile(TRIM(FileNameMean),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
+CALL WriteArray(DataSetName='DG_Solution',&
+                  rank=5,&
+                  nValGlobal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
+                  nVal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
+                  offset=(/0,0,0,0,0/),&
+                  collective=.FALSE.,&
+                  RealArray=UMean(:,:,:,:,:))
 CALL CloseDataFile()
 
 
@@ -90,22 +90,19 @@ Vars(10)='Temperature_Variance'
 FileNameVariance=TRIM(TIMESTAMP('Variance',Time_State))//'.h5'
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE VARIANCE TO HDF5 FILE "',TRIM(FileNameVariance),'" ... \n'
 
-CALL GenerateFileSkeleton(TRIM(FileNameVariance),&
-                          'State',&
-                          2*nVar,&
-                          NNew,&
-                          Vars,&
-                          'hopr_mesh.h5',&
-                          Time_State,&
-                          Time_State,&
-                          withUserblock=.TRUE.)
-!
-! ! Open HDF5 file for write
-CALL OpenDataFile(TRIM(FileNameVariance),.FALSE.,.TRUE.,readOnly=.FALSE.)
-! Write DG solution ----------------------------------------------------------------------------------------------------------------
-CALL WriteArray('DG_Solution',5,(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-    (/0,0,0,0,0/),.FALSE.,RealArray=UVar(:,:,:,:,:))
+CALL GenerateFileSkeleton(TRIM(FileNameVariance),'State',2*nVar+1,NNew,Vars,'mesh_1.h5',Time_State,&
+                          Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
+
+CALL OpenDataFile(TRIM(FileNameVariance),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
+CALL WriteArray(DataSetName='DG_Solution',&
+                  rank=5,&
+                  nValGlobal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
+                  nVal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
+                  offset=(/0,0,0,0,0/),&
+                  collective=.FALSE.,&
+                  RealArray=UVar(:,:,:,:,:))
 CALL CloseDataFile()
+
 
 SWRITE(UNIT_stdOut,'(a)',ADVANCE='YES')'DONE'
 END SUBROUTINE WriteMeanAndVarianceToHDF5

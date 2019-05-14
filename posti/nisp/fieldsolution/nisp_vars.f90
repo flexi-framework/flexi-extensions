@@ -31,7 +31,8 @@ REAL                               :: Time_State
 REAL, ALLOCATABLE                  :: HermiteCoeff(:,:)
 REAL,ALLOCATABLE                   :: UPrim(:,:,:,:,:)
 REAL,ALLOCATABLE                   :: UMean(:,:,:,:,:), UVar(:,:,:,:,:), UMode(:,:,:,:,:) ,U(:,:,:,:,:)
-REAL,ALLOCATABLE                   :: USample(:,:,:,:,:,:)
+REAL,ALLOCATABLE                   :: USamplePrim(:,:,:,:,:,:)
+REAL,ALLOCATABLE                   :: USampleCons(:,:,:,:,:,:)
 
 CHARACTER(LEN=255)                 :: StateFile, StateFileName, ProjectName
 CHARACTER(LEN=255)                 :: FileNameMean = 'Mean.h5' ,FileNameVariance = 'Variance.h5'

@@ -23,10 +23,6 @@ INTERFACE InitNisp
   MODULE PROCEDURE InitNisp
 END INTERFACE
 
-INTERFACE AllocateSamples
-  MODULE PROCEDURE AllocateSamples
-END INTERFACE
-
 INTERFACE ComputeModes
   MODULE PROCEDURE ComputeModes
 END INTERFACE
@@ -35,7 +31,7 @@ INTERFACE FinalizeNisp
   MODULE PROCEDURE FinalizeNisp
 END INTERFACE
 
-PUBLIC::DefineParametersNisp,InitNisp,AllocateSamples,ComputeModes,FinalizeNisp
+PUBLIC::DefineParametersNisp,InitNisp,ComputeModes,FinalizeNisp
 CONTAINS
 !===================================================================================================================================
 !> Define parameters of Posti Nisp RP tool
@@ -50,8 +46,6 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !===================================================================================================================================
 CALL prms%SetSection('Nisp Parameters')
-CALL prms%CreateStringOption (  'VarName'            , "TODO",multiple=.TRUE.)
-CALL prms%CreateIntOption    (  'OutputFormat'       , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
 CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
@@ -70,12 +64,15 @@ USE MOD_Nisp_Vars
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
 USE MOD_HDF5_Input        ,ONLY: OpenDataFile,CloseDataFile,GetDataProps,ReadAttribute, ReadArray, ReadAttributeBatchScalar
 USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray,ReadAttributeBatchScalar
-
+USE MOD_Output            ,ONLY: insert_userblock
+USE MOD_Output_Vars       ,ONLY: UserBlockTmpFile,userblock_total_len
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)      :: StochFile
 INTEGER                 :: iArg,nLevelVarsStr
+LOGICAL                 :: userblockFound
+CHARACTER(LEN=255)      :: prmfile=".parameter.ini"
 !===================================================================================================================================
 !======================================================
 ! Readin StochInput.h5
@@ -128,8 +125,12 @@ CALL CreateMultiIndex()
 !======================================================
 ! Open .h5 on sample n to get MeshFile and necessary attributes
 !======================================================
-CALL GET_COMMAND_ARGUMENT(2,StateFileName)
+CALL GET_COMMAND_ARGUMENT(3,StateFileName)
 CALL OpenDataFile(StateFileName,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL ExtractParameterFile(StateFileName,TRIM(prmfile),userblockFound)
+ !prepare userblock file
+CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(prmfile)//C_NULL_CHAR)
+INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
 
 CALL GetDataProps(nVar,NNew,nElemsNew,NodeType)
 CALL ReadAttribute(File_ID,'MeshFile',    1,StrScalar=Mesh)
@@ -138,37 +139,18 @@ CALL ReadAttribute(File_ID,'Time',1,RealScalar=Time_State)
 CALL CloseDataFile()
 ALLOCATE(UMean(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew), UVar(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(UMode(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
-ALLOCATE(U(nVar,0:NNew,0:NNew,0:NNew,nElemsNew),USample(1:nStochSamples,2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
+ALLOCATE(U(nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(UPrim(nVar+1,0:NNew,  0:NNew,  0:NNew,  nElemsNew))
-UMean= 0.
-UVar = 0.
-USample = 0.
-UPrim =0.
+ALLOCATE(USamplePrim(1:nStochSamples,1:nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
+ALLOCATE(USampleCons(1:nStochSamples,1:nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
+UMean = 0.
+UVar= 0.
+UMode= 0.
+U = 0.
+UPrim = 0.
+USamplePrim = 0.
+USampleCons = 0.
 END SUBROUTINE InitNisp
-
-SUBROUTINE AllocateSamples()
-!----------------------------------------------------------------------------------------------------------------------------------!
-USE MOD_Nisp_Vars
-USE MOD_EOS            ,ONLY: ConsToPrim
-IMPLICIT NONE
-! INPUT / OUTPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER                              :: iStochSample,k,l,p,iElem
-REAL                                 :: evalPoly, y_out, y_out_dummy
-CHARACTER(LEN=255)                   :: DataSetName="DG_Solution"
-!-----------------------------------------------------------------------------------------------------------------------------------
-DO iStochSample=1,nStochSamples
-  CALL ReadStateFile(StateFileName,DataSetName,iStochSample-1)
-  USample(iStochSample,1:nVar,:,:,:,:) = U
-  DO iElem=1,nElemsNew
-    DO k=0,NNew; DO l=0,NNew; DO p=0,NNew
-      CALL ConsToPrim(UPrim(:,m,l,k,iElem),U(:,m,l,k,iElem))
-    END DO; END DO; END DO
-  END DO
-  USample(iStochSample,nVar+1:2*nVar,:,:,:,:) = UPrim
-END DO
-END SUBROUTINE AllocateSamples
 
 !===================================================================================================================================
 !> Open a state file, read the old state and store the information later needed to write a new state.
@@ -206,13 +188,26 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER           :: iStochCoeff,jStochSample,iStochVar
-REAL              :: evalPoly, y_out, y_out_dummy
+INTEGER                 :: iStochCoeff,jStochSample,iStochVar
+REAL                    :: evalPoly, y_out, y_out_dummy
+CHARACTER(LEN=255)      :: DataSetName="DG_Solution"
+INTEGER                 :: iStochSample,k,l,p,iElem
 !-----------------------------------------------------------------------------------------------------------------------------------
+DO jStochSample=1,nStochSamples
+  CALL ReadStateFile(StateFileName,DataSetName,jStochSample-1)
+  USampleCons(jStochSample,:,:,:,:,:) = U
+  DO iElem=1,nElemsNew
+    DO k=0,NNew; DO l=0,NNew; DO p=0,NNew
+      CALL ConsToPrim(UPrim(:,m,l,k,iElem),U(:,m,l,k,iElem))
+    END DO; END DO; END DO
+  END DO
+  USamplePrim(jStochSample,:,:,:,:,:) = UPrim(2:nVar,:,:,:,:)
+END DO
 DO iStochCoeff=0,nStochCoeffs
   IF(iStochCoeff==0) THEN
     DO jStochSample=1, nStochSamples
-      UMean = UMean + USample(jStochSample,:,:,:,:,:)*StochWeights(jStochSample)
+      UMean(1:nVar,:,:,:,:)        = UMean(1:nVar,:,:,:,:)  + USampleCons(jStochSample,:,:,:,:,:)*StochWeights(jStochSample)
+      UMean(nVar+1:2*nVar,:,:,:,:) = UMean(nVar+1:2*nVar,:,:,:,:) + USamplePrim(jStochSample,2:nVar,:,:,:,:)*StochWeights(jStochSample)
     END DO
   ELSE
     y_out=0.
@@ -230,7 +225,8 @@ DO iStochCoeff=0,nStochCoeffs
         END IF
         evalPoly = evalPoly*y_out
       END DO
-      UMode = UMode+ USample(jStochSample,:,:,:,:,:)*evalPoly*StochWeights(jStochSample)
+      UMode(1:nVar,:,:,:,:)       = UMode(1:nVar,:,:,:,:) + USampleCons(jStochSample,:,:,:,:,:)*evalPoly*StochWeights(jStochSample)
+      UMode(nVar+1:nVar,:,:,:,:)  = UMode(nVar+1:nVar,:,:,:,:) + USamplePrim(jStochSample,2:nVar,:,:,:,:)*evalPoly*StochWeights(jStochSample)
     END DO
   END IF
   UVar = UVar + UMode*UMode
@@ -254,7 +250,8 @@ SDEALLOCATE(UMean)
 SDEALLOCATE(UVar)
 SDEALLOCATE(U)
 SDEALLOCATE(UMode)
-SDEALLOCATE(USample)
+SDEALLOCATE(USamplePrim)
+SDEALLOCATE(USampleCons)
 SDEALLOCATE(StochVarNames)
 SDEALLOCATE(Distributions)
 SDEALLOCATE(StochPoints)

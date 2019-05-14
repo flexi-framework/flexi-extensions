@@ -22,8 +22,8 @@ MESSAGE(STATUS "Posti: building ${TOOL_NAME} tool.")
 INCLUDE_DIRECTORIES( ${TOOL_DIR})
 
 FILE(GLOB ${TOOL_NAME}F90 ${TOOL_DIR}/posti_nisp.f90
-                          ${TOOL_DIR}/nisp_vars.f90
                           ${TOOL_DIR}/nisp.f90
+                          ${TOOL_DIR}/nisp_vars.f90
                           ${TOOL_DIR}/nisp_output.f90)
 
 ADD_LIBRARY(${TOOL_NAME}libF90 OBJECT ${${TOOL_NAME}F90})
