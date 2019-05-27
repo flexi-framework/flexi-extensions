@@ -52,10 +52,17 @@ IMPLICIT NONE
 CALL prms%SetSection('Nisp Parameters')
 CALL prms%CreateStringOption (  'VarName'            , "TODO",multiple=.TRUE.)
 CALL prms%CreateIntOption    (  'OutputFormat'       , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'mu0'                , "TODO",multiple=.TRUE.)
+CALL prms%CreateLogicalOption('UseNonDimensionalEqn',"Set true to compute R and mu from bulk Mach Reynolds (nondimensional form.",&
+                                                                    '.FALSE.')
+CALL prms%CreateRealOption(     'BulkMach',     "Bulk Mach     (UseNonDimensionEqn=T)")
+CALL prms%CreateRealOption(     'BulkReynolds', "Bulk Reynolds (UseNonDimensionEqn=T)")
+CALL prms%CreateRealOption(     'kappa',        "Heat capacity ratio / isentropic exponent", '1.4')
+CALL prms%CreateRealOption(     'R',            "Specific gas constant", '287.058')
+CALL prms%CreateRealOption(     'Pr',           "Prandtl number", '0.72')
+CALL prms%CreateRealOption(     'mu0',          "Dynamic Viscosity", '0.')
+CALL prms%CreateRealOption(     'Ts',           "Sutherland's law for variable viscosity: Ts", '110.4')
+CALL prms%CreateRealOption(     'Tref',         "Sutherland's law for variable viscosity: Tref ", '280.0')
+CALL prms%CreateRealOption(     'ExpoSuth',     "Sutherland's law for variable viscosity: Exponent", '1.5')
 END SUBROUTINE DefineParametersNisp
 
 !===================================================================================================================================
@@ -70,6 +77,7 @@ USE MOD_Nisp_Vars
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
 USE MOD_HDF5_Input        ,ONLY: OpenDataFile,CloseDataFile,GetDataProps,ReadAttribute, ReadArray, ReadAttributeBatchScalar
 USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray,ReadAttributeBatchScalar
+USE MOD_EOS               ,ONLY: InitEOS
 
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -80,6 +88,7 @@ INTEGER                 :: iArg,nLevelVarsStr
 !======================================================
 ! Readin StochInput.h5
 !======================================================
+CALL InitEOS()
 CALL GET_COMMAND_ARGUMENT(2,StochFile)
 CALL OpenDataFile(StochFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
 !CALL ReadAttribute(File_ID,'ProjectName'  ,1,StrScalar   = ProjectName)
@@ -128,7 +137,7 @@ CALL CreateMultiIndex()
 !======================================================
 ! Open .h5 on sample n to get MeshFile and necessary attributes
 !======================================================
-CALL GET_COMMAND_ARGUMENT(2,StateFileName)
+CALL GET_COMMAND_ARGUMENT(3,StateFileName)
 CALL OpenDataFile(StateFileName,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 
 CALL GetDataProps(nVar,NNew,nElemsNew,NodeType)
@@ -160,13 +169,13 @@ CHARACTER(LEN=255)                   :: DataSetName="DG_Solution"
 !-----------------------------------------------------------------------------------------------------------------------------------
 DO iStochSample=1,nStochSamples
   CALL ReadStateFile(StateFileName,DataSetName,iStochSample-1)
-  USample(iStochSample,1:nVar,:,:,:,:) = U
+  USample(iStochSample,1:nVar,:,:,:,:) = U(:,:,:,:,:)
   DO iElem=1,nElemsNew
     DO k=0,NNew; DO l=0,NNew; DO p=0,NNew
       CALL ConsToPrim(UPrim(:,m,l,k,iElem),U(:,m,l,k,iElem))
     END DO; END DO; END DO
   END DO
-  USample(iStochSample,nVar+1:2*nVar,:,:,:,:) = UPrim
+  USample(iStochSample,nVar+1:2*nVar,:,:,:,:) = UPrim(1:nVar,:,:,:,:)
 END DO
 END SUBROUTINE AllocateSamples
 

@@ -47,6 +47,8 @@ IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
 CALL ParseCommandlineArguments()
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
+CALL DefineParametersNisp()
+CALL prms%read_options(Args(1))
 
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(1("**********************************"))')
@@ -64,6 +66,10 @@ IF ((nArgs.LT.1).OR.(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))) THEN
 END IF
 CALL InitIOHDF5()
 CALL InitNisp()
+!----------------------------------------------------------------------------------------------------------------------------------!
+! Save Samples in vector
+!----------------------------------------------------------------------------------------------------------------------------------!
+CALL AllocateSamples()
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! Compute Modes, Mean and Variance
 !----------------------------------------------------------------------------------------------------------------------------------!

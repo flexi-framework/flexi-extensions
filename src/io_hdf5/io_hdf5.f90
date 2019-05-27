@@ -145,12 +145,13 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 gatheredWrite=.FALSE.
-IF(nLeaderProcs.LT.nProcessors) gatheredWrite=GETLOGICAL('gatheredWrite','.FALSE.')
+! IF(nLeaderProcs.LT.nProcessors) gatheredWrite=GETLOGICAL('gatheredWrite','.FALSE.')
 
 #if PP_dim == 3
 output2D = .FALSE.
 #else
-output2D = GETLOGICAL('output2D','.FALSE.')
+! output2D = GETLOGICAL('output2D','.FALSE.')
+output2D = .FALSE.
 #endif
 END SUBROUTINE InitIOHDF5
 
