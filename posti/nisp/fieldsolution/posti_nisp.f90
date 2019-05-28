@@ -51,9 +51,10 @@ CALL DefineParametersNisp()
 CALL prms%read_options(Args(1))
 
 SWRITE(UNIT_stdOut,'(132("="))')
-SWRITE(UNIT_stdOut,'(1("**********************************"))')
-SWRITE(UNIT_stdOut,'(1("**     START COMPUTING MODES    **"))')
-SWRITE(UNIT_stdOut,'(1("**********************************"))')
+WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
+WRITE(UNIT_stdOut,'(A)') " || Compute NISP modes                                                                                      ! ||"
+WRITE(UNIT_stdOut,'(A)') " || Attention for uncertain viscosity derived quantities like pressure are wrong! Needs to be fixed.        ! ||"
+WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
 SWRITE(UNIT_stdOut,'(132("="))')
 
 IF (doPrintHelp.GT.0) THEN
