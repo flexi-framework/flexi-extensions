@@ -183,6 +183,7 @@ END DO
 !======================================================
 CALL GetHermiteCoefficients()
 CALL Binom(nStochVars+M,nStochVars,nStochCoeffs)
+nStochCoeffs = nStochCoeffs -1
 CALL CreateMultiIndex()
 
 END SUBROUTINE InitNisp_RP

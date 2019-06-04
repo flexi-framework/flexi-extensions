@@ -133,6 +133,7 @@ CALL CloseDataFile()
 !======================================================
 CALL GetHermiteCoefficients()
 CALL Binom(nStochVars+M,nStochVars,nStochCoeffs)
+nStochCoeffs = nStochCoeffs -1
 CALL CreateMultiIndex()
 !======================================================
 ! Open .h5 on sample n to get MeshFile and necessary attributes
@@ -150,15 +151,18 @@ ALLOCATE(UMode(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(U(nVar,0:NNew,0:NNew,0:NNew,nElemsNew),USample(1:nStochSamples,2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(UPrim(nVar+1,0:NNew,  0:NNew,  0:NNew,  nElemsNew))
 UMean= 0.
+UMode = 0.
 UVar = 0.
 USample = 0.
 UPrim =0.
+U = 0.
 END SUBROUTINE InitNisp
 
 SUBROUTINE AllocateSamples()
 !----------------------------------------------------------------------------------------------------------------------------------!
 USE MOD_Nisp_Vars
 USE MOD_EOS            ,ONLY: ConsToPrim
+USE MOD_Mesh_Vars      ,ONLY: Elem_xGP
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -244,6 +248,7 @@ DO iStochCoeff=0,nStochCoeffs
   END IF
   UVar = UVar + UMode*UMode
 END DO
+! PRINT*, UVar(2,1,1,0,5)
 END SUBROUTINE ComputeModes
 
 !----------------------------------------------------------------------------------------------------------------------------------!
@@ -358,6 +363,7 @@ DO p=0,pStoch
   y_out=y_out+HermiteCoeffs(p,pStoch)*xEval**p
 END DO
 END SUBROUTINE EvaluateHermitePoly
+
 
 !===================================================================================================================================
 !> Compute the binomial coefficient of n over k where n=M+nStochVars and k=M
