@@ -59,7 +59,10 @@ DO iArg=1,nArgs
   snSamplesM1=1./(nSamples_Sums-1)
 
   Mean = Mean + snSamples*(UFineSum-UCoarseSum)
-  StdDev = StdDev + snSamplesM1*(DUSqSum   - snSamples*(UFineSum-UCoarseSum)*(UFineSum-UCoarseSum))
+  !Old version
+  !StdDev = StdDev + snSamplesM1*(DUSqSum   - snSamples*(UFineSum-UCoarseSum)*(UFineSum-UCoarseSum))
+  !Chernov 
+  StdDev = StdDev + snSamplesM1*(UFineSqSum- UCoarseSqSum) - snSamples*snSamplesM1*(UFineSum**2 - UCoarseSum**2)
 END DO
 StdDev = SQRT(ABS(StdDev))
 
