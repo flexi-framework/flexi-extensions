@@ -35,6 +35,10 @@ REAL              :: IniHalfwidth      !< parameter used for Shu vortex
 REAL              :: P_Parameter       !< parameter for Couette-Poiseuille flow
 REAL              :: U_Parameter       !< parameter for Couette-Poiseuille flow
 REAL              :: angle             !< angle of attack for naca profile
+REAL              :: dmr_angle         !< parameter used for dmr
+REAL              :: random_density    !< parameter used for riemann
+REAL              :: ShockPos          !< parameter used for sod shock
+
 #if PARABOLIC
 REAL              :: delta99_in        !< boundary layer thickness for Blasius solution
 REAL              :: x_in(2)           !< inflow position for Blasius solution

@@ -28,7 +28,6 @@ SUBROUTINE WriteMeanAndVarianceToHDF5()
 !===================================================================================================================================
 ! MODULES
 USE MOD_Globals
-USE MOD_PreProc
 USE MOD_IO_HDF5
 USE MOD_HDF5_Output         ,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
 USE MOD_Nisp_Vars
@@ -41,68 +40,42 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-CHARACTER(LEN=255)            :: Vars(2*nVar)
-CHARACTER(LEN=255)            :: TimeString
-Vars(1)='Density_Mean'
-Vars(2)='MomentumX_Mean'
-Vars(3)='MomentumY_Mean'
-Vars(4)='MomentumZ_Mean'
-Vars(5)='EnergyStagnationDensity_Mean'
-Vars(6)='VelocityX_Mean'
-Vars(7)='VelocityY_Mean'
-Vars(8)='VelocityZ_Mean'
-Vars(9)='Pressure_Mean'
-Vars(10)='Temperature_Mean'
+CHARACTER(LEN=255)            :: VarNames(2*nVar)
+CHARACTER(LEN=255)            :: FileName= 'SOLUTION_State.h5'
+VarNames( 1)='Density'
+VarNames( 2)='MomentumX'
+VarNames( 3)='MomentumY'
+VarNames( 4)='MomentumZ'
+VarNames( 5)='EnergyStagnationDensity'
+VarNames( 6)='VelocityX'
+VarNames( 7)='Velocityy'
+VarNames( 8)='VelocityZ'
+VarNames( 9)='Pressure'
+VarNames(10)='Temperature'
 !===================================================================================================================================
 !-----------------------------------------------------------------------------------------------------------------------------------
-! MEAN:
-! hack
-nGlobalElems = nElemsNew
-FileNameMean=TRIM(TIMESTAMP('Mean',Time_State))//'.h5'
-SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN TO HDF5 FILE "',TRIM(FileNameMean),'" ... \n'
-CALL GenerateFileSkeleton(TRIM(FileNameMean),'State',2*nVar+1,NNew,Vars,'mesh_1.h5',Time_State,&
-                          Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
+SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN AND STDDEV TO HDF5 FILE "',TRIM(FileName),'" ... \n'
+nGlobalElems=nElemsNew
+CALL GenerateFileSkeleton(TRIM(FileName),'State',1,NNew,(/'DUMMY_DO_NOT_VISUALIZE'/),&
+                          'mesh_1.h5',Time_State,Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
+CALL GenerateFileSkeleton(TRIM(FileName),'State',2*nVar+1,NNew,VarNames,&
+                          'mesh_1.h5',Time_State,Time_State,create=.FALSE.,Dataset='Mean',batchMode=.FALSE.)
+CALL GenerateFileSkeleton(TRIM(FileName),'State',2*nVar+1,NNew,VarNames,&
+                          'mesh_1.h5',Time_State,Time_State,create=.FALSE.,Dataset='StandardDeviation',batchMode=.FALSE.)
 
-CALL OpenDataFile(TRIM(FileNameMean),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
-CALL WriteArray(DataSetName='DG_Solution',&
-                  rank=5,&
-                  nValGlobal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-                  nVal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-                  offset=(/0,0,0,0,0/),&
-                  collective=.FALSE.,&
-                  RealArray=UMean(:,:,:,:,:))
+CALL OpenDataFile(TRIM(FileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
+
+CALL WriteArray('Mean',5,(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/0,0,0,0,0/),.FALSE.,RealArray=UMean)
+CALL WriteArray('StandardDeviation',5,(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),(/0,0,0,0,0/),.FALSE.,RealArray=SQRT(UVar))
+CALL WriteArray(DataSetName='ElemData',&
+					 rank=2,&
+					 nValGlobal=(/nVal_ElemData(1),nVal_ElemData(2)/),&
+					 nVal=(/nVal_ElemData(1),nVal_ElemData(2)/),&
+					 offset=(/0,0/),&
+					 collective=.FALSE.,&
+					 RealArray=ElemData)
+CALL WriteAttribute(File_ID,'VarNamesAdd',nVal_ElemData(1),StrArray=VarNamesAdditional)
 CALL CloseDataFile()
-
-
-! !-----------------------------------------------------------------------------------------------------------------------------------
-! ! VARIANCE:
-Vars(1)='Density_Variance'
-Vars(2)='MomentumX_Variance'
-Vars(3)='MomentumY_Variance'
-Vars(4)='MomentumZ_Variance'
-Vars(5)='EnergyStagnationDensity_Variance'
-Vars(6)='VelocityX_Variance'
-Vars(7)='VelocityY_Variance'
-Vars(8)='VelocityZ_Variance'
-Vars(9)='Pressure_Variance'
-Vars(10)='Temperature_Variance'
-
-FileNameVariance=TRIM(TIMESTAMP('Variance',Time_State))//'.h5'
-SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE VARIANCE TO HDF5 FILE "',TRIM(FileNameVariance),'" ... \n'
-
-CALL GenerateFileSkeleton(TRIM(FileNameVariance),'State',2*nVar+1,NNew,Vars,'mesh_1.h5',Time_State,&
-                          Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
-
-CALL OpenDataFile(TRIM(FileNameVariance),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
-CALL WriteArray(DataSetName='DG_Solution',&
-                  rank=5,&
-                  nValGlobal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-                  nVal=(/2*nVar,NNew+1,NNew+1,NNew+1,nElemsNew/),&
-                  offset=(/0,0,0,0,0/),&
-                  collective=.FALSE.,&
-                  RealArray=UVar(:,:,:,:,:))
-CALL CloseDataFile()
-
 
 SWRITE(UNIT_stdOut,'(a)',ADVANCE='YES')'DONE'
 END SUBROUTINE WriteMeanAndVarianceToHDF5

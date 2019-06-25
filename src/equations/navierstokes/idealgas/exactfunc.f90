@@ -83,21 +83,26 @@ CALL addStrListEntry('IniExactFunc','cavity'   ,9)
 CALL addStrListEntry('IniExactFunc','shock'    ,10)
 CALL addStrListEntry('IniExactFunc','sod'      ,11)
 CALL addStrListEntry('IniExactFunc','dmr'      ,13)
-CALL addStrListEntry('IniExactFunc','naca_angle',14)
+CALL addStrListEntry('IniExactFunc','riemann'  ,14)
+CALL addStrListEntry('IniExactFunc','naca_angle',15)
 #if PARABOLIC
 CALL addStrListEntry('IniExactFunc','blasius'  ,1338)
 #endif
-CALL prms%CreateRealArrayOption(    'AdvVel',       "Advection velocity (v1,v2,v3) required for exactfunction CASE(2,21,4,8)")
-CALL prms%CreateRealOption(         'MachShock',    "Parameter required for CASE(10)", '1.5')
-CALL prms%CreateRealOption(         'PreShockDens', "Parameter required for CASE(10)", '1.0')
-CALL prms%CreateRealArrayOption(    'IniCenter',    "Shu Vortex CASE(7) (x,y,z)")
-CALL prms%CreateRealArrayOption(    'IniAxis',      "Shu Vortex CASE(7) (x,y,z)")
-CALL prms%CreateRealOption(         'IniAmplitude', "Shu Vortex CASE(7)", '0.2')
-CALL prms%CreateRealOption(         'IniHalfwidth', "Shu Vortex CASE(7)", '0.2')
-CALL prms%CreateRealOption(         'angle',        "Naca angle of attack", '8.0')
+CALL prms%CreateRealArrayOption(    'AdvVel',        "Advection velocity (v1,v2,v3) required for exactfunction CASE(2,21,4,8)")
+CALL prms%CreateRealOption(         'MachShock',     "Parameter required for CASE(10)", '1.5')
+CALL prms%CreateRealOption(         'PreShockDens',  "Parameter required for CASE(10)", '1.0')
+CALL prms%CreateRealArrayOption(    'IniCenter',     "Shu Vortex CASE(7) (x,y,z)")
+CALL prms%CreateRealArrayOption(    'IniAxis',       "Shu Vortex CASE(7) (x,y,z)")
+CALL prms%CreateRealOption(         'IniAmplitude',  "Shu Vortex CASE(7)", '0.2')
+CALL prms%CreateRealOption(         'IniHalfwidth',  "Shu Vortex CASE(7)", '0.2')
+CALL prms%CreateRealOption(         'angle',         "Naca uncertain angle of attack", '8.0')
+CALL prms%CreateRealOption(         'dmr_angle',     "Uncertain Angle for dmr", '30.0')
+CALL prms%CreateRealOption(         'random_density',"Uncertain Density", '8.0')
+CALL prms%CreateRealOption(         'shockpos',      "Uncertain Shock position", '0.')
+
 #if PARABOLIC
-CALL prms%CreateRealOption(         'delta99_in',   "Blasius boundary layer CASE(1338)")
-CALL prms%CreateRealArrayOption(    'x_in',         "Blasius boundary layer CASE(1338)")
+CALL prms%CreateRealOption(         'delta99_in',    "Blasius boundary layer CASE(1338)")
+CALL prms%CreateRealArrayOption(    'x_in',          "Blasius boundary layer CASE(1338)")
 #endif
 
 END SUBROUTINE DefineParametersExactFunc
@@ -140,7 +145,15 @@ CASE(8) ! couette-poiseuille flow
 CASE(10) ! shock
   MachShock    = GETREAL('MachShock','1.5')
   PreShockDens = GETREAL('PreShockDens','1.0')
-CASE(14)
+CASE(11) ! sod shock
+  ShockPos    = GETREAL('shockpos','0.')
+CASE(13) ! dmr
+  dmr_angle    = GETREAL('dmr_angle','30.0')
+  random_density = GETREAL('random_density','8.0')
+CASE(14) ! riemann
+  ShockPos    = GETREAL('shockpos','0.')
+  random_density = GETREAL('random_density','0')
+CASE(15)
   angle        = GETREAL('angle','8.')
 #if PARABOLIC
 CASE(1338) ! Blasius boundary layer solution
@@ -180,14 +193,14 @@ USE MOD_Mathtools      ,ONLY: CROSS
 USE MOD_Eos_Vars       ,ONLY: Kappa,sKappaM1,KappaM1,KappaP1,R
 USE MOD_Exactfunc_Vars ,ONLY: IniCenter,IniHalfwidth,IniAmplitude,IniAxis,AdvVel
 USE MOD_Exactfunc_Vars ,ONLY: MachShock,PreShockDens
-USE MOD_Exactfunc_Vars ,ONLY: P_Parameter,U_Parameter
+USE MOD_Exactfunc_Vars ,ONLY: P_Parameter,U_Parameter,dmr_angle,random_density,angle,ShockPos
 USE MOD_Equation_Vars  ,ONLY: IniRefState,RefStateCons,RefStatePrim
 USE MOD_Timedisc_Vars  ,ONLY: fullBoundaryOrder,CurrentStage,dt,RKb,RKc,t
 USE MOD_TestCase       ,ONLY: ExactFuncTestcase
 USE MOD_EOS            ,ONLY: PrimToCons,ConsToPrim
 #if PARABOLIC
 USE MOD_Eos_Vars       ,ONLY: mu0
-USE MOD_Exactfunc_Vars ,ONLY: delta99_in,x_in,angle
+USE MOD_Exactfunc_Vars ,ONLY: delta99_in,x_in
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -213,6 +226,10 @@ REAL                            :: random
 REAL                            :: du, dTemp, RT, r2       ! aux var for SHU VORTEX,isentropic vortex case 12
 REAL                            :: pi_loc,phi,radius       ! needed for cylinder potential flow
 REAL                            :: h,sRT,pexit,pentry   ! needed for Couette-Poiseuille
+REAL                            :: shockSpeed
+REAL                            :: shockSpeed12,shockSpeed13,shockSpeed34,shockSpeed42
+REAL                            :: interfacepos, density
+
 #if PARABOLIC
 ! needed for blasius BL
 INTEGER                         :: nSteps,i
@@ -239,7 +256,7 @@ CASE(0)
   CALL ExactFuncTestcase(tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(:,RefState)
-CASE(14)
+CASE(15)
   prim = RefStatePrim(:,RefState)
   prim(2)= COS(angle*PP_Pi/180.)
   prim(3)= SIN(angle*PP_Pi/180.)
@@ -542,7 +559,7 @@ CASE(10) ! shock
   ! Tanh boundary
   Resu=-0.5*(Resul-Resur)*TANH(5.0*(x(1)-xs))+Resur+0.5*(Resul-Resur)
 CASE(11) ! Sod Shock tube
-  xs = 0.5
+  xs = 0.5 + 0.05*ShockPos
   IF (X(1).LE.xs) THEN
     Resu = RefStateCons(:,1)
   ELSE
@@ -562,18 +579,66 @@ CASE(12) ! Shu Osher density fluctuations shock wave interaction
   CALL PrimToCons(prim,resu)
 
 CASE(13) ! DoubleMachReflection (see e.g. http://www.astro.princeton.edu/~jstone/Athena/tests/dmr/dmr.html )
+  shockSpeed = (RefStatePrim(1,2)*RefStatePrim(2,2)-random_density*RefStatePrim(2,1))/(RefStatePrim(1,2)-random_density)
   IF (x(1).EQ.0.) THEN
     prim = RefStatePrim(:,1)
+    prim(2) = RefStatePrim(2,1)*COS(dmr_angle*PP_Pi/180.)
+    prim(3) = RefStatePrim(3,1)*SIN(dmr_angle*PP_Pi/180.)
   ELSE IF (x(1).EQ.4.0) THEN
     prim = RefStatePrim(:,2)
   ELSE
-    IF (x(1).LT.1./6.+(x(2)+20.*t)*1./3.**0.5) THEN
+     IF (COS(dmr_angle*PP_Pi/180.)*(x(1)-1./6.).LT.SIN(dmr_angle*PP_Pi/180.)*x(2)+shockSpeed*t) THEN
       prim = RefStatePrim(:,1)
+      prim(2) = prim(2)*COS(dmr_angle*PP_Pi/180.)
+      prim(3) = prim(3)*SIN(dmr_angle*PP_Pi/180.)
     ELSE
       prim = RefStatePrim(:,2)
+      prim(2) = prim(2)*COS(dmr_angle*PP_Pi/180.)
+      prim(3) = prim(3)*SIN(dmr_angle*PP_Pi/180.)
     END IF
   END IF
+  prim(6)=0.
   CALL PrimToCons(prim,resu)
+CASE(14) ! Riemann Problem from http://www.csun.edu/~jb715473/examples/euler2d.htm#press
+! Rankine-Hugoniot
+density = 0.5323 + 0.1*random_density
+shockSpeed12 = (density*0.-0.138*1.206)/(density-0.138)
+shockSpeed13 = (0.138*1.206-density*0.)/(0.138-density)
+shockSpeed34 = (1.5*0.- 1.206*density )/(1.5-density)
+shockSpeed42 = (density*1.206-1.5*0)/(density-1.5)
+interfacepos = 0. + 0.1*ShockPos
+  !quadrant 4
+  IF ((x(1).GT.(interfacepos+shockSpeed34*t)).AND.(x(2).GT.(interfacepos+shockSpeed42*t))) THEN
+    prim(1) = 1.5
+    prim(2) = 0.
+    prim(3) = 0.
+    prim(4) = 0.
+    prim(5) = 1.5
+  !quadrant 3
+  ELSE IF ((x(1).LE.(interfacepos+shockSpeed34*t)).AND.(x(2).GT.(interfacepos+shockSpeed13*t))) THEN
+    prim(1) = density
+    prim(2) = 1.206
+    prim(3) = 0.
+    prim(4) = 0.
+    prim(5) = 0.3
+  !quadrant 2
+  ELSE IF ((x(1).GT.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed42*t))) THEN
+    prim(1) = density
+    prim(2) = 0.
+    prim(3) = 1.206
+    prim(4) = 0.
+    prim(5) = 0.3
+  !quadrant 1
+  ELSE IF ((x(1).LE.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed13*t))) THEN
+    prim(1) = 0.138
+    prim(2) = 1.206
+    prim(3) = 1.206
+    prim(4) = 0.
+    prim(5) = 0.029
+  END IF
+  prim(6)=0.
+  CALL PrimToCons(prim,resu)
+
 #if PARABOLIC
 CASE(1338) ! blasius
   prim=RefStatePrim(:,RefState)

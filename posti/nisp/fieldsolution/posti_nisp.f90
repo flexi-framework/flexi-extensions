@@ -44,9 +44,10 @@ IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
 
 CALL ParseCommandlineArguments()
 
-WRITE(UNIT_stdOut,'(A)') " ||======================================||"
-WRITE(UNIT_stdOut,'(A)') " || Compute NISP modes                 ! ||"
-WRITE(UNIT_stdOut,'(A)') " ||======================================||"
+WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
+WRITE(UNIT_stdOut,'(A)') " || Compute NISP modes                                                                                      ! ||"
+WRITE(UNIT_stdOut,'(A)') " || For uncertain viscosity, derived quantities like pressure are wrong! Needs to be fixed.                 ! ||"
+WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
 WRITE(UNIT_stdOut,'(A)')
 
 ! Define parameters needed

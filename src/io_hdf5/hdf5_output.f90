@@ -201,8 +201,11 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
 ! Deallocate UOut only if we did not point to U
 IF((PP_N .NE. NOut).OR.((PP_dim .EQ. 2).AND.(.NOT.output2D))) DEALLOCATE(UOut)
 
-!CALL WriteAdditionalElemData(FileName,ElementOut)
-!CALL WriteAdditionalFieldData(FileName,FieldOut)
+IF(iSequentialRun .EQ. 1) THEN
+  CALL WriteAdditionalElemData(FileName,ElementOut)
+  CALL WriteAdditionalFieldData(FileName,FieldOut)
+ENDIF
+
 
 
 IF(MPIGlobalRoot)THEN
@@ -447,7 +450,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         nValGlobal=(/nVar,nGlobalElems,nGlobalRuns/),&
                         nVal=      (/nVar,nElems      ,1/),&
                         offset=    (/0   ,offSetElem  ,iGlobalRun-1/),&
-                        collective=.TRUE.,RealArray=(/ElemData,1./))
+                        collective=.TRUE.,RealArray=ElemData)
 DEALLOCATE(ElemData,VarNames)
 END SUBROUTINE WriteAdditionalElemData
 

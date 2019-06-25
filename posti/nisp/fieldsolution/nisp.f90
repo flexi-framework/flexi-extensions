@@ -61,9 +61,9 @@ USE MOD_Globals
 USE MOD_Commandline_Arguments
 USE MOD_Readintools
 USE MOD_Nisp_Vars
-USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
+USE MOD_IO_HDF5
 USE MOD_HDF5_Input        ,ONLY: OpenDataFile,CloseDataFile,GetDataProps,ReadAttribute, ReadArray, ReadAttributeBatchScalar
-USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray,ReadAttributeBatchScalar
+USE MOD_HDF5_Input        ,ONLY: ReadAttribute,ReadArray,ReadAttributeBatchScalar,GetDataSize
 USE MOD_Output            ,ONLY: insert_userblock
 USE MOD_Output_Vars       ,ONLY: UserBlockTmpFile,userblock_total_len
 IMPLICIT NONE
@@ -113,7 +113,6 @@ CALL ReadArray(ArrayName  = 'DistributionProps',&
                Offset_in  = 0,&
                Offset_dim = 1,&
                RealArray  = DistributionProps)
-
 CALL CloseDataFile()
 
 !======================================================
@@ -121,6 +120,7 @@ CALL CloseDataFile()
 !======================================================
 CALL GetHermiteCoefficients()
 CALL Binom(nStochVars+M,nStochVars,nStochCoeffs)
+nStochCoeffs = nStochCoeffs-1
 CALL CreateMultiIndex()
 !======================================================
 ! Open .h5 on sample n to get MeshFile and necessary attributes
@@ -128,6 +128,16 @@ CALL CreateMultiIndex()
 CALL GET_COMMAND_ARGUMENT(3,StateFileName)
 CALL OpenDataFile(StateFileName,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ExtractParameterFile(StateFileName,TRIM(prmfile),userblockFound)
+#if FV_ENABLED
+CALL GetDataSize(File_ID,'ElemData',nDims,HSize)
+CHECKSAFEINT(MAXVAL(HSize),4)
+nVal_ElemData=  INT(HSize)
+DEALLOCATE(HSize)
+ALLOCATE(ElemData(nVal_ElemData(1),nVal_ElemData(2),1))
+ALLOCATE(VarNamesAdditional(nVal_ElemData(1)))
+CALL ReadArray('ElemData',3,(/nVal_ElemData(1),nVal_ElemData(2),1/),0,1,RealArray=ElemData)
+CALL ReadAttribute(File_ID,'VarNamesAdd',nVal_ElemData(1),StrArray=VarNamesAdditional)
+#endif
  !prepare userblock file
 CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(prmfile)//C_NULL_CHAR)
 INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
@@ -228,13 +238,13 @@ DO iStochCoeff=0,nStochCoeffs
       UMode(1:nVar,:,:,:,:)       = UMode(1:nVar,:,:,:,:) + USampleCons(jStochSample,:,:,:,:,:)*evalPoly*StochWeights(jStochSample)
       UMode(nVar+1:nVar,:,:,:,:)  = UMode(nVar+1:nVar,:,:,:,:) + USamplePrim(jStochSample,2:nVar,:,:,:,:)*evalPoly*StochWeights(jStochSample)
     END DO
+   UVar = UVar + UMode*UMode
   END IF
-  UVar = UVar + UMode*UMode
 END DO
 END SUBROUTINE ComputeModes
 
 !----------------------------------------------------------------------------------------------------------------------------------!
-! Finalize all parameters of NISP RP tool
+! Finalize all parameters of NISP tool
 !----------------------------------------------------------------------------------------------------------------------------------!
 SUBROUTINE FinalizeNisp()
 !----------------------------------------------------------------------------------------------------------------------------------!

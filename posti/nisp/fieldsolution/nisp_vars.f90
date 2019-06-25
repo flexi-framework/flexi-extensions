@@ -26,13 +26,16 @@ INTEGER                            :: nVar     ! GP-wise vars in HDF5
 INTEGER                            :: nElemsNew
 CHARACTER(LEN=255)                 :: Mesh
 CHARACTER(LEN=255)                 :: NodeType
-CHARACTER(LEN=255), ALLOCATABLE    :: VarNamesField(:), VarNames(:)
 REAL                               :: Time_State
 REAL, ALLOCATABLE                  :: HermiteCoeff(:,:)
 REAL,ALLOCATABLE                   :: UPrim(:,:,:,:,:)
 REAL,ALLOCATABLE                   :: UMean(:,:,:,:,:), UVar(:,:,:,:,:), UMode(:,:,:,:,:) ,U(:,:,:,:,:)
 REAL,ALLOCATABLE                   :: USamplePrim(:,:,:,:,:,:)
 REAL,ALLOCATABLE                   :: USampleCons(:,:,:,:,:,:)
+REAL,ALLOCATABLE,TARGET            :: ElemData(:,:,:)
+REAL,ALLOCATABLE,TARGET            :: ElemData_loc(:,:)
+INTEGER                            :: nVal_ElemData(15)
+CHARACTER(LEN=255),ALLOCATABLE     :: VarNamesAdditional(:)
 
 CHARACTER(LEN=255)                 :: StateFile, StateFileName, ProjectName
 CHARACTER(LEN=255)                 :: FileNameMean = 'Mean.h5' ,FileNameVariance = 'Variance.h5'

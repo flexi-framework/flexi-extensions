@@ -56,6 +56,12 @@ REAL,ALLOCATABLE    :: UPrim(:,:,:,:,:)
 LOGICAL             :: validInput,hasCoarse
 INTEGER             :: nPrevious
 !===================================================================================================================================
+#if FV_ENABLED
+! IF FV then use same polynomial degree
+CALL CollectiveStop(__STAMP__, &
+     'FV for MLMC is not implemented!')
+#endif
+
 CALL SetStackSizeUnlimited()
 CALL InitMPI()
 CALL InitMPIInfo()
@@ -92,7 +98,7 @@ IF((nArgs.LT.3) .OR. (nArgs.GT.4))                   validInput=.FALSE.
 IF(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))  validInput=.FALSE.
 DO i=2,nArgs
   IF(.NOT.(STRICMP(GetFileExtension(Args(i)),'h5'))) validInput=.FALSE.
-END DO 
+END DO
 IF (.NOT.validInput) THEN
   CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: estimatesigma prm-file statefile_f [statefile_c]')
 END IF
