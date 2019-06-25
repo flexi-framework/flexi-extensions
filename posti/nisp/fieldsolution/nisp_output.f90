@@ -30,8 +30,8 @@ SUBROUTINE WriteMeanAndVarianceToHDF5()
 USE MOD_Globals
 USE MOD_IO_HDF5
 USE MOD_HDF5_Output         ,ONLY:WriteAttribute,WriteArray,GenerateFileSkeleton
+USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_Nisp_Vars
-USE MOD_Mesh_Vars           ,ONLY:nGlobalElems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
