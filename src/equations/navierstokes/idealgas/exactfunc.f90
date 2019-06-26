@@ -602,18 +602,25 @@ CASE(13) ! DoubleMachReflection (see e.g. http://www.astro.princeton.edu/~jstone
 CASE(14) ! Riemann Problem from http://www.csun.edu/~jb715473/examples/euler2d.htm#press
 ! Rankine-Hugoniot
 density = 0.5323 + 0.1*random_density
-shockSpeed12 = (density*0.-0.138*1.206)/(density-0.138)
-shockSpeed13 = (0.138*1.206-density*0.)/(0.138-density)
-shockSpeed34 = (1.5*0.- 1.206*density )/(1.5-density)
-shockSpeed42 = (density*1.206-1.5*0)/(density-1.5)
+shockSpeed12 = (0.5323*0.-0.138*1.206)/(0.5323-0.138)
+shockSpeed13 = (0.138*1.206-0.5323*0.)/(0.138-0.5323)
+shockSpeed34 = (1.5*0.- 1.206*0.5323 )/(1.5-0.5323)
+shockSpeed42 = (0.5323*1.206-1.5*0)/(0.5323-1.5)
 interfacepos = 0. + 0.1*ShockPos
-  !quadrant 4
-  IF ((x(1).GT.(interfacepos+shockSpeed34*t)).AND.(x(2).GT.(interfacepos+shockSpeed42*t))) THEN
-    prim(1) = 1.5
-    prim(2) = 0.
-    prim(3) = 0.
+  !quadrant 1
+  IF ((x(1).LE.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed13*t))) THEN
+    prim(1) = 0.138
+    prim(2) = 1.206
+    prim(3) = 1.206
     prim(4) = 0.
-    prim(5) = 1.5
+    prim(5) = 0.029
+  !quadrant 2
+  ELSE IF ((x(1).GT.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed42*t))) THEN
+    prim(1) = density
+    prim(2) = 0
+    prim(3) = 1.206
+    prim(4) = 0.
+    prim(5) = 0.3
   !quadrant 3
   ELSE IF ((x(1).LE.(interfacepos+shockSpeed34*t)).AND.(x(2).GT.(interfacepos+shockSpeed13*t))) THEN
     prim(1) = density
@@ -621,21 +628,15 @@ interfacepos = 0. + 0.1*ShockPos
     prim(3) = 0.
     prim(4) = 0.
     prim(5) = 0.3
-  !quadrant 2
-  ELSE IF ((x(1).GT.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed42*t))) THEN
-    prim(1) = density
+ !quadrant 4
+ ELSE IF ((x(1).GT.(interfacepos+shockSpeed34*t)).AND.(x(2).GT.(interfacepos+shockSpeed42*t))) THEN
+    prim(1) = 1.5
     prim(2) = 0.
-    prim(3) = 1.206
+    prim(3) = 0.
     prim(4) = 0.
-    prim(5) = 0.3
-  !quadrant 1
-  ELSE IF ((x(1).LE.(interfacepos+shockSpeed12*t)).AND.(x(2).LE.(interfacepos+shockSpeed13*t))) THEN
-    prim(1) = 0.138
-    prim(2) = 1.206
-    prim(3) = 1.206
-    prim(4) = 0.
-    prim(5) = 0.029
+    prim(5) = 1.5
   END IF
+  !quadrant 1
   prim(6)=0.
   CALL PrimToCons(prim,resu)
 
