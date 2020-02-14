@@ -34,11 +34,18 @@ REAL,ALLOCATABLE       :: eRatio(:)             !< Analysis data for LAF model
 REAL,ALLOCATABLE       :: r(:)                  !< Analysis data for LAF model
 REAL,ALLOCATABLE       :: ekin_avg_old(:)       !< cell integral value for ekin avg (LAF)
 REAL,ALLOCATABLE       :: ekin_fluc_avg_old(:)  !< cell integral value for ekin fluc avg (LAF))
-REAL,ALLOCATABLE       :: Vol(:)                !< cell volume for averaging (LAF)
-REAL,ALLOCATABLE       :: Integrationweight(:,:,:,:)  !< integration weights (LAF)
+REAL,ALLOCATABLE       :: Vol(:)                !< cell volume for averaging (LAF or hpLimiter)
+REAL,ALLOCATABLE       :: Integrationweight(:,:,:,:)  !< integration weights (LAF or hpLimiter)
+#if FV_ENABLED
+REAL,ALLOCATABLE       :: VolFV(:)                !< cell volume for averaging (LAF or hpLimiter) for FV
+REAL,ALLOCATABLE       :: IntegrationweightFV(:,:,:,:)  !< integration weights (LAF or hpLimiter) for FV
+#endif
 REAL                   :: normMod               !< spectral normalization (LAF)
 REAL,ALLOCATABLE       :: J_N(:,:,:)            !< Jacobi for volume integral (LAF)
 REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
+#endif
+#if HPLimiter
+REAL,ALLOCATABLE       :: t_HPLimiter(:,:,:,:,:) !< limiter strength
 #endif
 !==================================================================================================================================
 END MODULE MOD_Filter_Vars

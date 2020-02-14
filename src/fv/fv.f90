@@ -55,6 +55,10 @@ INTERFACE FV_DGtoFV
   MODULE PROCEDURE FV_DGtoFV
 END INTERFACE
 
+INTERFACE FV_DGtoFVHP
+  MODULE PROCEDURE FV_DGtoFVHP
+END INTERFACE
+
 INTERFACE FinalizeFV
   MODULE PROCEDURE FinalizeFV
 END INTERFACE
@@ -66,6 +70,7 @@ PUBLIC::FV_ProlongFVElemsToFace
 PUBLIC::FV_Info
 PUBLIC::FV_FillIni
 PUBLIC::FV_DGtoFV
+PUBLIC::FV_DGtoFVHP
 PUBLIC::FinalizeFV
 !==================================================================================================================================
 
@@ -411,7 +416,7 @@ REAL                   :: Elem_xFV(1:3,0:PP_N,0:PP_N,0:PP_NZ)
 CALL CalcIndicator(U,0.)
 FV_Elems = 0
 ! Switch DG elements to FV if necessary (converts initial DG solution to FV solution)
-CALL FV_Switch(U,AllowToDG=.FALSE.)
+!CALL FV_Switch(U,AllowToDG=.FALSE.)
 
 IF (.NOT.FV_IniSharp) THEN
   ! Super sample initial solution of all FV elements. Necessary if already initial DG solution contains oscillations, which
@@ -508,6 +513,46 @@ END DO
 
 END SUBROUTINE FV_DGtoFV
 
+SUBROUTINE FV_DGtoFVHP(nVar,U_master,U_slave)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_ChangeBasisByDim ,ONLY: ChangeBasisSurf
+USE MOD_FV_Vars
+USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+INTEGER,INTENT(IN) :: nVar                                   !< number of solution variables
+REAL,INTENT(INOUT) :: U_master(nVar,0:PP_N,0:PP_NZ,1:nSides) !< Solution on master side
+REAL,INTENT(INOUT) :: U_slave (nVar,0:PP_N,0:PP_NZ,1:nSides) !< Solution on slave side
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER     :: firstSideID,lastSideID,SideID
+REAL        :: UTmp_master(nVar,0:PP_N,0:PP_NZ)              !< 
+REAL        :: UTmp_slave(nVar,0:PP_N,0:PP_NZ)               !< 
+!==================================================================================================================================
+firstSideID = firstInnerSide
+lastSideID  = lastMPISide_MINE
+
+DO SideID=firstSideID,lastSideID
+  UTmp_slave =U_slave(:,:,:,SideID)
+  UTmp_master=U_master(:,:,:,SideID)
+  IF (FV_Elems_Sum(SideID).EQ.2) THEN
+    CALL ChangeBasisSurf(nVar,PP_N,PP_N,FV_Vdm,U_master(:,:,:,SideID))
+  ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
+    CALL ChangeBasisSurf(nVar,PP_N,PP_N,FV_Vdm,U_slave (:,:,:,SideID))
+  END IF
+  IF (ANY(U_master(1,:,:,SideID) .LT. 0.) .OR. ANY(U_master(5,:,:,SideID) .LT. 0.)) THEN
+    U_master(:,:,:,SideID) = UTmp_master
+  END IF
+  IF (ANY(U_slave(1,:,:,SideID) .LT. 0.) .OR. ANY(U_slave(5,:,:,SideID) .LT. 0.)) THEN
+    U_slave(:,:,:,SideID) = UTmp_slave
+  END IF
+END DO
+
+END SUBROUTINE FV_DGtoFVHP
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.

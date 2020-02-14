@@ -103,6 +103,9 @@ USE MOD_IO_HDF5           ,ONLY:AddToElemData,ElementOut
 USE MOD_Interpolation_Vars,ONLY:wGP
 USE MOD_Mesh_Vars         ,ONLY:nElems,sJ
 #endif
+#if HPLimiter
+USE MOD_HPLimiter         ,ONLY: InitHPLimiter
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -202,6 +205,9 @@ IF(FilterType.GT.0) THEN
   FilterMat=MATMUL(MATMUL(Vdm_Leg,FilterMat),sVdm_Leg)
 END IF !FilterType=0
 
+#if HPLimiter
+CALL InitHPLimiter()
+#endif 
 FilterInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT FILTER DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -531,6 +537,13 @@ SDEALLOCATE(ekin_fluc_avg_old)
 SDEALLOCATE(Vol)
 #endif /*EQNSYSNR==2*/
 FilterInitIsDone = .FALSE.
+#if HPLimiter
+SDEALLOCATE(t_HPLimiter)
+#endif
+#if FV_ENABLED
+SDEALLOCATE(IntegrationweightFV)
+SDEALLOCATE(VolFV)
+#endif
 END SUBROUTINE FinalizeFilter
 
 END MODULE MOD_Filter

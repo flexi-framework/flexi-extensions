@@ -164,6 +164,9 @@ USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
 USE MOD_FV
 #endif
 use MOD_IO_HDF5
+#if HPLimiter
+USE MOD_HPLimiter           ,ONLY: HyperbolicityPreservingLimiter
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -216,6 +219,9 @@ IF(doCalcIndicator) CALL CalcIndicator(U,t)
 IF(.NOT.DoRestart)THEN
   CALL FV_FillIni()
 END IF
+#endif
+#if HPLimiter
+CALL HyperbolicityPreservingLimiter()
 #endif
 
 IF(.NOT.DoRestart)THEN
@@ -276,9 +282,12 @@ SWRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 CalcTimeStart=FLEXITIME()
 DO
   CurrentStage=1
-  IF(doCalcIndicator) CALL CalcIndicator(U,t)
+  !IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
   CALL FV_Switch(U,AllowToDG=(nCalcTimestep.LT.1))
+#endif
+#if HPLimiter
+  CALL HyperbolicityPreservingLimiter()
 #endif
   CALL DGTimeDerivative_weakForm(t)
   IF(nCalcTimestep.LT.1)THEN
@@ -410,6 +419,9 @@ USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
 USE MOD_FV           ,ONLY: FV_Switch
 USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
 #endif
+#if HPLimiter
+USE MOD_HPLimiter    ,ONLY: HyperbolicityPreservingLimiter
+#endif
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -441,9 +453,15 @@ DO iStage=2,nRKStages
 #if FV_ENABLED
   CALL FV_Switch(U,Ut_temp,AllowToDG=FV_toDGinRK)
 #endif
+#if HPLimiter
+  CALL HyperbolicityPreservingLimiter()
+#endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+#if HPLimiter
+  CALL HyperbolicityPreservingLimiter()
+#endif
 END DO
 CurrentStage=1
 
@@ -470,6 +488,9 @@ USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
 #if FV_ENABLED
 USE MOD_FV           ,ONLY: FV_Switch
 USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
+#endif
+#if HPLimiter
+USE MOD_HPLimiter    ,ONLY: HyperbolicityPreservingLimiter
 #endif
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -505,11 +526,17 @@ DO iStage=2,nRKStages
 #if FV_ENABLED
   CALL FV_Switch(U,Uprev,S2,AllowToDG=FV_toDGinRK)
 #endif
+#if HPLimiter
+  CALL HyperbolicityPreservingLimiter()
+#endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)
   CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
   CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
   CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
+#if HPLimiter
+  CALL HyperbolicityPreservingLimiter()
+#endif
 END DO
 CurrentStage=1
 
