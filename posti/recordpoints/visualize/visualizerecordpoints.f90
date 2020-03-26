@@ -85,6 +85,7 @@ CALL prms%CreateLogicalOption('Plane_doBLProps'    ,"Set to calculate seperate b
                                                      & planes",".FALSE.")
 CALL prms%CreateIntOption    ('Plane_BLvelScaling' ,"Choose scaling for boundary layer quantities. 0: no scaling, 1: laminar&
                                                      & scaling, 3: turbulent scaling")
+CALL prms%CreateRealOption   ('pInf'               ,"Reference pressure to calculate c_p")
 CALL prms%CreateLogicalOption('Plane_LocalCoords'  ,"Set to use local instead of global coordinates along planes",".FALSE.")
 CALL prms%CreateLogicalOption('Plane_LocalVel'     ,"Set to use local instead of global velocities along planes",".FALSE.")
 
@@ -97,6 +98,8 @@ CALL prms%CreateRealOption   ('FilterWidth'        ,"Width of the temporal filte
 CALL prms%CreateIntOption    ('FilterMode'         ,"Set to 0 for low pass filter and to 1 for high pass filter")
 
 CALL prms%CreateRealOption   ('mu0'                ,"Kinematic viscosity, needed for turbulent quantities")
+
+CALL prms%CreateStringOption( 'TimeAvgFile'        ,"Optional file that contains the temporal averages that should be used")
 
 CALL prms%CreateIntOption    ('SkipSample'         ,"Used to skip every n-th RP evaluation")
 CALL prms%CreateIntOption    ('OutputFormat'       ,"Choose the main format for output. 0: ParaView, 2: HDF5")
@@ -111,6 +114,7 @@ USE MOD_Globals
 USE MOD_Readintools         ,ONLY:GETINT,GETREAL,GETLOGICAL,GETSTR,GETREALARRAY,CountOption
 USE MOD_ParametersVisu
 USE MOD_RPInterpolation_Vars,ONLY:calcTimeAverage
+USE MOD_EquationRP_Vars     ,ONLY:pInf
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -200,6 +204,7 @@ IF(Plane_doBLProps) THEN ! for BL properties we need local coords and velocities
   Plane_BLvelScaling  =GETINT('Plane_BLvelScaling','0') ! 0 - no scaling.
   ! 1 - "laminar scaling": scale velocity with u_delta and PlaneY with delta99
   ! 2 - "turbulent scaling:" calculate u+ and y+
+  pInf = GETREAL('pInf')
 END IF
 ! =============================================================================== !
 ! LINE OPTIONS

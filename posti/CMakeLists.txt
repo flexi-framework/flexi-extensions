@@ -2,9 +2,9 @@
 # POSTI
 # =========================================================================
 
-CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISU                  "Build the visu tool"                        ON  "FLEXI_BUILDPOSTI" OFF)
-CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MERGETIMEAVERAGES     "Build the time-averaging tool"              ON  "FLEXI_BUILDPOSTI" OFF)
-CMAKE_DEPENDENT_OPTION(POSTI_BUILD_DMD                   "Build the DMD tool"                         ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISU                  "Build the visu tool"                                ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MERGETIMEAVERAGES     "Build the time-averaging tool"                      ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_DMD                   "Build the DMD tool"                                 OFF "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_PREPARERECORDPOINTS   "Build the Record point preprocessing tool"          ON  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISUALIZERECORDPOINTS "Build the Record Point visualization tool"          OFF "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_EVALUATERECORDPOINTS  "Build the Record Point aposteriori evaluation tool" ON  "FLEXI_BUILDPOSTI" OFF)
@@ -15,6 +15,21 @@ CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MLMC_BODYFORCES     "Build MLMC bodyforces to
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MLMC_RP  "Build MLMC recordpoints tools" OFF  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_NISP     "Build NISP tools" OFF               "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_NISP_RP  "Build NISP recordpoints tools" OFF  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_WALLDISTANCE          "Build the walldistance tool"                        OFF "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_TO3D                  "Build the 3D extrusion tool"                        OFF "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_AVG2D                 "Build the 2D average tool"                          OFF "FLEXI_BUILDPOSTI" OFF)
+OPTION(ENABLE_OPENMP "Enable OpenMP" OFF)
+IF(ENABLE_OPENMP)
+  IF ("${CMAKE_VERSION}" VERSION_LESS 3.1.0)
+    MESSAGE(WARNING "For finding OpenMP Fortran flags at least CMake version 3.1.0 is required. Please specify flags manually or use newer CMake version.")
+  ENDIF()
+  FIND_PACKAGE(OpenMP REQUIRED)
+  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG}   ${OpenMP_Fortran_FLAGS}")
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${OpenMP_Fortran_FLAGS}")
+  SET (CMAKE_CXX_FLAGS_DEBUG       "${CMAKE_CXX_FLAGS_DEBUG}       ${OpenMP_CXX_FLAGS}")
+  SET (CMAKE_CXX_FLAGS_RELEASE     "${CMAKE_CXX_FLAGS_RELEASE}     ${OpenMP_CXX_FLAGS}")
+  SET (CMAKE_EXE_LINKER_FLAGS      "${CMAKE_EXE_LINKER_FLAGS}      ${OpenMP_EXE_LINKER_FLAGS}")
+ENDIF()
 
 
 SET(   POSTI_WHICH_EQNSYS "navierstokes" CACHE STRING
@@ -115,4 +130,16 @@ ENDIF()
 
 IF(POSTI_BUILD_NISP_RP)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/nisp/recordpoints/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_WALLDISTANCE)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/walldistance/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_TO3D)
+	INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/to3D/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_AVG2D)
+	INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/avg2D/CMakeLists.txt)
 ENDIF()

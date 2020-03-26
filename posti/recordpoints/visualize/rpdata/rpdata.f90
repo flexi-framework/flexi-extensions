@@ -67,7 +67,7 @@ INTEGER                       :: nSamples_loc,nSamples_skip
 INTEGER                       :: iSample
 REAL,ALLOCATABLE              :: temparray(:,:,:)
 INTEGER                       :: offset(2)
-#ifdef MPI
+#if USE_MPI
 INTEGER                       :: nChunks,iChunk,nSamples_chunk
 REAL                          :: nTotal,limit
 #endif
@@ -151,7 +151,7 @@ IF (PRESENT(stochOffset)) THEN
 ELSE
   offset(2)=0
 END IF
-#ifdef MPI
+#if USE_MPI
 ! check array data size.
 nTotal=REAL((nVar_HDF5+1)*nRP_HDF5*nSamples_loc)
 !limit=(2**31-1)/8.
@@ -170,7 +170,7 @@ IF(nTotal.GT.limit)THEN
 ELSE
 #endif
 CALL ReadArray('RP_Data',4,(/nVar_HDF5+1,nRP_HDF5,nSamples_loc,1/),offset(2),4,RealArray=temparray)
-#ifdef MPI
+#if USE_MPI
 END IF
 #endif
 DO iSample=1,nSamples_skip

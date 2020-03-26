@@ -65,6 +65,8 @@ INTEGER            :: MPIStatus(MPI_STATUS_SIZE)
 LOGICAL            :: doGenerateUnittestReferenceData
 INTEGER            :: doPrintHelp ! 0: no help, 1: help, 2: markdown-help
 
+LOGICAL           :: postiMode=.FALSE.                                        !< set TRUE if called from posti
+
 INTERFACE Abort
   MODULE PROCEDURE Abort
 END INTERFACE Abort
