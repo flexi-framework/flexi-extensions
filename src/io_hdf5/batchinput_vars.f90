@@ -41,8 +41,7 @@ INTEGER,ALLOCATABLE            :: LevelVarsInt(:)
 REAL,ALLOCATABLE               :: LevelVarsReal(:)
 CHARACTER(LEN=255),ALLOCATABLE :: LevelVarsStr(:)
 
-INTEGER                        :: nPreviousRuns
-
+LOGICAL                        :: BatchMode
 LOGICAL                        :: BatchInputInitIsDone=.FALSE.
 !==================================================================================================================================
 END MODULE MOD_BatchInput_Vars

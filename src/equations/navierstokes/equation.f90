@@ -66,6 +66,7 @@ CALL prms%CreateIntOption(      'IniRefState',  "Refstate required for initializ
 CALL prms%CreateRealArrayOption('RefState',     "State(s) in primitive variables (density, velx, vely, velz, pressure).",&
                                                 multiple=.TRUE.)
 CALL prms%CreateStringOption(   'BCStateFile',  "File containing the reference solution on the boundary to be used as BC.")
+CALL prms%CreateRealOption(     'AlphaRefState',"Rotation of Refstate")
 
 CALL DefineParametersRiemann()
 #ifdef SPLIT_DG
@@ -87,7 +88,7 @@ USE MOD_Equation_Vars
 USE MOD_Eos               ,ONLY: InitEos,PrimToCons
 USE MOD_EOS_Vars          ,ONLY: R
 USE MOD_Exactfunc         ,ONLY: InitExactFunc
-USE MOD_ReadInTools       ,ONLY: CountOption,GETREALARRAY,GETSTR
+USE MOD_ReadInTools       ,ONLY: CountOption,GETREALARRAY,GETSTR,GETREAL
 USE MOD_Testcase          ,ONLY: InitTestcase
 USE MOD_Riemann           ,ONLY: InitRiemann
 USE MOD_GetBoundaryFlux,   ONLY: InitBC
@@ -104,7 +105,7 @@ USE MOD_SplitFlux         ,ONLY: InitSplitDG
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i
-REAL    :: UE(PP_2Var)
+REAL    :: UE(PP_2Var),u_tmp(2:3)
 !==================================================================================================================================
 IF(EquationInitIsDone)THEN
   CALL CollectiveStop(__STAMP__,&
@@ -132,6 +133,10 @@ IF(IniRefState.GT.nRefState)THEN
     'ERROR: Ini not defined! (Ini,nRefState):',IniRefState,REAL(nRefState))
 END IF
 
+!rotate ref states
+AlphaRefState = GETREAL('AlphaRefState','0.')
+AlphaRefState = AlphaRefState*PP_Pi/180.
+
 IF(nRefState .GT. 0)THEN
   ALLOCATE(RefStatePrim(PP_nVarPrim,nRefState))
   ALLOCATE(RefStateCons(PP_nVar    ,nRefState))
@@ -147,6 +152,9 @@ IF(nRefState .GT. 0)THEN
     UE(SRHO) = 1./RefStatePrim(1,i)
     UE(PRES) = RefStatePrim(5,i)
     RefStatePrim(6,i) = TEMPERATURE_HE(UE)
+    u_tmp = RefStatePrim(2:3,i)
+    RefStatePrim(2,i) = COS(AlphaRefState)*u_tmp(2) - SIN(AlphaRefState)*u_tmp(3)
+    RefStatePrim(3,i) = COS(AlphaRefState)*u_tmp(3) + SIN(AlphaRefState)*u_tmp(2) 
     CALL PrimToCons(RefStatePrim(:,i),RefStateCons(:,i))
   END DO
 END IF

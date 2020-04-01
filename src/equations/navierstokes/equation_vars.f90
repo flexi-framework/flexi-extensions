@@ -29,6 +29,7 @@ INTEGER           :: IniRefState       !< RefState for initialization (case IniE
 INTEGER           :: nRefState         !< number of refstates defined in parameter file
 REAL,ALLOCATABLE  :: RefStatePrim(:,:) !< refstates in primitive variables (as read from ini file)
 REAL,ALLOCATABLE  :: RefStateCons(:,:) !< refstates in conservative variables
+REAL              :: AlphaRefState
 CHARACTER(LEN=255):: BCStateFile       !< file containing the reference solution on the boundary to be used as BC
 
 ! Boundary condition arrays

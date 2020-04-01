@@ -39,6 +39,7 @@ SUBROUTINE CalcBodyForces(BodyForce,Fp,Fv)
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
+USE MOD_Equation_Vars,   ONLY:AlphaRefState
 USE MOD_DG_Vars,         ONLY:UPrim_master
 #if PARABOLIC
 USE MOD_Lifting_Vars,    ONLY:gradUx_master,gradUy_master,gradUz_master
@@ -61,6 +62,7 @@ INTEGER                        :: SideID,iBC
 #if USE_MPI
 REAL                           :: Box(6,nBCs)
 #endif /*USE_MPI*/
+REAL                           :: u_tmp(2,nBCs)
 !==================================================================================================================================
 ! Calculate body forces  ! Attention: during the initialization phase no face data / gradients available!
 
@@ -95,7 +97,12 @@ IF(MPIRoot)THEN
 ELSE
   CALL MPI_REDUCE(Box         ,0  ,6*nBCs,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_FLEXI,iError)
 END IF
+#else
+BodyForce=Fv+Fp
 #endif
+u_tmp = BodyForce(1:2,:)
+BodyForce(1,:) = COS(AlphaRefState)*u_tmp(1,:) - SIN(AlphaRefState)*u_tmp(2,:)
+BodyForce(2,:) = COS(AlphaRefState)*u_tmp(2,:) + SIN(AlphaRefState)*u_tmp(1,:) 
 
 END SUBROUTINE CalcBodyForces
 

@@ -771,6 +771,15 @@ IF(BatchInputInitIsDone)THEN
   CALL CollectiveStop(__STAMP__,&
     "Init BatchInput not ready to be called or already called.")
 END IF
+
+IF(.NOT.BatchMode)THEN
+  nStochVars=0
+  nLevelVarsInt=0
+  nLevelVarsReal=0
+  nLevelVarsStr=0
+  RETURN
+END IF 
+
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT BATCH INPUT...'
 

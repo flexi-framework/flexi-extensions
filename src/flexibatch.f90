@@ -23,29 +23,17 @@ USE MOD_Flexi
 USE MOD_TimeDisc   ,ONLY: TimeDisc
 USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID,InitMPIInfo
 USE MOD_HDF5_Input ,ONLY: ReadAttribute,DatasetExists
-USE MOD_BatchInput_Vars, ONLY: StochFile,nPreviousRuns
+USE MOD_BatchInput_Vars, ONLY: StochFile,BatchMode
+USE MOD_StringTools ,ONLY: STRICMP,GetFileExtension
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                        :: nArgsLoc,iArg,Color
+INTEGER                        :: nArgsLoc,iArg,Color,nArgsAdd
 CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
+CHARACTER(LEN=255)             :: FirstArg
 LOGICAL                        :: exists,isActive
 REAL                           :: GlobalStartTime,GlobalEndTime
 !==================================================================================================================================
-
-! read command line arguments
-
-nArgsLoc = COMMAND_ARGUMENT_COUNT()
-IF(nArgsLoc.LT.2) CALL Abort(__STAMP__,'Usage: ./flexi flexi.h5 flexi.ini')
-CALL GET_COMMAND_ARGUMENT(1,StochFile)
-
-ALLOCATE(ArgsLoc(nArgsLoc-1))
-DO iArg=2,nArgsLoc
-  CALL GET_COMMAND_ARGUMENT(iArg,ArgsLoc(iArg-1))
-END DO 
-
-! init global MPI
-
 #if USE_MPI
 CALL MPI_INIT(iError)
 CALL MPI_COMM_RANK(MPI_COMM_WORLD, myGlobalRank     , iError)
@@ -57,21 +45,42 @@ myGlobalRank=0
 nGlobalProcessors=1
 #endif
 MPIGlobalRoot=(myGlobalRank .EQ. 0)
-
 CALL InitMPIInfo()
 
-! open StochFile, get attributes nGlobalRuns, nParallelRuns
-CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
-CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
-CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
-CALL DatasetExists(File_ID,'nPreviousRuns',exists,attrib=.TRUE.)
-IF(exists)THEN
-  CALL ReadAttribute(File_ID,'nPreviousRuns',1,IntScalar=nPreviousRuns)
-ELSE
-  nPreviousRuns=0
-END IF
-CALL CloseDataFile()
 
+! read command line arguments
+nArgsLoc = COMMAND_ARGUMENT_COUNT()
+IF(nArgsLoc.LT.1) CALL Abort(__STAMP__,'Provide Ini File!')
+CALL GET_COMMAND_ARGUMENT(1,FirstArg)
+BatchMode = STRICMP(GetFileExtension(FirstArg),'h5')
+
+IF(BatchMode) THEN
+  StochFile=FirstArg
+  nArgsAdd=1
+  SWRITE(*,*) "BATCH MODE"
+ELSE 
+  nArgsAdd=0
+  SWRITE(*,*) "SINGLE MODE"
+END IF 
+
+IF(nArgsLoc.LT.1+nArgsAdd) CALL Abort(__STAMP__,'Provide Ini File!')
+ALLOCATE(ArgsLoc(nArgsLoc-nArgsAdd))
+IF(.NOT.BatchMode) ArgsLoc(1)=FirstArg
+DO iArg=2,nArgsLoc
+  CALL GET_COMMAND_ARGUMENT(iArg,ArgsLoc(iArg-nArgsAdd))
+END DO 
+
+
+IF(BatchMode)THEN
+  ! open StochFile, get attributes nGlobalRuns, nParallelRuns
+  CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
+  CALL ReadAttribute(File_ID,'nGlobalRuns',1,IntScalar=nGlobalRuns)
+  CALL ReadAttribute(File_ID,'nParallelRuns',1,IntScalar=nParallelRuns)
+  CALL CloseDataFile()
+ELSE 
+  nGlobalRuns=1
+  nParallelRuns=1
+END IF 
 
 nProcsPerRun = nGlobalProcessors/nParallelRuns
 IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
