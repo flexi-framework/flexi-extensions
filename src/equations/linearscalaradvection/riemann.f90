@@ -56,7 +56,7 @@ CONTAINS
 !==================================================================================================================================
 !> Computes sum of numerical and viscous flux
 !==================================================================================================================================
-SUBROUTINE GetFlux(Nloc,F,U_L,U_R, &
+SUBROUTINE GetFlux(Nloc,F,U_L,U_R,MeshVel, &
 #if PARABOLIC
                    gradUx_L,gradUy_L,gradUz_L,gradUx_R,gradUy_R,gradUz_R, &
 #endif /* PARABOLIC */
@@ -68,6 +68,7 @@ IMPLICIT NONE
 INTEGER,INTENT(IN)                                       :: Nloc                         !< Polynomial degree
 REAL,DIMENSION(PP_nVar,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)     :: U_L                          !< Left state
 REAL,DIMENSION(PP_nVar,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)     :: U_R                          !< Right state
+REAL,DIMENSION(3       ,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)    :: MeshVel                      !< Mesh velocity on the interface
 #if PARABOLIC
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN) :: gradUx_L                     !< Left gradient in x-direction
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN) :: gradUy_L                     !< Left gradient in y-direction
@@ -87,7 +88,7 @@ REAL,INTENT(OUT)                                         :: F(PP_nVar,0:Nloc,0:Z
 ! LOCAL VARIABLES
 REAL                                             :: Fv(PP_nVar,0:Nloc,0:ZDIM(Nloc))
 !==================================================================================================================================
-CALL Riemann(Nloc,F,U_L,U_R,U_L,U_R,nv,t1,t2,doBC=doBC)
+CALL Riemann(Nloc,F,U_L,U_R,U_L,U_R,MeshVel,nv,t1,t2,doBC=doBC)
 #if PARABOLIC
 CALL ViscousFlux(Nloc,Fv,U_L,U_R,gradUx_L,gradUy_L,gradUz_L,gradUx_R,gradUy_R,gradUz_R,nv)
 F=F+Fv
@@ -100,7 +101,7 @@ END SUBROUTINE GetFlux
 !> Computes the numerical flux
 !> Conservative States are rotated into normal direction in this routine and are NOT backrotatet: don't use it after this routine!!
 !==================================================================================================================================
-SUBROUTINE Riemann(Nloc,F,U_L,U_R,dummy_L,dummy_R,nv,t1,t2,doBC)
+SUBROUTINE Riemann(Nloc,F,U_L,U_R,dummy_L,dummy_R,MeshVel,nv,t1,t2,doBC)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:AdvVel
@@ -112,6 +113,7 @@ REAL,DIMENSION(PP_nVar,    0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_L              
 REAL,DIMENSION(PP_nVar,    0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_R                          !< Right state
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: dummy_L                      !< primitive state (useless here)
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: dummy_R                      !< primitive state (useless here)
+REAL,DIMENSION(3          ,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)  :: MeshVel                      !< Mesh velocity on the interface
 REAL,INTENT(IN)                                           :: nv(3,0:Nloc,0:ZDIM(Nloc))      !< Normal vector
 REAL,INTENT(IN)                                           :: t1(3,0:Nloc,0:ZDIM(Nloc))      !< First tangential vector
 REAL,INTENT(IN)                                           :: t2(3,0:Nloc,0:ZDIM(Nloc))      !< Second tangential vector
@@ -122,10 +124,17 @@ REAL,INTENT(OUT)                                          :: F(PP_nVar,0:Nloc,0:
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                             :: LambdaMax(0:Nloc,0:ZDIM(Nloc))
+REAL                                             :: MeshVel_n(0:Nloc,0:ZDIM(Nloc))
 !==================================================================================================================================
-LambdaMax = AdvVel(1)*nv(1,:,:) +  AdvVel(2)*nv(2,:,:) + AdvVel(3)*nv(3,:,:)
+! Calculate mesh velocity normal to face
+MeshVel_n(:,:) = MeshVel(1,:,:)*nv(1,:,:) + &
+                 MeshVel(2,:,:)*nv(2,:,:) + &
+                 MeshVel(3,:,:)*nv(3,:,:)
+LambdaMax = (AdvVel(1)-MeshVel(1,:,:))*nv(1,:,:) +  (AdvVel(2)-MeshVel(2,:,:))*nv(2,:,:) + (AdvVel(3)-MeshVel(3,:,:))*nv(3,:,:)
 ! Compute the classic upwind flux into normal direction for each face GP
-F(1,:,:) = 0.5*( (LambdaMax + ABS(LambdaMax))*U_L(1,:,:) + (LambdaMax-ABS(LambdaMax))*U_R(1,:,: ))
+F(1,:,:) = 0.5*( (LambdaMax + ABS(LambdaMax))*U_L(1,:,:) - U_L(1,:,:)*MeshVel_n(:,:) + &
+                 (LambdaMax - ABS(LambdaMax))*U_R(1,:,:) - U_R(1,:,:)*MeshVel_n(:,:))
+! Moving Mesh part
 END SUBROUTINE Riemann
 
 

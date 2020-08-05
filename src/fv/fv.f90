@@ -259,6 +259,7 @@ USE MOD_Indicator       ,ONLY: IndPersson
 USE MOD_FV_Vars
 USE MOD_Analyze
 USE MOD_Mesh_Vars       ,ONLY: nElems
+USE MOD_SM_Vars         ,ONLY: SM_Elems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -275,6 +276,9 @@ REAL    :: ind
 INTEGER :: iElem
 !==================================================================================================================================
 DO iElem=1,nElems
+  ! Force Elements at SM interface to stay DG
+  IF ((SM_Elems(iElem).GT.0)) CYCLE
+
   IF (FV_Elems(iElem).EQ.0) THEN ! DG Element
     ! Switch DG to FV Element, if Indicator is higher then IndMin
     IF (IndValue(iElem).GT.FV_IndUpperThreshold) THEN

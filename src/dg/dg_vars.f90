@@ -53,6 +53,9 @@ REAL,ALLOCATABLE                      :: DVolSurf(:,:)          !< Transpose of 
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! DG solution (JU or U) vectors)
+REAL,ALLOCATABLE,TARGET               :: JU(:,:,:,:,:)          !< Solution variable for each equation, node and element in
+                                                                !< reference space (needed for moving meshes),
+                                                                !< size [1..NVar,0..N,0..N,0..N,nElems]. 
 REAL,ALLOCATABLE,TARGET               :: U(:,:,:,:,:)           !< Solution variable for each equation, node and element,
                                                                 !< size [1..NVar,0..N,0..N,0..N,nElems].
 

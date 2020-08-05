@@ -27,81 +27,39 @@ INTERFACE InitFV_Metrics
   MODULE PROCEDURE InitFV_Metrics
 END INTERFACE
 
+INTERFACE FV_CalcMetrics
+  MODULE PROCEDURE FV_CalcMetrics
+END INTERFACE
+
 INTERFACE FinalizeFV_Metrics
   MODULE PROCEDURE FinalizeFV_Metrics
 END INTERFACE
 
 PUBLIC::InitFV_Metrics
+PUBLIC::FV_CalcMetrics
 PUBLIC::FinalizeFV_Metrics
 !==================================================================================================================================
 
 CONTAINS
 
 !==================================================================================================================================
-!> Compute the remaining metric terms for FV subcells, that are not computed in metrics.f90.
-!> Normal, tangential vectors, SurfElems, ... for FV subcells.
+!> Initialize variables for metric terms of FV subcells.
 !==================================================================================================================================
 SUBROUTINE InitFV_Metrics()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_FV_Vars
-USE MOD_FV_Basis
-USE MOD_Mesh_Vars          ,ONLY: nElems,nSides,firstMPISide_YOUR,lastMPISide_YOUR
-USE MOD_Mesh_Vars          ,ONLY: Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,sJ
-USE MOD_Mesh_Vars          ,ONLY: NGeoRef,DetJac_Ref,MortarType,MortarInfo
-USE MOD_Mesh_Vars          ,ONLY: NormalDirs,TangDirs,NormalSigns,SideToElem
-USE MOD_Mesh_Vars          ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP,Ja_Face
-USE MOD_ChangeBasis        ,ONLY: ChangeBasis1D,ChangeBasis2D,ChangeBasis3D
-USE MOD_ChangeBasisByDim   ,ONLY: ChangeBasisSurf,ChangeBasisVolume
-USE MOD_Metrics            ,ONLY: SurfMetricsFromJa
-USE MOD_Interpolation      ,ONLY: GetVandermonde
-USE MOD_Interpolation_Vars ,ONLY: NodeType
+USE MOD_Mesh_Vars          ,ONLY: nElems,nSides
 #if FV_RECONSTRUCT
-USE MOD_Mesh_Vars          ,ONLY: firstBCSide,lastBCSide,firstInnerSide,lastMPISide_MINE
-USE MOD_Mesh_Vars          ,ONLY: S2V2,ElemToSide,dXCL_N
-USE MOD_Interpolation      ,ONLY: GetNodesAndWeights
-USE MOD_Interpolation_Vars ,ONLY: NodeTypeCL,xGP,wGP,wBary
-#if USE_MPI
-USE MOD_MPI                ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
-USE MOD_MPI_Vars           ,ONLY: nNbProcs
+USE MOD_Mesh_Vars          ,ONLY: lastMPISide_MINE
 #endif
-#endif
-USE MOD_2D
-USE MOD_FillMortar1        ,ONLY: U_Mortar1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER                                :: i,j,k,l,iSide,iElem,iLocSide
-INTEGER                                :: dd,NormalDir,TangDir
-REAL                                   :: NormalSign
-REAL                                   :: Vdm_Gauss_FVboundary(0:PP_N+1,0:PP_N)
-REAL                                   :: JaVol(3,3,0:PP_N+1,0:PP_N+1,0:PP_NZ+1)
-REAL                                   :: FV_Ja_Face(3,3,0:PP_N,0:PP_NZ)
-REAL,DIMENSION(0:PP_N,0:NgeoRef)       :: Vdm_NgeoRef_N,Vdm_NgeoRef_FV
-REAL                                   :: FV_DetJac(1,0:PP_N,0:PP_N,0:PP_NZ)
-INTEGER                                :: flip, SideID, iMortar
-#if FV_RECONSTRUCT
-INTEGER                                :: ijk(2),p,q,locSideID
-REAL                                   :: FV_dx_Face    (0:PP_N,0:PP_NZ,1:3)
-REAL                                   :: DG_dx_slave (1,0:PP_N,0:PP_NZ,1:nSides)
-REAL                                   :: DG_dx_master(1,0:PP_N,0:PP_NZ,1:nSides)
-REAL                                   :: tmp2(3,0:PP_N)
-REAL,DIMENSION(0:PP_N,0:PP_N)          :: Vdm_CLN_FV, Vdm_CLN_GaussN,length
-REAL,DIMENSION(3,0:PP_N,0:PP_N,0:PP_NZ):: FV_Path_XI, FV_Path_ETA, FV_Path_ZETA
-REAL                                   :: x0, xN
-REAL,POINTER                           :: FV_dx_P(:,:)
-#if USE_MPI
-INTEGER                                :: MPIRequest(nNbProcs,2)
-#endif
-#if PARABOLIC
-INTEGER                                :: d
-#endif
-#endif
+! LOCAL VARIABLES 
 !==================================================================================================================================
-SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO') '  Build Metrics ...'
 
 #if FV_RECONSTRUCT
 ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -168,13 +126,19 @@ ALLOCATE(FV_SurfElemZeta_sw(0:PP_N,0:PP_N ,1:PP_N,nElems)) ! Attention: storage 
 ALLOCATE(FV_NormVecXi   (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  ! Attention: storage order is (j,k,i,iElem)
 ALLOCATE(FV_TangVec1Xi  (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
 ALLOCATE(FV_TangVec2Xi  (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
+ALLOCATE(FV_Face_vGPXi  (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
+FV_Face_vGPXi = 0.
 ALLOCATE(FV_NormVecEta  (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  ! Attention: storage order is (i,k,j,iElem)
 ALLOCATE(FV_TangVec1Eta (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
 ALLOCATE(FV_TangVec2Eta (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
+ALLOCATE(FV_Face_vGPEta (3,0:PP_N,0:PP_NZ,1:PP_N,nElems))  !  -"-
+FV_Face_vGPEta = 0.
 #if (PP_dim == 3)
 ALLOCATE(FV_NormVecZeta (3,0:PP_N,0:PP_N ,1:PP_N,nElems))  ! Attention: storage order is (i,j,k,iElem)
 ALLOCATE(FV_TangVec1Zeta(3,0:PP_N,0:PP_N ,1:PP_N,nElems))  !  -"-
 ALLOCATE(FV_TangVec2Zeta(3,0:PP_N,0:PP_N ,1:PP_N,nElems))  !  -"-
+ALLOCATE(FV_Face_vGPZeta(3,0:PP_N,0:PP_N ,1:PP_N,nElems))  !  -"-
+FV_Face_vGPZeta = 0.
 #endif
 
 #if PARABOLIC
@@ -186,6 +150,74 @@ ALLOCATE(FV_Metrics_hTilde_sJ(3,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 #endif
 
 ALLOCATE(FV_Elems_master(1:nSides)) ! Moved from InitFV to here, since needed in U_Mortar below.
+
+END SUBROUTINE InitFV_Metrics
+
+
+!==================================================================================================================================
+!> Compute the remaining metric terms for FV subcells, that are not computed in metrics.f90. 
+!> Normal, tangential vectors, SurfElems, ... for FV subcells.
+!==================================================================================================================================
+SUBROUTINE FV_CalcMetrics()
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_FV_Vars
+USE MOD_FV_Basis
+USE MOD_Mesh_Vars          ,ONLY: nElems,nSides,firstMPISide_YOUR,lastMPISide_YOUR
+USE MOD_Mesh_Vars          ,ONLY: Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,sJ
+USE MOD_Mesh_Vars          ,ONLY: NGeoRef,DetJac_Ref,MortarType,MortarInfo
+USE MOD_Mesh_Vars          ,ONLY: NormalDirs,TangDirs,NormalSigns,SideToElem
+USE MOD_Mesh_Vars          ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP,Ja_Face
+USE MOD_ChangeBasis        ,ONLY: ChangeBasis1D,ChangeBasis2D,ChangeBasis3D
+USE MOD_ChangeBasisByDim   ,ONLY: ChangeBasisSurf,ChangeBasisVolume
+USE MOD_Metrics            ,ONLY: SurfMetricsFromJa
+USE MOD_Interpolation      ,ONLY: GetVandermonde
+USE MOD_Interpolation_Vars ,ONLY: NodeType
+#if FV_RECONSTRUCT
+USE MOD_Mesh_Vars          ,ONLY: firstBCSide,lastBCSide,firstInnerSide,lastMPISide_MINE
+USE MOD_Mesh_Vars          ,ONLY: S2V2,ElemToSide,dXCL_N
+USE MOD_Interpolation      ,ONLY: GetNodesAndWeights
+USE MOD_Interpolation_Vars ,ONLY: NodeTypeCL,xGP,wGP,wBary
+#if USE_MPI
+USE MOD_MPI                ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
+USE MOD_MPI_Vars           ,ONLY: nNbProcs
+#endif
+#endif
+USE MOD_2D
+USE MOD_FillMortar1        ,ONLY: U_Mortar1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                                :: i,j,k,l,iSide,iElem,iLocSide
+INTEGER                                :: dd,NormalDir,TangDir
+REAL                                   :: NormalSign
+REAL                                   :: Vdm_Gauss_FVboundary(0:PP_N+1,0:PP_N)
+REAL                                   :: JaVol(3,3,0:PP_N+1,0:PP_N+1,0:PP_NZ+1)
+REAL                                   :: FV_Ja_Face(3,3,0:PP_N,0:PP_NZ)
+REAL,DIMENSION(0:PP_N,0:NgeoRef)       :: Vdm_NgeoRef_N,Vdm_NgeoRef_FV
+REAL                                   :: FV_DetJac(1,0:PP_N,0:PP_N,0:PP_NZ)
+INTEGER                                :: flip, SideID, iMortar
+#if FV_RECONSTRUCT
+INTEGER                                :: ijk(2),p,q,locSideID
+REAL                                   :: FV_dx_Face    (0:PP_N,0:PP_NZ,1:3)
+REAL                                   :: DG_dx_slave (1,0:PP_N,0:PP_NZ,1:nSides)
+REAL                                   :: DG_dx_master(1,0:PP_N,0:PP_NZ,1:nSides)
+REAL                                   :: tmp2(3,0:PP_N)
+REAL,DIMENSION(0:PP_N,0:PP_N)          :: Vdm_CLN_FV, Vdm_CLN_GaussN,length
+REAL,DIMENSION(3,0:PP_N,0:PP_N,0:PP_NZ):: FV_Path_XI, FV_Path_ETA, FV_Path_ZETA
+REAL                                   :: x0, xN
+REAL,POINTER                           :: FV_dx_P(:,:)
+#if USE_MPI
+INTEGER                                :: MPIRequest(nNbProcs,2)
+#endif
+#if PARABOLIC
+INTEGER                                :: d
+#endif
+#endif
+!==================================================================================================================================
 
 ! compute FV NormVec, TangVec,.. on boundary of DG-cells
 DO iSide=1,nSides
@@ -479,9 +511,7 @@ END DO
 #endif /* FV_RECONSTRUCT */
 
 
-SWRITE(UNIT_stdOut,'(A)')' Done !'
-
-END SUBROUTINE InitFV_Metrics
+END SUBROUTINE FV_CalcMetrics
 
 
 #if FV_RECONSTRUCT
@@ -561,12 +591,15 @@ SDEALLOCATE(FV_SurfElemZeta_sw)
 SDEALLOCATE(FV_NormVecXi)
 SDEALLOCATE(FV_TangVec1Xi)
 SDEALLOCATE(FV_TangVec2Xi)
+SDEALLOCATE(FV_Face_vGPXi)
 SDEALLOCATE(FV_NormVecEta)
 SDEALLOCATE(FV_TangVec1Eta)
 SDEALLOCATE(FV_TangVec2Eta)
+SDEALLOCATE(FV_Face_vGPEta)
 SDEALLOCATE(FV_NormVecZeta)
 SDEALLOCATE(FV_TangVec1Zeta)
 SDEALLOCATE(FV_TangVec2Zeta)
+SDEALLOCATE(FV_Face_vGPZeta)
 
 #if PARABOLIC
 SDEALLOCATE(FV_Metrics_fTilde_sJ)

@@ -58,7 +58,7 @@ CONTAINS
 !>
 !>==================================================================================================================================
 SUBROUTINE Mortar_CalcSurfMetrics(SideID,Nloc,Face_Ja,Face_xGP,&
-                                  Mortar_Ja,Mortar_xGP,nbSideID)
+                                  Mortar_Ja,Mortar_xGP,nbSideID,SMo_In)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mortar,      ONLY: MortarBasis_BigToSmall
@@ -67,13 +67,14 @@ USE MOD_Interpolation_Vars,ONLY: NodeType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-INTEGER,INTENT(IN) :: SideID                         !< SideID of mortar master side
-INTEGER,INTENT(IN) :: Nloc                           !< polynomial degree
-REAL,INTENT(IN)    :: Face_Ja(  3,3,0:Nloc,0:ZDIM(Nloc))   !< surface metrics of side
-REAL,INTENT(IN)    :: Face_xGP(   3,0:Nloc,0:ZDIM(Nloc))   !< face xGP
-REAL,INTENT(OUT)   :: Mortar_Ja(3,3,0:Nloc,0:ZDIM(Nloc),4) !< mortarized surface metrics of side
-REAL,INTENT(OUT)   :: Mortar_xGP( 3,0:Nloc,0:ZDIM(Nloc),4) !< mortarized face xGP
-INTEGER,INTENT(OUT):: nbSideID(4)                    !< index of neighbour sideIDs
+INTEGER,INTENT(IN)        :: SideID                         !< SideID of mortar master side
+INTEGER,INTENT(IN)        :: Nloc                           !< polynomial degree
+REAL,INTENT(IN)           :: Face_Ja(  3,3,0:Nloc,0:ZDIM(Nloc))   !< surface metrics of side
+REAL,INTENT(IN)           :: Face_xGP(   3,0:Nloc,0:ZDIM(Nloc))   !< face xGP
+REAL,INTENT(OUT)          :: Mortar_Ja(3,3,0:Nloc,0:ZDIM(Nloc),4) !< mortarized surface metrics of side
+REAL,INTENT(OUT)          :: Mortar_xGP( 3,0:Nloc,0:ZDIM(Nloc),4) !< mortarized face xGP
+INTEGER,INTENT(OUT)       :: nbSideID(4)                    !< index of neighbour sideIDs
+REAL,INTENT(IN),OPTIONAL  :: SMo_In        !< TODO
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER  :: q,dir1,dir2,iNb,SideIDMortar
@@ -83,14 +84,21 @@ REAL     :: Mortar_Ja2(1:3,1:3,0:Nloc,0:Nloc)
 REAL     :: Mortar_xGP2 (  1:3,0:Nloc,0:Nloc)
 #endif
 REAL     :: M_0_12(0:Nloc,0:Nloc,2),M_0_12_h(0:Nloc,0:Nloc,2)
+REAL     :: SMo        !< TODO
 !==================================================================================================================================
-CALL MortarBasis_BigToSmall(0,Nloc,NodeType,M_0_12(:,:,1),M_0_12(:,:,2))
+IF (PRESENT(SMo_In)) THEN
+  SMo=SMo_In
+ELSE
+  SMo=0.5 ! between 0 and 1!!
+END IF 
+
+CALL MortarBasis_BigToSmall(0,Nloc,NodeType,M_0_12(:,:,1),M_0_12(:,:,2),SMo_In=SMo)
 ! ATTENTION: MortarBasis_BigToSmall computes the transposed matrices, which is useful when they are used
 !            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
 M_0_12(:,:,1) = TRANSPOSE(M_0_12(:,:,1))
 M_0_12(:,:,2) = TRANSPOSE(M_0_12(:,:,2))
-M_0_12_h(:,:,1)=0.5*M_0_12(:,:,1)
-M_0_12_h(:,:,2)=0.5*M_0_12(:,:,2)
+M_0_12_h(:,:,1)=    SMo *M_0_12(:,:,1)
+M_0_12_h(:,:,2)=(1.-SMo)*M_0_12(:,:,2)
 
 nbSideID=-1
 

@@ -168,7 +168,7 @@ END FUNCTION GetMaskGrad
 !> the routine that does the actual calculation CalcDerivedQuantity is called with the appropriate arguments.
 !==================================================================================================================================
 SUBROUTINE CalcQuantities(nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,maskCalc,gradUx,gradUy,gradUz,&
-    NormVec,TangVec1,TangVec2)
+    NormVec,TangVec1,TangVec2,MeshVel)
 ! MODULES
 USE MOD_Globals
 USE MOD_EOS_Posti_Vars
@@ -183,6 +183,7 @@ INTEGER,INTENT(IN)                                              :: maskCalc(nVar
 REAL,INTENT(OUT)                                                :: UCalc(PRODUCT(nVal),1:nVarCalc)
 REAL,DIMENSION(1:PP_nVarPrim,PRODUCT(nVal)),INTENT(IN),OPTIONAL :: gradUx,gradUy,gradUz
 REAL,DIMENSION(1:3,PRODUCT(nVal)),INTENT(IN),OPTIONAL           :: NormVec,TangVec1,TangVec2
+REAL,DIMENSION(1:3,PRODUCT(nVal)),INTENT(IN),OPTIONAL           :: MeshVel
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 LOGICAL            :: withGradients
@@ -199,16 +200,17 @@ DO iVar=1,nVarDepEOS
     IF(withGradients)THEN
       IF(withVectors)THEN
         CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,gradUx,gradUy,gradUz,&
-            NormVec,TangVec1,TangVec2)
+            NormVec,TangVec1,TangVec2,MeshVel=MeshVel)
       ELSE
-        CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,gradUx,gradUy,gradUz)
+        CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,gradUx,gradUy,gradUz,&
+            MeshVel=MeshVel)
       END IF
     ELSE
       IF(withVectors)THEN
         CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,&
-            NormVec=NormVec,TangVec1=TangVec1,TangVec2=TangVec2)
+            NormVec=NormVec,TangVec1=TangVec1,TangVec2=TangVec2,MeshVel=MeshVel)
       ELSE
-        CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc)
+        CALL CalcDerivedQuantity(iVarCalc,DepNames(iVar),nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,MeshVel=MeshVel)
       END IF
     END IF
   END IF
@@ -222,7 +224,7 @@ END SUBROUTINE CalcQuantities
 !> for the more complex ones.
 !==================================================================================================================================
 SUBROUTINE CalcDerivedQuantity(iVarCalc,DepName,nVarCalc,nVal,mapCalcMeshToGlobalMesh,mapDepToCalc,UCalc,gradUx,gradUy,gradUz, &
-    NormVec,TangVec1,TangVec2)
+    NormVec,TangVec1,TangVec2,MeshVel)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Posti_Vars
@@ -240,9 +242,11 @@ INTEGER,INTENT(IN)                                              :: mapDepToCalc(
 REAL,INTENT(INOUT)                                              :: UCalc(PRODUCT(nVal),1:nVarCalc)
 REAL,DIMENSION(1:PP_nVarPrim,PRODUCT(nVal)),INTENT(IN),OPTIONAL :: gradUx,gradUy,gradUz
 REAL,DIMENSION(1:3,PRODUCT(nVal)),INTENT(IN),OPTIONAL           :: NormVec,TangVec1,TangVec2
+REAL,DIMENSION(1:3,PRODUCT(nVal)),INTENT(IN),OPTIONAL           :: MeshVel
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: i,iMom1,iMom2,iMom3,iDens,iPres,iVel1,iVel2,iVel3,iVelM,iVelS,iEner,iEnst,iTemp
+INTEGER            :: iMeshVel1,iMeshVel2,iMeshVel3,iMeshVelM
 CHARACTER(LEN=255) :: DepName_low
 REAL               :: UE(PP_2Var)
 INTEGER            :: nElems_loc,Nloc,nDOF,nDims
@@ -269,19 +273,23 @@ withGradients=(PRESENT(gradUx).AND.PRESENT(gradUy).AND.PRESENT(gradUz))
 withVectors=(PRESENT(NormVec).AND.PRESENT(TangVec1).AND.PRESENT(TangVec2))
 
 ! Already retrieve mappings for conservatives, as theses are required for many quantities
-iDens = KEYVALUE(DepNames,mapDepToCalc,"density"    )
-iMom1 = KEYVALUE(DepNames,mapDepToCalc,'momentumx')
-iMom2 = KEYVALUE(DepNames,mapDepToCalc,'momentumy')
-iMom3 = KEYVALUE(DepNames,mapDepToCalc,'momentumz')
-iVel1 = KEYVALUE(DepNames,mapDepToCalc,"velocityx"  )
-iVel2 = KEYVALUE(DepNames,mapDepToCalc,"velocityy"  )
-iVel3 = KEYVALUE(DepNames,mapDepToCalc,"velocityz"  )
-iPres = KEYVALUE(DepNames,mapDepToCalc,"pressure"   )
-iEner = KEYVALUE(DepNames,mapDepToCalc,'energystagnationdensity')
+iDens = KEYVALUE(DepNames,mapDepToCalc,"density")
+iMom1 = KEYVALUE(DepNames,mapDepToCalc,"momentumx")
+iMom2 = KEYVALUE(DepNames,mapDepToCalc,"momentumy")
+iMom3 = KEYVALUE(DepNames,mapDepToCalc,"momentumz")
+iVel1 = KEYVALUE(DepNames,mapDepToCalc,"velocityx")
+iVel2 = KEYVALUE(DepNames,mapDepToCalc,"velocityy")
+iVel3 = KEYVALUE(DepNames,mapDepToCalc,"velocityz")
+iPres = KEYVALUE(DepNames,mapDepToCalc,"pressure")
+iEner = KEYVALUE(DepNames,mapDepToCalc,"energystagnationdensity")
 iVelM = KEYVALUE(DepNames,mapDepToCalc,"velocitymagnitude")
 iTemp = KEYVALUE(DepNames,mapDepToCalc,"temperature")
-iVelS = KEYVALUE(DepNames,mapDepToCalc,"velocitysound"    )
+iVelS = KEYVALUE(DepNames,mapDepToCalc,"velocitysound")
 iEnst = KEYVALUE(DepNames,mapDepToCalc,"energystagnation")
+iMeshVel1 = KEYVALUE(DepNames,mapDepToCalc,"meshvelocityx")
+iMeshVel2 = KEYVALUE(DepNames,mapDepToCalc,"meshvelocityy")
+iMeshVel3 = KEYVALUE(DepNames,mapDepToCalc,"meshvelocityz")
+iMeshVelM = KEYVALUE(DepNames,mapDepToCalc,"meshvelocitymagnitude")
 #if PARABOLIC
 iVorM = KEYVALUE(DepNames,mapDepToCalc,"vorticitymagnitude")
 iWFriX = KEYVALUE(DepNames,mapDepToCalc,"wallfrictionx")
@@ -344,6 +352,14 @@ SELECT CASE(DepName_low)
     UCalc(:,iVarCalc) = UCalc(:,iPres)+0.5*UCalc(:,iDens)*UCalc(:,iVelM)**2
   CASE("pressuretimederiv")
      CALL FillPressureTimeDeriv(nElems_loc,mapCalcMeshToGlobalMesh,Nloc,UCalc(:,iVarCalc))
+  CASE("meshvelocityx")
+    UCalc(:,iVarCalc) = MeshVel(1,:)
+  CASE("meshvelocityy")
+    UCalc(:,iVarCalc) = MeshVel(2,:)
+  CASE("meshvelocityz")
+    UCalc(:,iVarCalc) = MeshVel(3,:)
+  CASE("meshvelocitymagnitude")
+    UCalc(:,iVarCalc) = SQRT(MeshVel(1,:)**2+MeshVel(2,:)**2+MeshVel(3,:)**2)
 #if PARABOLIC
   CASE("vorticityx")
     UCalc(:,iVarCalc) = FillVorticity(1,nVal,gradUx,gradUy,gradUz)
@@ -735,10 +751,10 @@ DO iSide=1,nBCSides
 #endif
 
     ! Calculate lengths of the cell = lengths of the edge vectors
-    yloc(1)=NORM2(xVec)
-    yloc(2)=NORM2(yVec)
+    yloc(1)=SQRT(DOT_PRODUCT(xVec,xVec))
+    yloc(2)=SQRT(DOT_PRODUCT(yVec,yVec))
 #if PP_dim==3
-    yloc(3)=NORM2(zVec)
+    yloc(3)=SQRT(DOT_PRODUCT(zVec,zVec))
 #endif
 
     ! Normalize the distances with the number of points per direction per cell

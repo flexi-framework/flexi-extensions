@@ -67,13 +67,14 @@ CONTAINS
 !==================================================================================================================================
 !> Compute advection part of the Navier-Stokes fluxes in all space dimensions using the conservative and primitive variables
 !==================================================================================================================================
-PPURE SUBROUTINE EvalFlux3D_Point(U,UPrim,f,g,h)
+PPURE SUBROUTINE EvalFlux3D_Point(U,UPrim,MeshVel,f,g,h)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U        !< Conservative solution
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim    !< Primitive solution
+REAL,DIMENSION(3          ),INTENT(IN)  :: MeshVel  !< Velocity of mesh
 !> Physical fluxes in x/y/z direction
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: f,g,h
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -103,6 +104,10 @@ h(3) = g(4)                       ! rho*v*w
 h(4) = U(4) * UPrim(4) + UPrim(5) ! rho*v²+p
 h(5) = Ep * UPrim(4)              ! (rho*e+p)*w
 
+! Flux introduced by moving mesh, -u*meshvelocity
+f(:)=f(:) - U(:)*MeshVel(1)
+g(:)=g(:) - U(:)*MeshVel(2)
+h(:)=h(:) - U(:)*MeshVel(3)
 #else
 
 ! Euler part
@@ -120,13 +125,17 @@ g(4)= 0.
 g(5)= Ep*UPrim(3)                 ! (rho*e+p)*v
 ! Euler fluxes z-direction
 h   = 0.
+
+! Flux introduced by moving mesh, -u*meshvelocity
+f(:)=f(:) - U(:)*MeshVel(1)
+g(:)=g(:) - U(:)*MeshVel(2)
 #endif
 END SUBROUTINE EvalFlux3D_Point
 
 !==================================================================================================================================
 !> Wrapper routine to compute the advection part of the Navier-Stokes fluxes for a single volume cell
 !==================================================================================================================================
-PPURE SUBROUTINE EvalFlux3D_Volume(Nloc,U,UPrim,f,g,h)
+PPURE SUBROUTINE EvalFlux3D_Volume(Nloc,U,UPrim,MeshVel,f,g,h)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -135,6 +144,7 @@ IMPLICIT NONE
 INTEGER                                               ,INTENT(IN)  :: Nloc     !< Polynomial degree
 REAL,DIMENSION(PP_nVar    ,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U        !< Conservative solution
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: UPrim    !< Primitive solution
+REAL,DIMENSION(3          ,0:NLoc,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)  :: MeshVel  !< Velocity of mesh
 !> Physical fluxes in x,y,z directions
 REAL,DIMENSION(PP_nVar    ,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: f,g,h
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -142,7 +152,7 @@ REAL,DIMENSION(PP_nVar    ,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: f,g,h
 INTEGER             :: i,j,k
 !==================================================================================================================================
 DO k=0,ZDIM(Nloc);  DO j=0,Nloc; DO i=0,Nloc
-  CALL EvalFlux3D_Point(U(:,i,j,k),UPrim(:,i,j,k),f(:,i,j,k),g(:,i,j,k),h(:,i,j,k))
+  CALL EvalFlux3D_Point(U(:,i,j,k),UPrim(:,i,j,k),MeshVel(:,i,j,k),f(:,i,j,k),g(:,i,j,k),h(:,i,j,k))
 END DO; END DO; END DO ! i,j,k
 END SUBROUTINE EvalFlux3D_Volume
 

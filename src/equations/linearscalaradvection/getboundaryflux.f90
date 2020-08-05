@@ -140,7 +140,7 @@ SUBROUTINE GetBoundaryFlux(SideID,t,Nloc,Flux,UPrim_master,          &
 #if PARABOLIC
                            gradUx_master,gradUy_master,gradUz_master,&
 #endif
-                           NormVec,TangVec1,TangVec2,Face_xGP)
+                           Face_vGP,NormVec,TangVec1,TangVec2,Face_xGP)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
@@ -160,6 +160,7 @@ REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: gradUx_master,gra
 #endif /*PARABOLIC*/
                                                                            !> normal and tangential vectors on surfaces
 REAL,DIMENSION(      3,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: NormVec,TangVec1,TangVec2
+REAL,DIMENSION(      3,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: Face_vGP   !< Mesh velocity on faces
 REAL,DIMENSION(      3,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: Face_xGP   !< positions of surface flux points
 REAL,DIMENSION(PP_nVar,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: Flux       !< resulting boundary fluxes
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -178,7 +179,7 @@ CASE(2) !Exact function or refstate
   DO q=0,ZDIM(Nloc); DO p=0,Nloc
     CALL ExactFunc(IniExactFunc,t,Face_xGP(:,p,q),UPrim_boundary(:,p,q))
   END DO; END DO
-  CALL GetFlux(Nloc,Flux,UPrim_master,UPrim_boundary,    &
+  CALL GetFlux(Nloc,Flux,UPrim_master,UPrim_boundary,Face_vGP,    &
 #if PARABOLIC
                gradUx_master,gradUy_master,gradUz_master,&
                gradUx_master,gradUy_master,gradUz_master,&
@@ -251,7 +252,7 @@ END SUBROUTINE GetBoundaryFVgradient
 !==================================================================================================================================
 !> Computes the boundary fluxes for the lifting procedure for a given mesh face (defined by SideID).
 !==================================================================================================================================
-SUBROUTINE Lifting_GetBoundaryFlux(SideID,t,UPrim_master,Flux,NormVec,TangVec1,TangVec2,Face_xGP,SurfElem)
+SUBROUTINE Lifting_GetBoundaryFlux(SideID,t,UPrim_master,Flux,NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP,SurfElem)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
@@ -271,6 +272,7 @@ REAL,INTENT(IN)   :: NormVec (              3,0:PP_N,0:PP_NZ)
 REAL,INTENT(IN)   :: TangVec1(              3,0:PP_N,0:PP_NZ)
 REAL,INTENT(IN)   :: TangVec2(              3,0:PP_N,0:PP_NZ)
 REAL,INTENT(IN)   :: Face_xGP(              3,0:PP_N,0:PP_NZ)
+REAL,INTENT(IN)   :: Face_vGP(              3,0:PP_N,0:PP_NZ)
 REAL,INTENT(IN)   :: SurfElem(                0:PP_N,0:PP_NZ)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES

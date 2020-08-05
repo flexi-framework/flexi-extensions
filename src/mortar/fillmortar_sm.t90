@@ -1,0 +1,180 @@
+!=================================================================================================================================
+! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz 
+! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
+! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+!
+! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
+! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+!
+! FLEXI is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+!
+! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
+!=================================================================================================================================
+#include "flexi.h"
+
+!============================================================================================================================
+!> Determines the global flip of a side (i.e. the p-q-orientation of the master system in global x-y-z-coordinates)
+!>
+!>             |            |            |            |            |            |            |            |            |
+!>   CoordSys  |   flip=1   |   flip=2   |   flip=3   |   flip=4   |   flip=5   |   flip=6   |   flip=7   |   flip=8   |
+!>             |            |            |            |            |            |            |            |            |
+!>  Az ^       |  p ^       |       ^ p  |        q   |   q        |  q ^       |       ^ q  |        p   |   p        |
+!>     |       |    |       |       |    |    +--->   |   <---+    |    |       |       |    |    +--->   |   <---+    |
+!>     +--->   |    +--->   |   <---+    |    |       |       |    |    +--->   |   <---+    |    |       |       |    |
+!>         L   |        q   |   q        |  p v       |       v p  |        p   |   p        |  q v       |       v q  |
+!>             |            |            |            |            |            |            |            |            |
+!>
+!> Negative flips are backwards. Function is its own inverse if flips 6 and 7 are exchanged.
+!============================================================================================================================
+PPURE SUBROUTINE DoFlip(&
+#ifdef WITHnVar
+        TP_nVar, &
+#endif
+            UIn,UOut,iFlip)
+! MODULES
+USE MOD_Preproc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+#ifdef WITHnVar
+INTEGER,INTENT(IN) :: TP_nVar
+#endif
+REAL,INTENT(IN )    :: UIn( 1:TP_nVar,0:PP_N,0:PP_NZ)
+REAL,INTENT(OUT)    :: UOut(1:TP_nVar,0:PP_N,0:PP_NZ)
+INTEGER,INTENT(IN)  :: iFlip
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i,j
+!============================================================================================================================
+SELECT CASE (iFlip)
+CASE(1,-1)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,     i,     j)
+  END DO; END DO
+CASE(2,-2)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,     i,PP_N-j)
+  END DO; END DO
+CASE(3,-3)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,PP_N-i,     j)
+  END DO; END DO
+CASE(4,-4)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,PP_N-i,PP_N-j)
+  END DO; END DO
+CASE(5,-5)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,     j,     i)
+  END DO; END DO
+CASE(6,-7)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,PP_N-j,     i)
+  END DO; END DO
+CASE(7,-6)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,     j,PP_N-i)
+  END DO; END DO
+CASE(8,-8)
+  DO j=0,PP_NZ; DO i=0,PP_N
+    UOut(:,i,j)=UIn(:,PP_N-j,PP_N-i)
+  END DO; END DO
+END SELECT
+END SUBROUTINE DoFlip
+
+!==================================================================================================================================
+!> Interpolates variables from sliding mesh sides onto the adjacent mortars
+!==================================================================================================================================
+PPURE SUBROUTINE InterpolateSM(&
+#ifdef WITHnVar
+        TP_nVar, &
+#endif
+        U_In,U_Out1,U_Out2,M1,M2,isRotor)
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+#ifdef WITHnVar
+INTEGER,INTENT(IN) :: TP_nVar
+#endif
+REAL,INTENT(IN)    :: U_In  (1:TP_nVar,0:PP_N,0:PP_NZ)   !< 
+REAL,INTENT(OUT)   :: U_Out1(1:TP_nVar,0:PP_N,0:PP_NZ)   !< 
+REAL,INTENT(OUT)   :: U_Out2(1:TP_nVar,0:PP_N,0:PP_NZ)   !< 
+REAL,INTENT(IN)    :: M1   (           0:PP_N,0:PP_N)    !< 
+REAL,INTENT(IN)    :: M2   (           0:PP_N,0:PP_N)    !< 
+LOGICAL,INTENT(IN) :: isRotor                            !< defines if U is flipped in p-direction before and after
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER            :: p,q,l
+!==================================================================================================================================
+! Index p is flipped before and after interpolation of rotor ('PP_N-...'). This is in order to have the small mortar at the 
+! different end as compared to at the stator
+IF (isRotor) THEN
+  DO q=0,PP_NZ; DO p=0,PP_N
+    U_Out1(:,PP_N-p,q)=                     M1(0,p)*U_In(:,PP_N-0,q)
+    U_Out2(:,PP_N-p,q)=                     M2(0,p)*U_In(:,PP_N-0,q)
+    DO l=1,PP_N
+      U_Out1(:,PP_N-p,q)=U_Out1(:,PP_N-p,q)+M1(l,p)*U_In(:,PP_N-l,q)
+      U_Out2(:,PP_N-p,q)=U_Out2(:,PP_N-p,q)+M2(l,p)*U_In(:,PP_N-l,q)
+    END DO
+  END DO; END DO
+ELSE
+  DO q=0,PP_NZ; DO p=0,PP_N
+    U_Out1(:,p,q)=                M1(0,p)*U_In(:,0,q)
+    U_Out2(:,p,q)=                M2(0,p)*U_In(:,0,q)
+    DO l=1,PP_N
+      U_Out1(:,p,q)=U_Out1(:,p,q)+M1(l,p)*U_In(:,l,q)
+      U_Out2(:,p,q)=U_Out2(:,p,q)+M2(l,p)*U_In(:,l,q)
+    END DO
+  END DO; END DO
+END IF
+END SUBROUTINE InterpolateSM
+
+!==================================================================================================================================
+!> Projects variables from sliding mesh mortars back onto adjacent sides
+!==================================================================================================================================
+PPURE SUBROUTINE ProjectSM(&
+#ifdef WITHnVar
+       TP_nVar, &
+#endif
+       Flux_In1,Flux_In2,Flux_Out,M1,M2,isRotor)
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+#ifdef WITHnVar
+INTEGER,INTENT(IN) :: TP_nVar
+#endif
+REAL,INTENT(IN)    :: Flux_In1(1:TP_nVar,0:PP_N,0:PP_NZ) !<
+REAL,INTENT(IN)    :: Flux_In2(1:TP_nVar,0:PP_N,0:PP_NZ) !<
+REAL,INTENT(OUT)   :: Flux_Out(1:TP_nVar,0:PP_N,0:PP_NZ) !< 
+REAL,INTENT(IN)    :: M1      (          0:PP_N,0:PP_N)  !< 
+REAL,INTENT(IN)    :: M2      (          0:PP_N,0:PP_N)  !< 
+LOGICAL,INTENT(IN) :: isRotor                            !< defines if U is flipped in p-direction before and after
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER            :: p,q,l
+!==================================================================================================================================
+! Index p is flipped before and after interpolation of rotor ('PP_N-...'). This is in order to have the small mortar at the 
+! different end as compared to at the stator
+IF (isRotor) THEN
+  DO q=0,PP_NZ; DO p=0,PP_N
+    Flux_Out(:,PP_N-p,q)=                         M1(0,p)*Flux_In1(:,PP_N-0,q)+M2(0,p)*Flux_In2(:,PP_N-0,q)
+    DO l=1,PP_N
+      Flux_Out(:,PP_N-p,q)=Flux_Out(:,PP_N-p,q) + M1(l,p)*Flux_In1(:,PP_N-l,q)+M2(l,p)*Flux_In2(:,PP_N-l,q)
+    END DO
+  END DO; END DO
+ELSE
+  DO q=0,PP_NZ; DO p=0,PP_N
+    Flux_Out(:,p,q)=                    M1(0,p)*Flux_In1(:,0,q)+M2(0,p)*Flux_In2(:,0,q)
+    DO l=1,PP_N
+      Flux_Out(:,p,q)=Flux_Out(:,p,q) + M1(l,p)*Flux_In1(:,l,q)+M2(l,p)*Flux_In2(:,l,q)
+    END DO
+  END DO; END DO
+END IF
+END SUBROUTINE ProjectSM
+

@@ -41,6 +41,7 @@ USE MOD_Globals
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_Mesh_Vars,          ONLY:sJ,Metrics_fTilde,Metrics_gTilde
+USE MOD_MoveMesh_Vars,      ONLY:Elem_vGP
 #if PP_dim==3
 USE MOD_Mesh_Vars,          ONLY:Metrics_hTilde
 #endif
@@ -87,10 +88,10 @@ DO iElem=1,nElems
   DO k=0,PP_NZ
     DO j=0,PP_N
       DO i=0,PP_N
-        Lambda1=ABS(SUM(Metrics_fTilde(:,i,j,k,iElem,FVE)*AdvVel))
-        Lambda2=ABS(SUM(Metrics_gTilde(:,i,j,k,iElem,FVE)*AdvVel))
+        Lambda1=ABS(SUM(Metrics_fTilde(:,i,j,k,iElem,FVE)*(AdvVel-Elem_vGP(1,i,j,k,iElem))))
+        Lambda2=ABS(SUM(Metrics_gTilde(:,i,j,k,iElem,FVE)*(AdvVel-Elem_vGP(2,i,j,k,iElem))))
 #if PP_dim==3
-        Lambda3=ABS(SUM(Metrics_hTilde(:,i,j,k,iElem,FVE)*AdvVel))
+        Lambda3=ABS(SUM(Metrics_hTilde(:,i,j,k,iElem,FVE)*(AdvVel-Elem_vGP(3,i,j,k,iElem))))
         maxLambda=MAX(maxLambda,sJ(i,j,k,iElem,FVE)*(Lambda1+Lambda2+Lambda3))
 #else
         maxLambda=MAX(maxLambda,sJ(i,j,k,iElem,FVE)*(Lambda1+Lambda2))

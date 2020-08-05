@@ -196,6 +196,11 @@ USE MOD_2D,                 ONLY: to2D_rank5
 #endif
 USE MOD_IO_HDF5
 USE MOD_HDF5_Input,         ONLY: GetDataSize
+#if GCL
+USE MOD_HDF5_Input,         ONLY: DatasetExists
+USE MOD_GCL_Vars,           ONLY: Jac
+USE MOD_Mesh_Vars,          ONLY: sJ
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -217,6 +222,14 @@ LOGICAL            :: doFlushFiles_loc
 INTEGER             :: nVal(15),iVar
 REAL,ALLOCATABLE    :: ElemData(:,:),tmp(:)
 CHARACTER(LEN=255),ALLOCATABLE :: VarNamesElemData(:)
+#endif
+#if GCL
+REAL,ALLOCATABLE   :: Jac_local(:,:,:,:,:)
+#if PP_dim == 3 
+REAL,ALLOCATABLE   :: Jac_local2(:,:,:,:,:)
+#endif
+LOGICAL            :: foundJac
+INTEGER            :: HSize_procJac(5)
 #endif
 !==================================================================================================================================
 IF (PRESENT(doFlushFiles)) THEN
@@ -267,11 +280,23 @@ IF(DoRestart)THEN
     DEALLOCATE(U_localNVar)
   END IF
 
+#if GCL
+  ! Restart from the Jacobian calculated by the GCL if applicable
+  CALL DatasetExists(File_ID, 'Jacobian', foundJac)
+  IF (foundJac) THEN
+    CALL GetDataSize(File_ID,'Jacobian',nDims,HSize)
+    HSize_procJac = INT(HSize)
+    HSize_procJac(5) = nElems
+    ALLOCATE(Jac_local(1,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))
+    CALL ReadArray('Jacobian',5,HSize_procJac,OffsetElem,5,RealArray=Jac_local)
+  END IF
+#endif
+
   ! Read in state
   IF(.NOT. InterpolateSolution)THEN
     ! No interpolation needed, read solution directly from file
 #if PP_dim == 3
-    IF (HSize(4).EQ.1) THEN
+    IF (HSize_proc(4).EQ.1) THEN
       ! FLEXI compiled 3D, but data is 2D => expand third space dimension
       CALL ExpandArrayTo3D(5,(/PP_nVar,PP_N+1,PP_N+1,1,nElems/),4,PP_N+1,U_local,U)
     ELSE
@@ -279,8 +304,8 @@ IF(DoRestart)THEN
       U = U_local
     END IF
 #else
-    IF (HSize(4).EQ.1) THEN
-      ! FLEXI compiled 2D + data 2D
+    IF (HSize_proc(4).EQ.1) THEN
+      ! FLEXI compiled 2D + data 2D 
       U = U_local
     ELSE
       ! FLEXI compiled 2D, but data is 3D => reduce third space dimension
@@ -288,7 +313,29 @@ IF(DoRestart)THEN
       U = U_local
     END IF
 #endif
-  ELSE ! InterpolateSolution
+#if GCL
+#if PP_dim == 3
+    IF (HSize_procJac(4).EQ.1) THEN
+      ! FLEXI compiled 3D, but data is 2D => expand third space dimension
+      IF (foundJac) CALL ExpandArrayTo3D(5,(/1,PP_N+1,PP_N+1,1,nElems/),4,PP_N+1,Jac_local,Jac)
+    ELSE
+      ! FLEXI compiled 3D + data 3D 
+      IF (foundJac) Jac = Jac_local
+    END IF
+#else
+    IF (HSize_procJac(4).EQ.1) THEN
+      ! FLEXI compiled 2D + data 2D 
+      IF (foundJac) Jac = Jac_local
+    ELSE
+      ! FLEXI compiled 2D, but data is 3D => reduce third space dimension 
+      IF (foundJac) THEN
+        CALL to2D_rank5((/1,0,0,0,1/),(/1,PP_N,PP_N,PP_N,nElems/),4,Jac_local)
+        Jac = Jac_local
+      END IF
+    END IF
+#endif /*PP_dim == 3*/
+#endif /*GCL*/
+  ELSE ! InterpolateSolution 
     ! We need to interpolate the solution to the new computational grid
     SWRITE(UNIT_stdOut,*)'Interpolating solution from restart grid with N=',N_restart,' to computational grid with N=',PP_N
 
@@ -298,7 +345,7 @@ IF(DoRestart)THEN
                         Vdm_3Ngeo_NRestart, modal=.TRUE.)
 
 #if PP_dim == 3
-    IF (HSize(4).EQ.1) THEN
+    IF (HSize_proc(4).EQ.1) THEN
       ! FLEXI compiled 3D, but data is 2D => expand third space dimension
       ! use temporary array 'U_local2' to store 3D data
       ALLOCATE(U_local2(PP_nVar,0:N_Restart,0:N_Restart,0:N_Restart,nElems))
@@ -309,11 +356,41 @@ IF(DoRestart)THEN
       U_local = U_local2
       DEALLOCATE(U_local2)
     END IF
-#else
-    IF (HSize(4).NE.1) THEN
-      ! FLEXI compiled 2D, but data is 3D => reduce third space dimension
+#if GCL
+    IF (HSize_procJac(4).EQ.1) THEN
+      IF (foundJac) THEN
+        ALLOCATE(Jac_local2(1,0:N_Restart,0:N_Restart,0:N_Restart,nElems))
+        CALL ExpandArrayTo3D(5,HSize_procJac,4,N_Restart,Jac_local,Jac_local2)
+        ! Reallocate 'Jac_local' to 3D and mv data from Jac_local2 to Jac_local
+        DEALLOCATE(Jac_local)
+        ALLOCATE(Jac_local(1,0:N_Restart,0:N_Restart,0:N_Restart,nElems))
+        Jac_local = Jac_local2
+        DEALLOCATE(Jac_local2)
+      END IF
+    END IF
+#endif /*GCL*/
+#else /*PP_dim != 3 */
+    IF (HSize_proc(4).NE.1) THEN
+      ! FLEXI compiled 2D, but data is 3D => reduce third space dimension 
       CALL to2D_rank5((/1,0,0,0,1/),(/PP_nVar,N_Restart,N_Restart,N_Restart,nElems/),4,U_local)
     END IF
+#if GCL
+    IF (HSize_procJac(4).NE.1) THEN
+      ! FLEXI compiled 2D, but data is 3D => reduce third space dimension 
+      IF (foundJac) THEN
+        CALL to2D_rank5((/1,0,0,0,1/),(/1,N_Restart,N_Restart,N_Restart,nElems/),4,Jac_local)
+      END IF
+    END IF
+#endif /*GCL*/
+#endif /*PP_dim == 3*/
+
+#if GCL
+    ! Transform Jacobian
+    DO iElem=1,nElems
+      CALL ChangeBasisVolume(1,N_Restart,PP_N,Vdm_NRestart_N,Jac_local(:,:,:,:,iElem),Jac(:,:,:,:,iElem))
+    END DO
+    ! Set inverse of Jacobian
+    sJ(:,:,:,:,0) = 1./Jac(1,:,:,:,:)
 #endif
     ! Transform solution to refspace and project solution to N
     ! For conservativity deg of detJac should be identical to EFFECTIVE polynomial deg of solution
@@ -349,6 +426,10 @@ IF(DoRestart)THEN
     END IF
 
     DEALLOCATE(U_local)
+#if GCL
+    IF (foundJac) DEALLOCATE(Jac_local)
+#endif
+
     SWRITE(UNIT_stdOut,*)'DONE!'
   END IF
   CALL CloseDataFile()

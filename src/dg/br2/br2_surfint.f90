@@ -41,7 +41,7 @@ CONTAINS
 !==================================================================================================================================
 !> \brief Surface integral optimized for performance
 !==================================================================================================================================
-PPURE SUBROUTINE Lifting_SurfInt(Flux,gradU,gradU_master,gradU_slave,doMPISides)
+SUBROUTINE Lifting_SurfInt(Flux_master,Flux_slave,gradU,gradU_master,gradU_slave,doMPISides)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -55,6 +55,7 @@ USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR, lastMPISide_YOUR
 USE MOD_Mesh_Vars,          ONLY: firstInnerSide,    lastInnerSide
 USE MOD_Mesh_Vars,          ONLY: firstBCSide,       lastMPISide_MINE
 USE MOD_Mesh_Vars,          ONLY: firstMortarMPISide,lastMortarMPISide
+USE MOD_Mesh_Vars,          ONLY: firstSMSide,       lastSMSide
 USE MOD_Lifting_Vars,       ONLY: etaBR2, etaBR2_wall
 USE MOD_Mesh_Vars,          ONLY: BC,BoundaryType,nBCSides
 #if FV_ENABLED
@@ -63,20 +64,24 @@ USE MOD_FV_Vars,            ONLY: FV_Elems_master,FV_Elems_slave
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-LOGICAL,INTENT(IN)   :: doMPISides  !< = .TRUE. only YOUR MPISides are filled, =.FALSE. BCSides+InnerSides+MPISides MINE
-REAL,INTENT(IN)      :: Flux(1:PP_nVarPrim,0:PP_N,0:PP_NZ,nSides) !< Surface flux contribution
+LOGICAL,INTENT(IN)     :: doMPISides  !< = .TRUE. only YOUR MPISides are filled, =.FALSE. BCSides+InnerSides+MPISides MINE
+REAL,TARGET,INTENT(IN) :: Flux_master(1:PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Surface flux contribution
+REAL,TARGET,INTENT(IN) :: Flux_slave( 1:PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Surface flux contribution
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)   :: gradU(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) !< Volume contribution to gradients
-REAL,INTENT(INOUT)   :: gradU_master(PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Gradient on the master sides
-REAL,INTENT(INOUT)   :: gradU_slave( PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Gradient on the slave sides
+REAL,INTENT(INOUT)     :: gradU(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)  !< Volume contribution to gradients
+REAL,INTENT(INOUT)     :: gradU_master(PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides)  !< Gradient on the master sides
+REAL,INTENT(INOUT)     :: gradU_slave( PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides)  !< Gradient on the slave sides
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL               :: F_loc(PP_nVarPrim)
 INTEGER            :: ElemID,nbElemID,l,p,q,Flip,SideID,locSideID,nblocSideID,ijk(3)
-INTEGER            :: firstSideID,lastSideID
+INTEGER            :: firstSideID,lastSideID,firstCycleID,lastCycleID
 REAL               :: eta
+REAL,POINTER       :: Flux(:,:,:,:)
 !==================================================================================================================================
+! Generally use master flux, as master and slave lifting fluxes are identical (not on sm sides!)
+Flux => Flux_master
 
 !slave Sides
 IF(doMPISides)THEN
@@ -96,6 +101,16 @@ DO SideID=firstSideID,lastSideID
   ! slave sides
   IF(nbElemID.GT.0)THEN
     IF (FV_Elems_slave(SideID).EQ.0) THEN ! DG element
+
+#if !(USE_MPI)
+      ! Without MPI, the proc has the master and slave SM sides, which have different lifting
+      ! fluxes, due to their changing position over time.  We therefore have to differentiate
+      ! between master and slave sm lifting fluxes for use without MPI.
+      IF ((SideID.GE.firstSMSide).AND.(SideID.LE.lastSMSide)) THEN
+        Flux => Flux_slave
+      END IF
+#endif
+
       nblocSideID = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
       flip        = SideToElem(S2E_FLIP,SideID)
       DO q=0,PP_NZ; DO p=0,PP_N
@@ -116,17 +131,24 @@ DO SideID=firstSideID,lastSideID
 END DO ! SideID=1,nSides
 
 !master sides
-IF(doMPISides)THEN
-  ! only mortar MPI sides
-  firstSideID = firstMortarMPISide
-   lastSideID =  lastMortarMPISide
+IF(doMPISides)THEN       ! Only start with SM sides if there are any.
+     firstSideID = MERGE(firstSMSide,firstMPISide_YOUR,lastSMSide.GE.firstSMSide)
+      lastSideID = nSides
+    firstCycleID = lastSMSide+1
+     lastCycleID = firstMortarMPISide-1
 ELSE
-  ! all sides except YOUR and MortarMPI
-  firstSideID = firstBCSide
-   lastSideID = lastMPISide_MINE
+     firstSideID = firstBCSide
+      lastSideID = lastMPISide_MINE
+#if USE_MPI
+    firstCycleID = firstSMSide
+     lastCycleID =  lastSMSide
+#endif
 END IF
 
 DO SideID=firstSideID,lastSideID
+#if USE_MPI
+  IF((SideID.GE.firstCycleID).AND.(SideID.LE.lastCycleID)) CYCLE
+#endif
   IF(SideID .LE. nBCSides) THEN
     IF (Boundarytype(BC(SideID),BC_TYPE).EQ.4.OR.Boundarytype(BC(SideID),BC_TYPE).EQ.3) THEN
       eta =etaBR2_wall
@@ -140,6 +162,12 @@ DO SideID=firstSideID,lastSideID
   ! master sides
   IF(ElemID.GT.0)THEN
     IF (FV_Elems_master(SideID).EQ.0) THEN ! DG element
+
+#if !(USE_MPI)
+      ! Reset flux pointer to master flux
+      Flux => Flux_master
+#endif
+
       locSideID = SideToElem(S2E_LOC_SIDE_ID,SideID)
       flip      = 0
       DO q=0,PP_NZ; DO p=0,PP_N

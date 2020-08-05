@@ -93,6 +93,10 @@ CALL prms%CreateRealArrayOption(    'IniCenter',    "Shu Vortex CASE(7) (x,y,z)"
 CALL prms%CreateRealArrayOption(    'IniAxis',      "Shu Vortex CASE(7) (x,y,z)")
 CALL prms%CreateRealOption(         'IniAmplitude', "Shu Vortex CASE(7)", '0.2')
 CALL prms%CreateRealOption(         'IniHalfwidth', "Shu Vortex CASE(7)", '0.2')
+CALL prms%CreateLogicalOption(      'UsePerBound',  "Use periodic boundaries for Shu Vortex CASE(7)", 'F')
+CALL prms%CreateRealArrayOption(    'LowerPerBound',"Lower periodic boundaries of domain for Shu Vortex CASE(7) (x0,y0,z0)")
+CALL prms%CreateRealArrayOption(    'UpperPerBound',"Upper periodic boundaries of domain for Shu Vortex CASE(7) (x1,y1,z1)")
+CALL prms%CreateRealOption(         'UMean',        "Turek Benchmark CASE(14)")
 #if PARABOLIC
 CALL prms%CreateRealOption(         'delta99_in',   "Blasius boundary layer CASE(1338)")
 CALL prms%CreateRealArrayOption(    'x_in',         "Blasius boundary layer CASE(1338)")
@@ -132,12 +136,27 @@ CASE(7) ! Shu Vortex
   IniAxis      = GETREALARRAY('IniAxis',3,'(/0.,0.,1./)')
   IniAmplitude = GETREAL('IniAmplitude','0.2')
   IniHalfwidth = GETREAL('IniHalfwidth','0.2')
+  UsePerBound  = GETLOGICAL('UsePerBound','F')
+  IF (UsePerBound) THEN
+    LowerPerBound  = GETREALARRAY('LowerPerBound',3,'(/0.,0.,0./)')
+    UpperPerBound  = GETREALARRAY('UpperPerBound',3,'(/1.,1.,1./)')
+#if PP_dim==2
+    IF (ANY(LowerPerBound(1:2).GE.UpperPerBound(1:2))) THEN
+#else
+    IF (ANY(LowerPerBound(1:3).GE.UpperPerBound(1:3))) THEN
+#endif
+      CALL CollectiveStop(__STAMP__, 'All entries in lower periodic boundary LowerPerBound must be greater than the &
+                                                              & respective entries in upper periodic boundary UpperPerBound!')
+    END IF
+  END IF
 CASE(8) ! couette-poiseuille flow
   P_Parameter  = GETREAL('P_Parameter','0.0')
   U_Parameter  = GETREAL('U_Parameter','0.01')
 CASE(10) ! shock
   MachShock    = GETREAL('MachShock','1.5')
   PreShockDens = GETREAL('PreShockDens','1.0')
+CASE(14) ! turek benchmark
+  UMean        = GETREAL('UMean')
 #if PARABOLIC
 CASE(1338) ! Blasius boundary layer solution
   delta99_in      = GETREAL('delta99_in')
@@ -175,8 +194,10 @@ USE MOD_Globals        ,ONLY: Abort
 USE MOD_Mathtools      ,ONLY: CROSS
 USE MOD_Eos_Vars       ,ONLY: Kappa,sKappaM1,KappaM1,KappaP1,R
 USE MOD_Exactfunc_Vars ,ONLY: IniCenter,IniHalfwidth,IniAmplitude,IniAxis,AdvVel
+USE MOD_Exactfunc_Vars ,ONLY: LowerPerBound,UpperPerBound,UsePerBound
 USE MOD_Exactfunc_Vars ,ONLY: MachShock,PreShockDens
 USE MOD_Exactfunc_Vars ,ONLY: P_Parameter,U_Parameter
+USE MOD_Exactfunc_Vars ,ONLY: UMean
 USE MOD_Equation_Vars  ,ONLY: IniRefState,RefStateCons,RefStatePrim
 USE MOD_Timedisc_Vars  ,ONLY: fullBoundaryOrder,CurrentStage,dt,RKb,RKc,t
 USE MOD_TestCase       ,ONLY: ExactFuncTestcase
@@ -466,6 +487,10 @@ CASE(7) ! SHU VORTEX,isentropic vortex
   RT=prim(PP_nVar)/prim(1) !ideal gas
   cent=(iniCenter+vel*tEval)!centerpoint time dependant
   cent=x-cent ! distance to centerpoint
+  ! Adapt to periodic boundaries (Zhang et al. JCP 2015)
+  IF(UsePerBound) THEN
+    cent = cent - FLOOR((cent+iniCenter-LowerPerBound)/(UpperPerBound-LowerPerBound))*(UpperPerBound-LowerPerBound)
+  END IF
   cent=CROSS(iniAxis,cent) !distance to axis, tangent vector, length r
   cent=cent/iniHalfWidth !Halfwidth is dimension 1
   r2=SUM(cent*cent) !
@@ -564,6 +589,11 @@ CASE(13) ! DoubleMachReflection (see e.g. http://www.astro.princeton.edu/~jstone
       prim = RefStatePrim(:,2)
     END IF
   END IF
+  CALL PrimToCons(prim,resu)
+CASE(14) ! Turek benchmark, parabolic velocity profile
+  prim = RefStatePrim(:,1)
+  prim(2)   = 1.5*UMean*4.0/0.1681*x(2)*(0.41-x(2))
+  prim(3:4) = 0.
   CALL PrimToCons(prim,resu)
 #if PARABOLIC
 CASE(1338) ! blasius

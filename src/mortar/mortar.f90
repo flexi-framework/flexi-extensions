@@ -109,7 +109,7 @@ END SUBROUTINE InitMortar
 !>    M_0_2(:,:)  interpolation from full  interval 0: [-1,1] to right interval 2: [0, 1]
 !> see doc/mortar for details...
 !==================================================================================================================================
-SUBROUTINE MortarBasis_BigToSmall(FVE,N_In,NodeType_In,M_0_1,M_0_2)
+SUBROUTINE MortarBasis_BigToSmall(FVE,N_In,NodeType_In,M_0_1,M_0_2,SMo_In)
 ! MODULES
 USE MOD_Basis,             ONLY: InitializeVandermonde
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights
@@ -118,6 +118,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)                                      :: FVE         !< Flag: DG=0, FV=1
 INTEGER,INTENT(IN)                                      :: N_In        !< polynomial degree
+REAL,INTENT(IN),OPTIONAL                                :: SMo_In      !< TODO
 CHARACTER(LEN=255),INTENT(IN)                           :: NodeType_In !< nodetype
 !> precomputed mortar matrices: big to small
 REAL,DIMENSION(0:N_In,0:N_in),INTENT(OUT)               :: M_0_1,M_0_2
@@ -131,13 +132,20 @@ REAL                          :: Mmean(0:N_In,0:N_In-1)
 REAL                          :: Mlr(0:N_In*2+1,0:N_In)
 REAL                          :: M(0:N_In*2+1,0:N_In)
 #endif
+REAL                          :: SMo        !< TODO
 !==================================================================================================================================
+IF (PRESENT(SMo_In)) THEN
+  SMo=SMo_In
+ELSE
+  SMo=0.5 ! between 0 and 1!!
+END IF 
+
 IF (FVE.EQ.0) THEN ! DG Element
   CALL GetNodesAndWeights(N_in,NodeType_In,xi_In,wIPBary=wBary_In)
 
   !build interpolation operators M 0->1,M 0->2
-  CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_In-1.),M_0_1)
-  CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_In+1.),M_0_2)
+  CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,    SMo *(xi_In+1.)-1.,M_0_1)
+  CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,(1.-SMo)*(xi_In-1.)+1.,M_0_2)
 
 ELSE ! FV Element
 
@@ -194,7 +202,7 @@ END SUBROUTINE MortarBasis_BigToSmall
 !>    M_2_0(:,:)  projection    from right interval 1: [0, 1] to full  interval 0: [-1,1]
 !> see doc/mortar for details...
 !==================================================================================================================================
-SUBROUTINE MortarBasis_SmallToBig(FVE,N_In,NodeType_In,M_1_0,M_2_0)
+SUBROUTINE MortarBasis_SmallToBig(FVE,N_In,NodeType_In,M_1_0,M_2_0,SMo_In)
 ! MODULES
 USE MOD_Basis,             ONLY: LegendrePolynomialAndDerivative
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights,GetVandermonde
@@ -204,6 +212,7 @@ IMPLICIT NONE
 INTEGER,INTENT(IN)                                      :: FVE         !< Flag: DG=0, FV=1
 INTEGER,INTENT(IN)                                      :: N_In  !< polynomial degree
 CHARACTER(LEN=255),INTENT(IN)                           :: NodeType_In !< nodetype
+REAL,INTENT(IN),OPTIONAL                                :: SMo_In        !< TODO
 !> precomputed mortar matrices: small to big
 REAL,DIMENSION(0:N_In,0:N_in),INTENT(OUT)  :: M_1_0,M_2_0
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -212,7 +221,14 @@ REAL                          :: dummy
 INTEGER                       :: i,j
 REAL,DIMENSION(0:N_in,0:N_in) :: VGP,W,Vphi1,Vphi2,Vdm_Leg
 REAL,DIMENSION(0:N_in)        :: xi_In,xi_Gauss,w_Gauss  ! Gauss Nodes
+REAL                          :: SMo        !< TODO
 !==================================================================================================================================
+IF (PRESENT(SMo_In)) THEN
+  SMo=SMo_In
+ELSE
+  SMo=0.5 ! between 0 and 1!!
+END IF 
+
 IF (FVE.EQ.0) THEN ! DG Element
   CALL GetNodesAndWeights(N_in,NodeType_In,xi_In)
   CALL GetNodesAndWeights(N_in,'GAUSS',xi_Gauss,w_Gauss) !Gauss nodes and integration weights
@@ -231,8 +247,8 @@ IF (FVE.EQ.0) THEN ! DG Element
   DO i=0,N_In
     DO j=0,N_In
       CALL LegendrePolynomialAndDerivative(j,xi_In(i),Vdm_Leg(i,j),dummy)
-      CALL LegendrePolynomialAndDerivative(j,0.5*(xi_Gauss(i)-1.),Vphi1(i,j),dummy) ! evaluate Legendre in [-1,0]
-      CALL LegendrePolynomialAndDerivative(j,0.5*(xi_Gauss(i)+1.),Vphi2(i,j),dummy) ! evaluate Legendre in [ 0,1]
+      CALL LegendrePolynomialAndDerivative(j,    SMo *(xi_Gauss(i)+1.)-1.,Vphi1(i,j),dummy) ! evaluate Legendre in [-1,0]
+      CALL LegendrePolynomialAndDerivative(j,(1.-SMo)*(xi_Gauss(i)-1.)+1.,Vphi2(i,j),dummy) ! evaluate Legendre in [ 0,1]
     END DO !i
   END DO !j
   ! final Mortar: Vphi1
@@ -268,6 +284,8 @@ IMPLICIT NONE
 !==================================================================================================================================
 SDEALLOCATE(M_0_1)
 SDEALLOCATE(M_0_2)
+SDEALLOCATE(M_0_1_Mesh)
+SDEALLOCATE(M_0_2_Mesh)
 SDEALLOCATE(M_1_0)
 SDEALLOCATE(M_2_0)
 #if FV_ENABLED

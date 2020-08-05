@@ -24,22 +24,32 @@ SAVE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 INTEGER,ALLOCATABLE :: MPIRequest_U(:,:)        !< communication handle for the surface solution
+INTEGER,ALLOCATABLE :: MPIRequestSM_U(:)        !< communication handle for the surface solution
 INTEGER,ALLOCATABLE :: MPIRequest_Flux(:,:)     !< communication handle for the surface flux
+INTEGER,ALLOCATABLE :: MPIRequestSM_Flux(:)     !< communication handle for the surface flux
 #if FV_ENABLED
 INTEGER,ALLOCATABLE :: MPIRequest_FV_Elems(:,:) !< communication handle for the FV_Elems array
 INTEGER,ALLOCATABLE :: MPIRequest_FV_gradU(:,:) !< communication handle for the slopes of the FV reconstruction
 #endif
 #if EDDYVISCOSITY
 INTEGER,ALLOCATABLE :: MPIRequest_SGS(:,:)      !< communication handle for the SGS Model Indicator
+INTEGER,ALLOCATABLE :: MPIRequestSM_SGS(:)      !< communication handle for the SGS Model Indicator
 #endif
 #if PARABOLIC
 INTEGER,ALLOCATABLE :: MPIRequest_gradU(:,:,:)  !< communication handle for the surface gradients
+INTEGER,ALLOCATABLE :: MPIRequestSM_gradU(:,:)    !< communication handle for the surface gradients
 #endif /*PARABOLIC*/
+INTEGER,ALLOCATABLE :: MPIRequest_MeshMortarSend(:,:)!< communication handle for velocity and displacement on mortar interfaces
+INTEGER,ALLOCATABLE :: MPIRequest_MeshMortarRcv(:,:) !< communication handle for velocity and displacement on mortar interfaces
 INTEGER             :: nSendVal                 !< number of values to be sent
 INTEGER             :: nRecVal                  !< number of values to be received
 INTEGER             :: DataSizeSide             !< datasize of one face, =PP_nVar*(PP_N+1)**2
+INTEGER             :: DataSizeSideMesh         !< datasize of mesh on face, =3*(NGeo+1)**2
 INTEGER             :: DataSizeSidePrim         !< datasize of one face for (primitive) gradients, =PP_nVarPrim*(PP_N+1)**2
 INTEGER             :: DataSizeSideSGS          !< datasize of one face for one value, =1*(PP_N+1)**2
+#if GCL
+INTEGER             :: DataSizeSideGCL          !< datasize of one face for GCL, =1*(PP_N+1)**2
+#endif
 
 INTEGER             :: SideID_start,SideID_end
 INTEGER             :: nNbProcs                 !< number of neighbor procs, is set in ReadMesh

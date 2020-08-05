@@ -244,7 +244,7 @@ END SUBROUTINE InitBC
 !==================================================================================================================================
 !> Computes the boundary state for the different boundary conditions.
 !==================================================================================================================================
-SUBROUTINE GetBoundaryState(SideID,t,Nloc,UPrim_boundary,UPrim_master,NormVec,TangVec1,TangVec2,Face_xGP)
+SUBROUTINE GetBoundaryState(SideID,t,Nloc,UPrim_boundary,UPrim_master,NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
@@ -268,6 +268,7 @@ REAL,INTENT(IN)         :: NormVec(                 3,0:Nloc,0:ZDIM(Nloc)) !< no
 REAL,INTENT(IN)         :: TangVec1(                3,0:Nloc,0:ZDIM(Nloc)) !< tangent surface vectors 1
 REAL,INTENT(IN)         :: TangVec2(                3,0:Nloc,0:ZDIM(Nloc)) !< tangent surface vectors 2
 REAL,INTENT(IN)         :: Face_xGP(                3,0:Nloc,0:ZDIM(Nloc)) !< positions of surface flux points
+REAL,INTENT(IN)         :: Face_vGP(                3,0:Nloc,0:ZDIM(Nloc)) !< mesh velocity at surface flux points
 REAL,INTENT(OUT)        :: UPrim_boundary(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)) !< resulting boundary state
 
 ! INPUT / OUTPUT VARIABLES
@@ -280,6 +281,8 @@ REAL,DIMENSION(PP_nVar) :: Cons
 REAL                    :: MaOut
 REAL                    :: c,vmag,Ma,cb,pt,pb ! for BCType==23,24,25
 REAL                    :: U,Tb,Tt,tmp1,tmp2,tmp3,A,Rminus,nv(3) ! for BCType==27
+REAL                    :: UPrim_moving(PP_nVarPrim)             ! Temporary primitive state in moving reference frame
+REAL                    :: Face_vGP_boundary(3,0:Nloc,0:ZDIM(Nloc))! Mesh velocity in the wall-normal system
 !===================================================================================================================================
 BCType  = Boundarytype(BC(SideID),BC_TYPE)
 BCState = Boundarytype(BC(SideID),BC_STATE)
@@ -317,6 +320,10 @@ CASE(3,4,9,91,23,24,25,27)
     UPrim_boundary(3,p,q)= SUM(UPrim_master(2:4,p,q)*TangVec1(:,p,q))
     UPrim_boundary(4,p,q)= SUM(UPrim_master(2:4,p,q)*TangVec2(:,p,q))
     UPrim_boundary(5:PP_nVarPrim,p,q)= UPrim_master(5:PP_nVarPrim,p,q)
+    ! Transform mesh velocity into normal system
+    Face_vGP_boundary(1,p,q)= SUM(Face_vGP(1:3,p,q)*NormVec( :,p,q))
+    Face_vGP_boundary(2,p,q)= SUM(Face_vGP(1:3,p,q)*TangVec1(:,p,q))
+    Face_vGP_boundary(3,p,q)= SUM(Face_vGP(1:3,p,q)*TangVec2(:,p,q))
   END DO; END DO !p,q
 
 
@@ -326,9 +333,12 @@ CASE(3,4,9,91,23,24,25,27)
     ! For adiabatic wall all gradients are 0
     ! We reconstruct the BC State, rho=rho_L, velocity=0, rhoE_wall = p_Riemann/(Kappa-1)
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
+      ! Calculate local mesh velocity normal to face and take into accout for wall normal riemann problem
+      UPrim_moving = UPrim_boundary(:,p,q)
+      UPrim_moving(2) = UPrim_moving(2) - Face_vGP_boundary(1,p,q)
       ! Set pressure by solving local Riemann problem
-      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_boundary(:,p,q))
-      UPrim_boundary(2:4,p,q)= 0. ! no slip
+      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_moving(:))
+      UPrim_boundary(2:4,p,q)= Face_vGP_boundary(1:3,p,q) ! set to face velocity
       UPrim_boundary(6,p,q) = UPrim_master(6,p,q) ! adiabatic => temperature from the inside
       ! set density via ideal gas equation, consistent to pressure and temperature
       UPrim_boundary(1,p,q) = UPrim_boundary(5,p,q) / (UPrim_boundary(6,p,q) * R)
@@ -337,9 +347,12 @@ CASE(3,4,9,91,23,24,25,27)
     ! For isothermal wall, all gradients are from interior
     ! We reconstruct the BC State, rho=rho_L, velocity=0, rhoE_wall =  rho_L*C_v*Twall
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
+      ! Calculate riemann wall problem in moving reference frame
+      UPrim_moving = UPrim_boundary(:,p,q)
+      UPrim_moving(2) = UPrim_moving(2) - Face_vGP_boundary(1,p,q)
       ! Set pressure by solving local Riemann problem
-      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_boundary(:,p,q))
-      UPrim_boundary(2:4,p,q)= 0. ! no slip
+      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_moving(:))
+      UPrim_boundary(2:4,p,q)= Face_vGP_boundary(1:3,p,q) ! set to face velocity
       UPrim_boundary(6,p,q) = RefStatePrim(6,BCState) ! temperature from RefState
       ! set density via ideal gas equation, consistent to pressure and temperature
       UPrim_boundary(1,p,q) = UPrim_boundary(5,p,q) / (UPrim_boundary(6,p,q) * R)
@@ -348,9 +361,12 @@ CASE(3,4,9,91,23,24,25,27)
     ! vel=(0,v_in,w_in)
     ! NOTE: from this state ONLY the velocities should actually be used for the diffusive flux
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
+      ! Calculate riemann wall problem in moving reference frame
+      UPrim_moving = UPrim_boundary(:,p,q)
+      UPrim_moving(2) = UPrim_moving(2) - Face_vGP_boundary(1,p,q)
       ! Set pressure by solving local Riemann problem
-      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_boundary(:,p,q))
-      UPrim_boundary(2,p,q) = 0. ! slip in tangential directions
+      UPrim_boundary(5,p,q) = PRESSURE_RIEMANN(UPrim_moving(:))
+      UPrim_boundary(2,p,q) = Face_vGP(1,p,q) ! set only normal velocity to mesh velocity
       ! Referring to Toro: Riemann Solvers and Numerical Methods for Fluid Dynamics (Chapter 6.3.3 Boundary Conditions)
       ! the density is chosen from the inside
       UPrim_boundary(1,p,q) = UPrim_master(1,p,q) ! density from inside
@@ -368,7 +384,7 @@ CASE(3,4,9,91,23,24,25,27)
     MaOut=RefStatePrim(2,BCState)
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
       c=SQRT(kappa*UPrim_boundary(5,p,q)/UPrim_boundary(1,p,q))
-      vmag=NORM2(UPrim_boundary(2:4,p,q))
+      vmag=SQRT(DOT_PRODUCT(UPrim_boundary(2:4,p,q),UPrim_boundary(2:4,p,q)))
       Ma=vmag/c
       cb=vmag/MaOut
       IF(Ma<1)THEN
@@ -492,7 +508,7 @@ SUBROUTINE GetBoundaryFlux(SideID,t,Nloc,Flux,UPrim_master,                   &
 #if PARABOLIC
                            gradUx_master,gradUy_master,gradUz_master,&
 #endif
-                           NormVec,TangVec1,TangVec2,Face_xGP)
+                           Face_vGP,NormVec,TangVec1,TangVec2,Face_xGP)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
@@ -519,6 +535,7 @@ REAL,INTENT(IN)      :: gradUx_master(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)) !< inner 
 REAL,INTENT(IN)      :: gradUy_master(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)) !< inner surface solution gradients in y-direction
 REAL,INTENT(IN)      :: gradUz_master(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)) !< inner surface solution gradients in z-direction
 #endif /*PARABOLIC*/
+REAL,INTENT(IN)      :: Face_vGP(3,0:Nloc,0:ZDIM(Nloc))                !< Mesh velocity on faces
 REAL,INTENT(IN)      :: NormVec (3,0:Nloc,0:ZDIM(Nloc))                !< normal vector on surfaces
 REAL,INTENT(IN)      :: TangVec1(3,0:Nloc,0:ZDIM(Nloc))                !< tangential1 vector on surfaces
 REAL,INTENT(IN)      :: TangVec2(3,0:Nloc,0:ZDIM(Nloc))                !< tangential2 vector on surfaces
@@ -548,6 +565,7 @@ REAL                                 :: gradUx_vTang2,gradUy_vTang2,gradUz_vNorm
 REAL                                 :: gradUn_vTang2,gradUt1_vTang2,gradUt2_vNormal,gradUt2_vTang1,gradUt2_vTang2
 #endif
 #endif /*PARABOLIC*/
+REAL                                 :: v_n  ! Local surface-normal mesh velocity
 !==================================================================================================================================
 BCType  = Boundarytype(BC(SideID),BC_TYPE)
 BCState = Boundarytype(BC(SideID),BC_STATE)
@@ -560,7 +578,7 @@ IF (BCType.LT.0) THEN ! testcase boundary condition
                                NormVec,TangVec1,TangVec2,Face_xGP)
 ELSE
   CALL GetBoundaryState(SideID,t,Nloc,UPrim_boundary,UPrim_master,&
-      NormVec,TangVec1,TangVec2,Face_xGP)
+      NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP)
 
   SELECT CASE(BCType)
   CASE(2,12,121,22,23,24,25,27) ! Riemann-Type BCs
@@ -569,7 +587,7 @@ ELSE
       CALL PrimToCons(UPrim_boundary(:,p,q),      UCons_boundary(:,p,q))
     END DO; END DO ! p,q=0,PP_N
     CALL Riemann(Nloc,Flux,UCons_master,UCons_boundary,UPrim_master,UPrim_boundary, &
-        NormVec,TangVec1,TangVec2,doBC=.TRUE.)
+        Face_vGP,NormVec,TangVec1,TangVec2,doBC=.TRUE.)
 #if PARABOLIC
     CALL ViscousFlux(Nloc,Fd_Face_loc,UPrim_master,UPrim_boundary,&
          gradUx_master,gradUy_master,gradUz_master,&
@@ -587,11 +605,19 @@ ELSE
     muSGS_master(:,:,:,SideID)=0.
 #endif
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
-      ! Now we compute the 1D Euler flux, but use the info that the normal component u=0
-      ! we directly tranform the flux back into the Cartesian coords: F=(0,n1*p,n2*p,n3*p,0)^T
+      ! Calculate local mesh velocity normal to face
+      v_n = SUM(Face_vGP(1:3,p,q)*NormVec(1:3,p,q))
+      ! Now we compute the 1D Euler flux, but use the info that the normal component u_n=v_n
+      ! flux in normal direction and normal coordinate system: 
+      ! F(U_n)-Q*v_n= / rho*(u_n-v_n)          \
+      !               | rho*u_n*(u_n-v_n)+p    |
+      !               | rho*u_t1*(u_n-v_n)     |
+      !               | rho*u_t2*(u_n-v_n)     |
+      !               \ rho*e*(u_n-v_n)+p*u_n  /
+      ! we directly tranform the flux back into the Cartesian coords: F=(0,n1*p,n2*p,n3*p,p*u_n)^T
       Flux(1  ,p,q) = 0.
       Flux(2:4,p,q) = UPrim_boundary(5,p,q)*NormVec(:,p,q)
-      Flux(5  ,p,q) = 0.
+      Flux(5  ,p,q) = UPrim_boundary(5,p,q)*v_n
     END DO; END DO !p,q
     ! Diffusion
 #if PARABOLIC
@@ -809,7 +835,7 @@ END SUBROUTINE GetBoundaryFlux
 !==================================================================================================================================
 !> Computes the gradient at a boundary for FV subcells.
 !==================================================================================================================================
-SUBROUTINE GetBoundaryFVgradient(SideID,t,gradU,UPrim_master,NormVec,TangVec1,TangVec2,Face_xGP,sdx_Face)
+SUBROUTINE GetBoundaryFVgradient(SideID,t,gradU,UPrim_master,NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP,sdx_Face)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals       ,ONLY: Abort
@@ -826,6 +852,7 @@ REAL,INTENT(IN)   :: NormVec (              3,0:PP_N,0:PP_NZ)    !< normal vecto
 REAL,INTENT(IN)   :: TangVec1(              3,0:PP_N,0:PP_NZ)    !< tangential1 vector on surfaces
 REAL,INTENT(IN)   :: TangVec2(              3,0:PP_N,0:PP_NZ)    !< tangential2 vector on surfaces
 REAL,INTENT(IN)   :: Face_xGP(              3,0:PP_N,0:PP_NZ)    !< positions of surface flux points
+REAL,INTENT(IN)   :: Face_vGP(              3,0:PP_N,0:PP_NZ)    !< mesh velocity on surface
 REAL,INTENT(IN)   :: sdx_Face(                0:PP_N,0:PP_NZ,3)  !< distance between center of FV-cell and boundary
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -840,7 +867,7 @@ IF (BCType.LT.0) THEN ! testcase boundary condition
   CALL GetBoundaryFVgradientTestcase(SideID,t,gradU,UPrim_master)
 ELSE
   CALL GetBoundaryState(SideID,t,PP_N,UPrim_boundary,UPrim_master,&
-      NormVec,TangVec1,TangVec2,Face_xGP)
+      NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP)
   SELECT CASE(BCType)
   CASE(2,3,4,9,91,12,121,22,23,24,25,27)
     DO q=0,PP_NZ; DO p=0,PP_N
@@ -861,7 +888,7 @@ END SUBROUTINE GetBoundaryFVgradient
 !==================================================================================================================================
 !> Computes the boundary fluxes for the lifting procedure for a given Cartesian mesh face (defined by SideID).
 !==================================================================================================================================
-SUBROUTINE Lifting_GetBoundaryFlux(SideID,t,UPrim_master,Flux,NormVec,TangVec1,TangVec2,Face_xGP,SurfElem)
+SUBROUTINE Lifting_GetBoundaryFlux(SideID,t,UPrim_master,Flux,NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP,SurfElem)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
@@ -879,6 +906,7 @@ REAL,INTENT(IN)   :: NormVec (              3,0:PP_N,0:PP_NZ) !< normal vector o
 REAL,INTENT(IN)   :: TangVec1(              3,0:PP_N,0:PP_NZ) !< tangential1 vector on surfaces
 REAL,INTENT(IN)   :: TangVec2(              3,0:PP_N,0:PP_NZ) !< tangential2 vector on surfaces
 REAL,INTENT(IN)   :: Face_xGP(              3,0:PP_N,0:PP_NZ) !< positions of surface flux points
+REAL,INTENT(IN)   :: Face_vGP(              3,0:PP_N,0:PP_NZ) !< mesh velocity on surface
 REAL,INTENT(IN)   :: SurfElem(                0:PP_N,0:PP_NZ) !< surface element to multiply with flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -893,16 +921,13 @@ IF (BCType.LT.0) THEN ! testcase boundary conditions
   CALL Lifting_GetBoundaryFluxTestcase(SideID,t,UPrim_master,Flux)
 ELSE
   CALL GetBoundaryState(SideID,t,PP_N,UPrim_boundary,UPrim_master,&
-                        NormVec,TangVec1,TangVec2,Face_xGP)
+                        NormVec,TangVec1,TangVec2,Face_xGP,Face_vGP)
   SELECT CASE(BCType)
   CASE(2,12,121,22,23,24,25,27) ! Riemann solver based BCs
       Flux=0.5*(UPrim_master+UPrim_boundary)
   CASE(3,4) ! No-slip wall BCs
     DO q=0,PP_NZ; DO p=0,PP_N
-      Flux(1  ,p,q) = UPrim_Boundary(1,p,q)
-      Flux(2:4,p,q) = 0.
-      Flux(5  ,p,q) = UPrim_Boundary(5,p,q)
-      Flux(6  ,p,q) = UPrim_Boundary(6,p,q)
+      Flux(1:6,p,q) = UPrim_Boundary(1:6,p,q)
     END DO; END DO !p,q
   CASE(9,91)
     ! Euler/(full-)slip wall, symmetry BC

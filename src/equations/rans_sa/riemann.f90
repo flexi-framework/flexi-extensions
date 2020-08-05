@@ -27,9 +27,10 @@ PRIVATE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ABSTRACT INTERFACE
-  SUBROUTINE RiemannInt(F_L,F_R,U_LL,U_RR,F)
+  SUBROUTINE RiemannInt(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
     REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
     REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+    REAL,INTENT(IN)                    :: MeshVel_n
     REAL,DIMENSION(PP_nVar),INTENT(OUT):: F
   END SUBROUTINE
 END INTERFACE
@@ -132,7 +133,7 @@ END SUBROUTINE InitRiemann
 !> Conservative States are rotated into normal direction in this routine and are NOT backrotated: don't use it after this routine!!
 !> Attention 2: numerical flux is backrotated at the end of the routine!!
 !==================================================================================================================================
-SUBROUTINE Riemann(Nloc,FOut,U_L,U_R,UPrim_L,UPrim_R,nv,t1,t2,doBC)
+SUBROUTINE Riemann(Nloc,FOut,U_L,U_R,UPrim_L,UPrim_R,MeshVel,nv,t1,t2,doBC)
 ! MODULES
 USE MOD_Flux         ,ONLY:EvalEulerFlux1D_fast
 IMPLICIT NONE
@@ -143,6 +144,7 @@ REAL,DIMENSION(PP_nVar    ,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_L        !< con
 REAL,DIMENSION(PP_nVar    ,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_R        !< conservative solution at right side of the interface
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: UPrim_L    !< primitive solution at left side of the interface
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: UPrim_R    !< primitive solution at right side of the interface
+REAL,DIMENSION(3          ,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)  :: MeshVel    !< Mesh velocity on the interface
 !> normal vector and tangential vectors at side
 REAL,DIMENSION(          3,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: nv,t1,t2
 LOGICAL,INTENT(IN)                                        :: doBC       !< marker whether side is a BC side
@@ -153,6 +155,7 @@ INTEGER                 :: i,j
 REAL,DIMENSION(PP_nVar) :: F_L,F_R,F
 REAL,DIMENSION(PP_2Var) :: U_LL,U_RR
 PROCEDURE(RiemannInt),POINTER :: Riemann_loc !< pointer defining the standard inner Riemann solver
+REAL                    :: MeshVel_n
 !==================================================================================================================================
 IF (doBC) THEN
   Riemann_loc => RiemannBC_pointer
@@ -202,7 +205,15 @@ DO j=0,ZDIM(Nloc); DO i=0,Nloc
   CALL EvalEulerFlux1D_fast(U_LL,F_L)
   CALL EvalEulerFlux1D_fast(U_RR,F_R)
 
-  CALL Riemann_loc(F_L,F_R,U_LL,U_RR,F)
+  ! Calculate mesh velocity normal to face
+  MeshVel_n = MeshVel(1,i,j)*nv(1,i,j) + &
+              MeshVel(2,i,j)*nv(2,i,j) + &
+              MeshVel(3,i,j)*nv(3,i,j)
+  ! Contribution of moving mesh
+  F_L = F_L - U_LL(CONS)*MeshVel_n
+  F_R = F_R - U_RR(CONS)*MeshVel_n
+
+  CALL Riemann_loc(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 
   ! Back Rotate the normal flux into Cartesian direction
   Fout(DENS,i,j)=F(DENS)
@@ -270,7 +281,7 @@ END SUBROUTINE ViscousFlux
 !==================================================================================================================================
 !> Local Lax-Friedrichs (Rusanov) Riemann solver
 !==================================================================================================================================
-SUBROUTINE Riemann_LF(F_L,F_R,U_LL,U_RR,F)
+SUBROUTINE Riemann_LF(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa
 IMPLICIT NONE
@@ -280,6 +291,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                 !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES

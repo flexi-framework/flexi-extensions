@@ -41,51 +41,31 @@ PUBLIC :: InitCalctimestep,CALCTIMESTEP,FinalizeCalctimestep
 REAL,ALLOCATABLE :: MetricsAdv(:,:,:,:,:,:)  !< support variable: NORM2(Metricsfgh)/J
 #if PARABOLIC
 REAL,ALLOCATABLE :: MetricsVisc(:,:,:,:,:,:) !< support variable: kappa/Pr*(SUM((Metricsfgh/J)**2))
+REAL             :: KappasPr_max             !< support variable: MAX(4./3.,kappa/Pr)
 #endif
 
 CONTAINS
 
 !==================================================================================================================================
-!> Precompute some metric support variables
+!> For moving meshes, only allocate the metrics for the timestep calculation here. We need to compute them in every timestep from
+!> our current Jacobian and current metric terms.
 !==================================================================================================================================
 SUBROUTINE InitCalctimestep()
 ! MODULES
 USE MOD_PreProc
-USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
+USE MOD_Mesh_Vars,ONLY:nElems
 #if PARABOLIC
 USE MOD_EOS_Vars ,ONLY:KappasPr
 #endif /*PARABOLIC*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: i,j,k,iElem,FVE
-#if PARABOLIC
-REAL                         :: KappasPr_max
-#endif /*PARABOLIC*/
 !==================================================================================================================================
 
 ALLOCATE(MetricsAdv(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
-DO FVE=0,FV_ENABLED
-  DO iElem=1,nElems
-    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-      MetricsAdv(1,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_fTilde(:,i,j,k,iElem,FVE))
-      MetricsAdv(2,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_gTilde(:,i,j,k,iElem,FVE))
-      MetricsAdv(3,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_hTilde(:,i,j,k,iElem,FVE))
-    END DO; END DO; END DO
-  END DO
-END DO
 #if PARABOLIC
 ALLOCATE(MetricsVisc(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
 KappasPr_max=KAPPASPR_MAX_TIMESTEP_H()
-DO FVE=0,FV_ENABLED
-  DO iElem=1,nElems
-    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-      MetricsVisc(1,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_fTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
-      MetricsVisc(2,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_gTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
-      MetricsVisc(3,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_hTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
-    END DO; END DO; END DO
-  END DO
-END DO
 #endif /*PARABOLIC*/
 END SUBROUTINE
 
@@ -102,6 +82,7 @@ USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_DG_Vars      ,ONLY:U
 USE MOD_Mesh_Vars    ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Elem_xGP,nElems
+USE MOD_MoveMesh_Vars,ONLY:Elem_vGP
 #if PP_dim==3
 USE MOD_Mesh_Vars    ,ONLY:Metrics_hTilde
 #endif
@@ -134,6 +115,31 @@ REAL                         :: chi,muTurb,muEff,muTilde
 !==================================================================================================================================
 errType=0
 
+! Calculate current metrics for timestep calculation
+DO FVE=0,FV_ENABLED
+  DO iElem=1,nElems
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      MetricsAdv(1,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_fTilde(:,i,j,k,iElem,FVE))
+      MetricsAdv(2,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_gTilde(:,i,j,k,iElem,FVE))
+#if PP_dim==3
+      MetricsAdv(3,i,j,k,iElem,FVE)=sJ(i,j,k,iElem,FVE)*NORM2(Metrics_hTilde(:,i,j,k,iElem,FVE))
+#endif
+    END DO; END DO; END DO
+  END DO
+END DO
+#if PARABOLIC
+DO FVE=0,FV_ENABLED
+  DO iElem=1,nElems
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      MetricsVisc(1,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_fTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
+      MetricsVisc(2,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_gTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
+#if PP_dim==3
+      MetricsVisc(3,i,j,k,iElem,FVE)=KappasPR_max*(SUM((Metrics_hTilde(:,i,j,k,iElem,FVE)*sJ(i,j,k,iElem,FVE))**2))
+#endif
+    END DO; END DO; END DO
+  END DO
+END DO
+#endif /*PARABOLIC*/
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
 DO iElem=1,nElems
@@ -155,6 +161,8 @@ DO iElem=1,nElems
       errType=1
     END IF
     c=SPEEDOFSOUND_HE(UE)
+    ! Take mesh velocity into account
+    UE(VELV)=UE(VELV)-Elem_vGP(1:3,i,j,k,iElem)
     vsJ=UE(VELV)*sJ(i,j,k,iElem,FVE)
     Max_Lambda(1)=MAX(Max_Lambda(1),ABS(SUM(Metrics_fTilde(:,i,j,k,iElem,FVE)*vsJ)) + &
                                               c*MetricsAdv(1,i,j,k,iElem,FVE))

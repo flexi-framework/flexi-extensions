@@ -27,9 +27,10 @@ PRIVATE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ABSTRACT INTERFACE
-  SUBROUTINE RiemannInt(F_L,F_R,U_LL,U_RR,F)
+  PPURE SUBROUTINE RiemannInt(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
     REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
     REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+    REAL,INTENT(IN)                    :: MeshVel_n
     REAL,DIMENSION(PP_nVar),INTENT(OUT):: F
   END SUBROUTINE
 END INTERFACE
@@ -48,6 +49,7 @@ INTEGER,PARAMETER      :: PRM_RIEMANN_HLLE          = 5
 INTEGER,PARAMETER      :: PRM_RIEMANN_HLLEM         = 6
 #ifdef SPLIT_DG
 INTEGER,PARAMETER      :: PRM_RIEMANN_CH            = 7
+INTEGER,PARAMETER      :: PRM_RIEMANN_WINTERS       = 8
 INTEGER,PARAMETER      :: PRM_RIEMANN_Average       = 0
 #endif
 
@@ -107,6 +109,7 @@ CALL addStrListEntry('Riemann','hlle',         PRM_RIEMANN_HLLE)
 CALL addStrListEntry('Riemann','hllem',        PRM_RIEMANN_HLLEM)
 #ifdef SPLIT_DG
 CALL addStrListEntry('Riemann','ch',           PRM_RIEMANN_CH)
+CALL addStrListEntry('Riemann','winters',      PRM_RIEMANN_WINTERS)
 CALL addStrListEntry('Riemann','avg',          PRM_RIEMANN_Average)
 #endif
 CALL prms%CreateIntFromStringOption('RiemannBC', "Riemann solver used for boundary conditions: Same, LF, Roe, RoeEntropyFix, "//&
@@ -122,6 +125,7 @@ CALL addStrListEntry('RiemannBC','hlle',         PRM_RIEMANN_HLLE)
 CALL addStrListEntry('RiemannBC','hllem',        PRM_RIEMANN_HLLEM)
 #ifdef SPLIT_DG
 CALL addStrListEntry('RiemannBC','ch',           PRM_RIEMANN_CH)
+CALL addStrListEntry('RiemannBC','winters',      PRM_RIEMANN_WINTERS)
 CALL addStrListEntry('RiemannBC','avg',          PRM_RIEMANN_Average)
 #endif
 CALL addStrListEntry('RiemannBC','same',         PRM_RIEMANN_SAME)
@@ -203,6 +207,8 @@ CASE(PRM_RIEMANN_ROEL2)
   Riemann_pointer => Riemann_RoeL2
 CASE(PRM_RIEMANN_CH)
   Riemann_pointer => Riemann_CH
+CASE(PRM_RIEMANN_Winters)
+  Riemann_pointer => Riemann_Winters
 CASE(PRM_RIEMANN_Average)
   Riemann_pointer => Riemann_FluxAverage
 CASE DEFAULT
@@ -224,6 +230,8 @@ CASE(PRM_RIEMANN_ROEL2)
   RiemannBC_pointer => Riemann_RoeL2
 CASE(PRM_RIEMANN_CH)
   Riemann_pointer => Riemann_CH
+CASE(PRM_RIEMANN_WINTERS)
+  Riemann_pointer => Riemann_Winters
 CASE(PRM_RIEMANN_Average)
   RiemannBC_pointer => Riemann_FluxAverage
 CASE DEFAULT
@@ -238,7 +246,7 @@ END SUBROUTINE InitRiemann
 !> Conservative States are rotated into normal direction in this routine and are NOT backrotated: don't use it after this routine!!
 !> Attention 2: numerical flux is backrotated at the end of the routine!!
 !==================================================================================================================================
-SUBROUTINE Riemann(Nloc,FOut,U_L,U_R,UPrim_L,UPrim_R,nv,t1,t2,doBC)
+SUBROUTINE Riemann(Nloc,FOut,U_L,U_R,UPrim_L,UPrim_R,MeshVel,nv,t1,t2,doBC)
 ! MODULES
 USE MOD_Flux         ,ONLY:EvalEulerFlux1D_fast
 IMPLICIT NONE
@@ -249,6 +257,7 @@ REAL,DIMENSION(PP_nVar    ,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_L        !< con
 REAL,DIMENSION(PP_nVar    ,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: U_R        !< conservative solution at right side of the interface
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: UPrim_L    !< primitive solution at left side of the interface
 REAL,DIMENSION(PP_nVarPrim,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: UPrim_R    !< primitive solution at right side of the interface
+REAL,DIMENSION(3          ,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)  :: MeshVel    !< Mesh velocity on the interface
 !> normal vector and tangential vectors at side
 REAL,DIMENSION(          3,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: nv,t1,t2
 LOGICAL,INTENT(IN)                                          :: doBC       !< marker whether side is a BC side
@@ -259,6 +268,7 @@ INTEGER                 :: i,j
 REAL,DIMENSION(PP_nVar) :: F_L,F_R,F
 REAL,DIMENSION(PP_2Var) :: U_LL,U_RR
 PROCEDURE(RiemannInt),POINTER :: Riemann_loc !< pointer defining the standard inner Riemann solver
+REAL                    :: MeshVel_n
 !==================================================================================================================================
 IF (doBC) THEN
   Riemann_loc => RiemannBC_pointer
@@ -305,12 +315,23 @@ DO j=0,ZDIM(Nloc); DO i=0,Nloc
   U_RR(MOM3)=0.
 #endif
 
-# ifndef SPLIT_DG
+#ifndef SPLIT_DG
   CALL EvalEulerFlux1D_fast(U_LL,F_L)
   CALL EvalEulerFlux1D_fast(U_RR,F_R)
+#else
+  F_L = 0.
+  F_R = 0.
 #endif /*SPLIT_DG*/
 
-  CALL Riemann_loc(F_L,F_R,U_LL,U_RR,F)
+  ! Calculate mesh velocity normal to face
+  MeshVel_n = MeshVel(1,i,j)*nv(1,i,j) + &
+              MeshVel(2,i,j)*nv(2,i,j) + &
+              MeshVel(3,i,j)*nv(3,i,j)
+  ! Contribution of moving mesh
+  F_L = F_L - U_LL(CONS)*MeshVel_n
+  F_R = F_R - U_RR(CONS)*MeshVel_n
+
+  CALL Riemann_loc(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 
   ! Back Rotate the normal flux into Cartesian direction
   Fout(DENS,i,j)=F(DENS)
@@ -392,7 +413,7 @@ END SUBROUTINE ViscousFlux
 !==================================================================================================================================
 !> Local Lax-Friedrichs (Rusanov) Riemann solver
 !==================================================================================================================================
-SUBROUTINE Riemann_LF(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_LF(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa
 #ifdef SPLIT_DG
@@ -405,6 +426,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                 !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -418,7 +440,7 @@ LambdaMax = MAX( ABS(U_RR(VEL1)),ABS(U_LL(VEL1)) ) + MAX( SPEEDOFSOUND_HE(U_LL),
 F = 0.5*((F_L+F_R) - LambdaMax*(U_RR(CONS) - U_LL(CONS)))
 #else
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 ! compute surface flux
 F = F - 0.5*LambdaMax*(U_RR(CONS) - U_LL(CONS))
 #endif /*SPLIT_DG*/
@@ -428,7 +450,7 @@ END SUBROUTINE Riemann_LF
 !=================================================================================================================================
 !> Harten-Lax-Van-Leer Riemann solver resolving contact discontinuity
 !=================================================================================================================================
-PPURE SUBROUTINE Riemann_HLLC(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_HLLC(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: KappaM1
 IMPLICIT NONE
@@ -438,6 +460,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                            !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F    !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -475,25 +498,27 @@ Roec      = SQRT(KappaM1*(RoeH-0.5*absVel))
 Ssl = RoeVel(1) - Roec
 Ssr = RoeVel(1) + Roec
 
+!NOTE: in HLLC, we have to consider the mesh velocity in the choice of the fluxes:
+
 ! positive supersonic speed
-IF(Ssl .GE. 0.)THEN
+IF(Ssl .GE. MeshVel_n)THEN
   F=F_L
 ! negative supersonic speed
-ELSEIF(Ssr .LE. 0.)THEN
+ELSEIF(Ssr .LE. MeshVel_n)THEN
   F=F_R
 ! subsonic case
 ELSE
   sMu_L = Ssl - U_LL(VEL1)
   sMu_R = Ssr - U_RR(VEL1)
   SStar = (U_RR(PRES) - U_LL(PRES) + U_LL(MOM1)*sMu_L - U_RR(MOM1)*sMu_R) / (U_LL(DENS)*sMu_L - U_RR(DENS)*sMu_R)
-  IF ((Ssl .LE. 0.).AND.(SStar .GE. 0.)) THEN
+  IF ((Ssl .LE. MeshVel_n).AND.(SStar .GE. MeshVel_n)) THEN
     EStar  = TOTALENERGY_HE(U_LL) + (SStar-U_LL(VEL1))*(SStar + U_LL(PRES)*U_LL(SRHO)/sMu_L)
     U_Star = U_LL(DENS) * sMu_L/(Ssl-SStar) * (/ 1., SStar, U_LL(VEL2:VEL3), EStar /)
-    F=F_L+Ssl*(U_Star-U_LL(CONS))
+    F=F_L+(Ssl-MeshVel_n)*(U_Star-U_LL(CONS))
   ELSE
     EStar  = TOTALENERGY_HE(U_RR) + (SStar-U_RR(VEL1))*(SStar + U_RR(PRES)*U_RR(SRHO)/sMu_R)
     U_Star = U_RR(DENS) * sMu_R/(Ssr-SStar) * (/ 1., SStar, U_RR(VEL2:VEL3), EStar /)
-    F=F_R+Ssr*(U_Star-U_RR(CONS))
+    F=F_R+(Ssr-MeshVel_n)*(U_Star-U_RR(CONS))
   END IF
 END IF ! subsonic case
 END SUBROUTINE Riemann_HLLC
@@ -502,7 +527,7 @@ END SUBROUTINE Riemann_HLLC
 !=================================================================================================================================
 !> Roe's approximate Riemann solver
 !=================================================================================================================================
-SUBROUTINE Riemann_Roe(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_Roe(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars  ,ONLY: kappaM1
 #ifdef SPLIT_DG
@@ -515,6 +540,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -539,6 +565,7 @@ Roec      = ROEC_RIEMANN_H(RoeH,RoeVel)
 
 ! mean eigenvalues and eigenvectors
 a  = (/ RoeVel(1)-Roec, RoeVel(1), RoeVel(1), RoeVel(1), RoeVel(1)+Roec      /)
+a  = a - MeshVel_n ! take mesh velocity into account
 r1 = (/ 1.,             a(1),      RoeVel(2), RoeVel(3), RoeH-RoeVel(1)*Roec /)
 r2 = (/ 1.,             RoeVel(1), RoeVel(2), RoeVel(3), 0.5*absVel          /)
 r3 = (/ 0.,             0.,        1.,        0.,        RoeVel(2)           /)
@@ -564,7 +591,7 @@ F=0.5*((F_L+F_R) - &
        Alpha5*ABS(a(5))*r5)
 #else
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 ! assemble Roe flux
 F = F - 0.5*(Alpha1*ABS(a(1))*r1 + &
              Alpha2*ABS(a(2))*r2 + &
@@ -580,7 +607,7 @@ END SUBROUTINE Riemann_Roe
 !> Pelanti, Marica & Quartapelle, Luigi & Vigevano, L & Vigevano, Luigi. (2018):
 !>  A review of entropy fixes as applied to Roe's linearization.
 !=================================================================================================================================
-SUBROUTINE Riemann_RoeEntropyFix(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_RoeEntropyFix(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa,KappaM1
 #ifdef SPLIT_DG
@@ -593,6 +620,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -627,6 +655,7 @@ Delta_U(5)   = U_RR(PRES) - U_LL(PRES)
 
 ! mean eigenvalues and eigenvectors
 a  = (/ RoeVel(1)-Roec, RoeVel(1), RoeVel(1), RoeVel(1), RoeVel(1)+Roec      /)
+a  = a - MeshVel_n ! take mesh velocity into account
 r1 = (/ 1.,             a(1),      RoeVel(2), RoeVel(3), RoeH-RoeVel(1)*Roec /)
 r2 = (/ 1.,             RoeVel(1), RoeVel(2), RoeVel(3), 0.5*absVel          /)
 r3 = (/ 0.,             0.,        1.,        0.,        RoeVel(2)           /)
@@ -677,7 +706,7 @@ F=0.5*((F_L+F_R)        - &
        Alpha(5)*a(5)*r5)
 #else
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 ! for KG or PI flux eigenvalues have to be altered to ensure consistent KE dissipation
 ! assemble Roe flux
 F= F - 0.5*(Alpha(1)*a(1)*r1 + &
@@ -691,7 +720,7 @@ END SUBROUTINE Riemann_RoeEntropyFix
 !=================================================================================================================================
 !> low mach number Roe's approximate Riemann solver according to Oßwald(2015)
 !=================================================================================================================================
-SUBROUTINE Riemann_RoeL2(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_RoeL2(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars  ,ONLY: kappaM1,kappa
 #ifdef SPLIT_DG
@@ -704,6 +733,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -729,6 +759,7 @@ Roec      = ROEC_RIEMANN_H(RoeH,RoeVel)
 
 ! mean eigenvalues and eigenvectors
 a  = (/ RoeVel(1)-Roec, RoeVel(1), RoeVel(1), RoeVel(1), RoeVel(1)+Roec      /)
+a  = a - MeshVel_n ! take mesh velocity into account
 r1 = (/ 1.,             a(1),      RoeVel(2), RoeVel(3), RoeH-RoeVel(1)*Roec /)
 r2 = (/ 1.,             RoeVel(1), RoeVel(2), RoeVel(3), 0.5*absVel          /)
 r3 = (/ 0.,             0.,        1.,        0.,        RoeVel(2)           /)
@@ -760,7 +791,7 @@ F=0.5*((F_L+F_R) - &
        Alpha5*ABS(a(5))*r5)
 #else
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 ! assemble Roe flux
 F = F - 0.5*(Alpha1*ABS(a(1))*r1 + &
              Alpha2*ABS(a(2))*r2 + &
@@ -774,7 +805,7 @@ END SUBROUTINE Riemann_RoeL2
 !=================================================================================================================================
 !> Standard Harten-Lax-Van-Leer Riemann solver without contact discontinuity
 !=================================================================================================================================
-PPURE SUBROUTINE Riemann_HLL(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_HLL(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars, ONLY: KappaM1
 IMPLICIT NONE
@@ -784,6 +815,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -809,6 +841,9 @@ Roec      = ROEC_RIEMANN_H(RoeH,RoeVel)
 ! Better Roe estimate for wave speeds Davis, Einfeldt
 Ssl = RoeVel(1) - Roec
 Ssr = RoeVel(1) + Roec
+! correction of wave speeds according to the mesh velocity
+Ssl = Ssl - MeshVel_n
+Ssr = Ssr - MeshVel_n
 ! positive supersonic speed
 IF(Ssl .GE. 0.)THEN
   F=F_L
@@ -825,7 +860,7 @@ END SUBROUTINE Riemann_HLL
 !=================================================================================================================================
 !> Harten-Lax-Van-Leer-Einfeldt Riemann solver
 !=================================================================================================================================
-PPURE SUBROUTINE Riemann_HLLE(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_HLLE(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 !=================================================================================================================================
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa,KappaM1
@@ -836,6 +871,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -858,6 +894,9 @@ Roec      = ROEC_RIEMANN_H(RoeH,RoeVel)
 beta=BETA_RIEMANN_H()
 SsL=MIN(RoeVel(1)-Roec,U_LL(VEL1) - beta*SPEEDOFSOUND_HE(U_LL), 0.)
 SsR=MAX(RoeVel(1)+Roec,U_RR(VEL1) + beta*SPEEDOFSOUND_HE(U_RR), 0.)
+! correction of wave speeds according to the mesh velocity
+Ssl = Ssl - MeshVel_n
+Ssr = Ssr - MeshVel_n
 
 ! positive supersonic speed
 IF(Ssl .GE. 0.)THEN
@@ -875,7 +914,7 @@ END SUBROUTINE Riemann_HLLE
 !=================================================================================================================================
 !> Harten-Lax-Van-Leer-Einfeldt-Munz Riemann solver
 !=================================================================================================================================
-PPURE SUBROUTINE Riemann_HLLEM(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_HLLEM(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 !=================================================================================================================================
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa,KappaM1
@@ -886,6 +925,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F        !< resulting Riemann flux
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -911,6 +951,9 @@ RoeDens   = SQRT(U_LL(DENS)*U_RR(DENS))
 beta=BETA_RIEMANN_H()
 SsL=MIN(RoeVel(1)-Roec,U_LL(VEL1) - beta*SPEEDOFSOUND_HE(U_LL), 0.)
 SsR=MAX(RoeVel(1)+Roec,U_RR(VEL1) + beta*SPEEDOFSOUND_HE(U_RR), 0.)
+! correction of wave speeds according to the mesh velocity
+Ssl = Ssl - MeshVel_n
+Ssr = Ssr - MeshVel_n
 
 ! positive supersonic speed
 IF(Ssl .GE. 0.)THEN
@@ -939,7 +982,7 @@ END SUBROUTINE Riemann_HLLEM
 !==================================================================================================================================
 !> Riemann solver using purely the average fluxes
 !==================================================================================================================================
-SUBROUTINE Riemann_FluxAverage(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_FluxAverage(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_SplitFlux     ,ONLY: SplitDGSurface_pointer
 IMPLICIT NONE
@@ -949,6 +992,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                 !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -956,14 +1000,13 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
 ! LOCAL VARIABLES
 !==================================================================================================================================
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 END SUBROUTINE Riemann_FluxAverage
-
 
 !==================================================================================================================================
 !> kinetic energy preserving and entropy consistent flux according to Chandrashekar (2012)
 !==================================================================================================================================
-SUBROUTINE Riemann_CH(F_L,F_R,U_LL,U_RR,F)
+PPURE SUBROUTINE Riemann_CH(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
 ! MODULES
 USE MOD_EOS_Vars      ,ONLY: Kappa,sKappaM1
 USE MOD_SplitFlux     ,ONLY: SplitDGSurface_pointer,GetLogMean
@@ -974,6 +1017,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
                                                 !> advection fluxes on the left/right side of the interface
 REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
 REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -1002,7 +1046,7 @@ beta_RR = 0.5*U_RR(DENS)/U_RR(PRES)
 CALL GetLogMean(beta_LL,beta_RR,betaLogMean)
 
 ! get split flux
-CALL SplitDGSurface_pointer(U_LL,U_RR,F)
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
 
 !compute flux
 F(1:4) = F(1:4) - 0.5*LambdaMax*(U_RR(1:4)-U_LL(1:4))
@@ -1012,7 +1056,109 @@ F(5)   = F(5)   - 0.5*LambdaMax*( &
          +0.5*rhoMean*sKappaM1*(1./beta_RR - 1./beta_LL))
 
 END SUBROUTINE Riemann_CH
-#endif /*SPLIT_DG*/
+
+!==================================================================================================================================
+!> Matrix based dissipation following Winters et al
+!==================================================================================================================================
+PPURE SUBROUTINE Riemann_Winters(F_L,F_R,U_LL,U_RR,MeshVel_n,F)
+! MODULES
+USE MOD_EOS_Vars      ,ONLY: Kappa,sKappaM1,KappaM1
+USE MOD_SplitFlux     ,ONLY: SplitDGSurface_pointer,GetLogMean
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+                                                !> extended solution vector on the left/right side of the interface
+REAL,DIMENSION(PP_2Var),INTENT(IN) :: U_LL,U_RR
+                                                !> advection fluxes on the left/right side of the interface
+REAL,DIMENSION(PP_nVar),INTENT(IN) :: F_L,F_R
+REAL,INTENT(IN)                    :: MeshVel_n !> Mesh velocity normal to face
+REAL,DIMENSION(PP_nVar),INTENT(OUT):: F         !< resulting Riemann flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                               :: beta_LL,beta_RR   ! auxiliary variables for the inverse Temperature
+REAL                               :: rhoMean           ! auxiliary variable for the mean density
+REAL                               :: uMean,vMean,wMean ! auxiliary variable for the average velocities
+REAL                               :: uRelMean          ! auxiliary variable for the average relative velocities
+REAL                               :: betaLogMean,rhoLogMean ! auxiliary variable for the logarithmic mean
+REAL                               :: betaMean
+REAL                               :: cMean,hMean
+REAL                               :: uAbsSqr
+REAL                               :: a1,a2,a3
+REAL                               :: chi_LL,chi_RR
+REAL,DIMENSION(5)                  :: w_LL,w_RR,j
+REAL,DIMENSION(5,5)                :: Rhat,RhatT,Lambda,H
+!==================================================================================================================================
+! average quantities
+rhoMean = 0.5*(U_LL(DENS) + U_RR(DENS))
+uMean   = 0.5*(U_LL(VEL1) + U_RR(VEL1))
+vMean   = 0.5*(U_LL(VEL2) + U_RR(VEL2))
+wMean   = 0.5*(U_LL(VEL3) + U_RR(VEL3))
+uRelMean = 0.5*(U_LL(VEL1) - MeshVel_n + U_RR(VEL1) - MeshVel_n)
+uAbsSqr  = 0.5*(U_LL(VEL1)*U_RR(VEL1) + U_LL(VEL2)*U_RR(VEL2) + U_LL(VEL3)*U_RR(VEL3))
+
+! inverse temperature
+beta_LL = 0.5*U_LL(DENS)/U_LL(PRES)
+beta_RR = 0.5*U_RR(DENS)/U_RR(PRES)
+betaMean = 0.5*(beta_LL+beta_RR)
+
+! logarithmic mean
+CALL GetLogMean(U_LL(DENS),U_RR(DENS),rhoLogMean)
+CALL GetLogMean(beta_LL,beta_RR,betaLogMean)
+
+! mean of sound speed and entropy
+cMean = SQRT(0.5*Kappa*rhoMean/(rhoLogMean*betaMean))
+hMean = 0.5*Kappa/(KappaM1*betaLogMean) + uAbsSqr
+
+! entries of matrix That = diag(a1,a2,a3,a3,a1)
+a1 = SQRT(0.5*Kappa*rhoLogMean)
+a2 = SQRT(KappaM1/Kappa*rhoLogMean)
+a3 = SQRT(0.5*rhoMean/betaMean)
+
+! Entropy variables
+chi_LL = LOG(U_LL(PRES)*U_LL(DENS)**(-Kappa))
+chi_RR = LOG(U_RR(PRES)*U_RR(DENS)**(-Kappa))
+w_LL(1) = (Kappa-chi_LL) / (KappaM1) - beta_LL*(U_LL(VEL1)**2+U_LL(VEL2)**2+U_LL(VEL3)**2)
+w_RR(1) = (Kappa-chi_RR) / (KappaM1) - beta_RR*(U_RR(VEL1)**2+U_RR(VEL2)**2+U_RR(VEL3)**2)
+w_LL(2) = 2.*beta_LL*U_LL(VEL1)
+w_RR(2) = 2.*beta_RR*U_RR(VEL1)
+w_LL(3) = 2.*beta_LL*U_LL(VEL2)
+w_RR(3) = 2.*beta_RR*U_RR(VEL2)
+w_LL(4) = 2.*beta_LL*U_LL(VEL3)
+w_RR(4) = 2.*beta_RR*U_RR(VEL3)
+w_LL(5) = -2.*beta_LL
+w_RR(5) = -2.*beta_RR
+
+! Jumps in entropy variables
+j = w_RR - w_LL
+
+! Compute dissipation matrix
+Rhat(1,:) = (/a1,                    a2,        0.,      0.,      a1/)
+Rhat(2,:) = (/a1*(uMean-cMean),      a2*uMean,  0.,      0.,      a1*(uMean+cMean)/)
+Rhat(3,:) = (/a1*vMean,              a2*vMean,  a3,      0.,      a1*vMean/)
+Rhat(4,:) = (/a1*wMean,              a2*wMean,  0.,      a3,      a1*wMean/)
+Rhat(5,:) = (/a1*(hMean-uMean*cMean),a2*uAbsSqr,a3*vMean,a3*wMean,a1*(hMean+uMean*cMean)/)
+
+RhatT = TRANSPOSE(Rhat)
+
+Lambda = 0.
+Lambda(1,1) = ABS(uRelMean-cMean)
+Lambda(2,2) = ABS(uRelMean)
+Lambda(3,3) = ABS(uRelMean)
+Lambda(4,4) = ABS(uRelMean)
+Lambda(5,5) = ABS(uRelMean+cMean)
+
+H = MATMUL(MATMUL(Rhat,Lambda),RhatT)
+
+! get split flux
+CALL SplitDGSurface_pointer(U_LL,U_RR,MeshVel_n,F)
+
+!compute flux by substracting matrix dissipation from split flux
+F = F-0.5*MATMUL(H,j)
+
+END SUBROUTINE Riemann_Winters
+#endif
 
 !==================================================================================================================================
 !> Finalize Riemann solver routines

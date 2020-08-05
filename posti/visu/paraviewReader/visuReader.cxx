@@ -56,6 +56,7 @@ visuReader::visuReader()
    this->NCalc = 0;
    this->NodeTypeVisu = NULL;
    this->Avg2d = 0;
+   this->MovingMesh = 0;
    this->DGonly = 0;
    this->ParameterFileOverwrite = NULL;
    this->MeshFileOverwrite = NULL;
@@ -329,6 +330,7 @@ int visuReader::RequestData(
    dprintf(posti_unit, "NCalc = %d\n", NCalc); // insert NCalc
    dprintf(posti_unit, "NodeTypeVisu = %s\n", NodeTypeVisu); // insert NodeType
    dprintf(posti_unit, "Avg2D = %s\n", (this->Avg2d ? "T" : "F"));
+   dprintf(posti_unit, "MovingMesh = %s\n", (this->MovingMesh ? "T" : "F"));
    dprintf(posti_unit, "DGonly = %s\n", (this->DGonly ? "T" : "F"));
    if (strlen(MeshFileOverwrite) > 0) {
       dprintf(posti_unit, "MeshFile = %s\n", MeshFileOverwrite);

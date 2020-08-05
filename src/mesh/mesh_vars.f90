@@ -35,9 +35,11 @@ INTEGER           :: NGeoRef                   !< polynomial degree of reference
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
-REAL,ALLOCATABLE,TARGET :: Elem_xGP(:,:,:,:,:)   !< XYZ positions (first index 1:3) of the volume Gauss Point
-REAL,ALLOCATABLE        :: Face_xGP(:,:,:,:,:)   !< XYZ positions (first index 1:3) of the Face Gauss Point
+REAL,ALLOCATABLE,TARGET :: NodeCoords(  :,:,:,:,:)   !< XYZ positions (CL,NGeo) of element interpolation points from meshfile
+REAL,ALLOCATABLE,TARGET :: Elem_xGP(    :,:,:,:,:)   !< XYZ positions (first index 1:3) of the volume Gauss Point
+REAL,ALLOCATABLE        :: Face_xGP(    :,:,:,:,:)   !< XYZ positions (first index 1:3) of the Face Gauss Point
+REAL,ALLOCATABLE,TARGET :: Elem_xGP_ref(:,:,:,:,:)   !< XYZ positions (first index 1:3) of the volume Gauss Point at time t=0.
+REAL,ALLOCATABLE        :: Face_xGP_ref(:,:,:,:,:)   !< XYZ positions (first index 1:3) of the Face Gauss Point   at time t=0.
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MORTAR DATA FOR NON-CONFORMING MESHES ORIGINATING FROM AN OCTREE BASIS (ONLY ALLOCATED IF isMortarMesh=.TRUE.!!!)
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -114,11 +116,12 @@ INTEGER,ALLOCATABLE :: S2V2(:,:,:,:,:)   !< side to volume 2
 INTEGER             :: nGlobalElems=0          !< number of elements in mesh
 INTEGER             :: nElems=0                !< number of local elements
 INTEGER             :: offsetElem=0            !< for MPI, until now=0 Elems pointer array range: [offsetElem+1:offsetElem+nElems]
-INTEGER             :: nSides=0                !< =nInnerSides+nBCSides+nMPISides
+INTEGER             :: nSides=0                !< =nInnerSides+nBCSides+nSMSides+nMPISides
 INTEGER             :: nSidesMaster=0          !< =sideIDMaster
-INTEGER             :: nSidesSlave=0           !< =nInnerSides+nBCSides+nMPISides
-INTEGER             :: nInnerSides=0           !< InnerSide index range: sideID [nBCSides+1:nBCSides+nInnerSides]
+INTEGER             :: nSidesSlave=0           !< =nInnerSides+nBCSides+nSMSides+nMPISides
+INTEGER             :: nInnerSides=0           !< InnerSide index range: sideID [nBCSides+nSMSides+1:nBCSides+nSMSides+nInnerSides]
 INTEGER             :: nBCSides=0              !< BCSide index range: sideID [1:nBCSides]
+INTEGER             :: nSMSides=0              !< SMSide index range: sideID [nBCSides+1:nBCSides+nSMSides]
 INTEGER             :: nAnalyzeSides=0         !< marker for each side (BC,analyze flag, periodic,...)
 INTEGER             :: nMPISides=0             !< number of MPI sides in mesh
 INTEGER             :: nMPISides_MINE=0        !< number of MINE MPI sides (on local processor)
@@ -133,13 +136,15 @@ INTEGER,ALLOCATABLE :: Elem_IJK(:,:)          !< Mapping from space-filling curv
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Define index ranges for all sides in consecutive order for easier access
 INTEGER             :: firstBCSide             !< First SideID of BCs (in general 1)
-INTEGER             :: firstMortarInnerSide    !< First SideID of Mortars (in general nBCSides+1)
+INTEGER             :: firstSMSide             !< First SideID of sliding mesh sides (in general nBCSides+1)
+INTEGER             :: firstMortarInnerSide    !< First SideID of Mortars (in general nBCSides+nSMSides+1)
 INTEGER             :: firstInnerSide          !< First SideID of inner sides
 INTEGER             :: firstMPISide_MINE       !< First SideID of MINE MPI sides (on local processor)
 INTEGER             :: firstMPISide_YOUR       !< First SideID of YOUR MPI sides (on neighbour processor)
 INTEGER             :: firstMortarMPISide      !< First SideID of Mortar MPI sides
 INTEGER             :: lastBCSide              !< Last  SideID of BCs (in general nBCSides)
-INTEGER             :: lastMortarInnerSide     !< Last  SideID of Mortars (in general nBCSides+nMortars)
+INTEGER             :: lastSMSide              !< Last  SideID of sliding mesh sides (in general nBCSides+nSMSides)
+INTEGER             :: lastMortarInnerSide     !< Last  SideID of Mortars (in general nBCSides+nSMSides+nMortarsSides)
 INTEGER             :: lastInnerSide           !< Last  SideID of inner sides
 INTEGER             :: lastMPISide_MINE        !< Last  SideID of MINE MPI sides (on local processor)
 INTEGER             :: lastMPISide_YOUR        !< Last  SideID of YOUR MPI sides (on neighbour processor)
@@ -159,6 +164,37 @@ LOGICAL          :: useCurveds                 !< Marker wheter curved boundarie
 
 LOGICAL          :: CrossProductMetrics        !< Compute metrics in cross-product form instead of curl formulation
                                                !< (not recommended)
+!----------------------------------------------------------------------------------------------------------------------------------
+! Sliding Mesh infos
+LOGICAL                 :: DoSlidingMesh
+INTEGER,ALLOCATABLE     :: nAzimuthalSides(:)     !< number of sides in azimuthal direction for the sliding mesh
+INTEGER,ALLOCATABLE     :: nLayers(:)             !< number layers in axial direction, valid at t=0. and conform mesh
+INTEGER,ALLOCATABLE     :: SlidingMeshInfo(:,:)   !< 1:4,firstSMSide:LastSMSide
+                                                  !< 1 - SideToAzimuthalPosition
+                                                  !< 2 - SideToLayer
+                                                  !< 3 - SideToElemID
+                                                  !< 4 - SideToNBElemID
+                                                  !< 5 - SideToInterface
+TYPE tSlidingMeshInfo
+  INTEGER,ALLOCATABLE   :: Sides(:,:)
+END TYPE tSlidingMeshInfo
+TYPE(tSlidingMeshInfo),ALLOCATABLE :: GlobalSlidingMeshInfo(:)
+
+INTEGER                 :: mySMPartition
+INTEGER,ALLOCATABLE     :: IntToPart(:)
+INTEGER,ALLOCATABLE     :: LocToGlobInterface(:)
+INTEGER,ALLOCATABLE     :: GlobToLocInterface(:)   
+
+INTEGER,ALLOCATABLE     :: RotatingElem(:)        !< mark if element is rotating or stationary
+INTEGER,ALLOCATABLE     :: AL_ToStatProc(:,:,:)   
+INTEGER,ALLOCATABLE     :: AL_ToRotProc (:,:,:)   
+INTEGER,ALLOCATABLE     :: nRotElems(:)           !< (1:nSlidingMeshPartitions)
+INTEGER                 :: nStatElems
+INTEGER,ALLOCATABLE     :: nRotProcs(:)
+INTEGER                 :: nStatProcs
+LOGICAL                 :: IAmARotProc
+LOGICAL                 :: IAmAStatProc
+REAL                    :: WeightRot
 !----------------------------------------------------------------------------------------------------------------------------------
 ! USER DEFINED TYPES
 

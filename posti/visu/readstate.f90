@@ -92,32 +92,39 @@ SUBROUTINE ReadStateAndGradients(prmfile,statefile)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Visu_Vars
-USE MOD_MPI           ,ONLY: DefineParametersMPI
+USE MOD_MPI                ,ONLY: DefineParametersMPI
 #if USE_MPI
-USE MOD_MPI           ,ONLY: InitMPIvars,FinalizeMPI
+USE MOD_MPI                ,ONLY: InitMPIvars,FinalizeMPI
 #endif
-USE MOD_IO_HDF5       ,ONLY: DefineParametersIO_HDF5,InitIOHDF5
-USE MOD_Interpolation ,ONLY: DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
-USE MOD_Restart       ,ONLY: DefineParametersRestart,InitRestart,Restart,FinalizeRestart
-USE MOD_Mesh          ,ONLY: DefineParametersMesh,InitMesh,FinalizeMesh
-USE MOD_Indicator     ,ONLY: DefineParametersIndicator,InitIndicator,FinalizeIndicator
+USE MOD_IO_HDF5            ,ONLY: DefineParametersIO_HDF5,InitIOHDF5
+USE MOD_Interpolation      ,ONLY: DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
+USE MOD_Interpolation_Vars ,ONLY: NodeType
+USE MOD_Restart            ,ONLY: DefineParametersRestart,InitRestart,Restart,FinalizeRestart
+USE MOD_Mesh               ,ONLY: DefineParametersMesh,InitMesh,FinalizeMesh
+USE MOD_MoveMesh           ,ONLY: DefineParametersMoveMesh,InitMoveMesh,FinalizeMoveMesh,InterpolateMeshVel
+USE MOD_SM                 ,ONLY: DefineParametersSM,InitSM,FinalizeSM
+USE MOD_Indicator          ,ONLY: DefineParametersIndicator,InitIndicator,FinalizeIndicator
 #if FV_ENABLED
-USE MOD_FV            ,ONLY: DefineParametersFV,InitFV,FinalizeFV
-USE MOD_FV_Basis      ,ONLY: InitFV_Basis,FinalizeFV_Basis
+USE MOD_FV                 ,ONLY: DefineParametersFV,InitFV,FinalizeFV
+USE MOD_FV_Basis           ,ONLY: InitFV_Basis,FinalizeFV_Basis
 #endif
-USE MOD_DG            ,ONLY: InitDG,DGTimeDerivative_weakForm,FinalizeDG
-USE MOD_Mortar        ,ONLY: InitMortar,FinalizeMortar
-USE MOD_EOS           ,ONLY: DefineParametersEos
-USE MOD_Equation      ,ONLY: DefineParametersEquation,InitEquation,FinalizeEquation
-USE MOD_Exactfunc     ,ONLY: DefineParametersExactFunc
+USE MOD_DG                 ,ONLY: InitDG,DGTimeDerivative_weakForm,FinalizeDG
+USE MOD_Mortar             ,ONLY: InitMortar,FinalizeMortar
+USE MOD_EOS                ,ONLY: DefineParametersEos
+USE MOD_Equation           ,ONLY: DefineParametersEquation,InitEquation,FinalizeEquation
+USE MOD_Exactfunc          ,ONLY: DefineParametersExactFunc
 #if PARABOLIC
-USE MOD_Lifting       ,ONLY: DefineParametersLifting,InitLifting,FinalizeLifting
+USE MOD_Lifting            ,ONLY: DefineParametersLifting,InitLifting,FinalizeLifting
 #endif
-USE MOD_Filter,         ONLY:DefineParametersFilter,InitFilter,FinalizeFilter
-USE MOD_Overintegration,ONLY:DefineParametersOverintegration,InitOverintegration,FinalizeOverintegration
-USE MOD_ReadInTools   ,ONLY: prms
-USE MOD_ReadInTools   ,ONLY: FinalizeParameters
-USE MOD_Restart_Vars  ,ONLY: RestartTime
+USE MOD_Filter             ,ONLY: DefineParametersFilter,InitFilter,FinalizeFilter
+USE MOD_Overintegration    ,ONLY: DefineParametersOverintegration,InitOverintegration,FinalizeOverintegration
+USE MOD_ReadInTools        ,ONLY: prms
+USE MOD_ReadInTools        ,ONLY: FinalizeParameters
+USE MOD_Restart_Vars       ,ONLY: RestartTime
+USE MOD_Mesh_Vars          ,ONLY: nElems,Elem_xGP,NodeCoords,NGeo,offsetElem
+USE MOD_MoveMesh_Vars      ,ONLY: v_NGeo,v_NGeo_Face
+USE MOD_Metrics            ,ONLY: CalcMetrics,BuildCoords
+USE MOD_HDF5_Input         ,ONLY: ReadArray,OpenDataFile,CloseDataFile
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -154,6 +161,8 @@ CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersMesh()
+CALL DefineParametersSM()
+CALL DefineParametersMoveMesh()
 CALL DefineParametersFilter()
 CALL DefineParametersOverintegration()
 CALL DefineParametersIndicator()
@@ -181,8 +190,23 @@ CALL InitRestart(statefile)
 ! TODO: what todo with vars that are set in InitOutput, that normally is executed here.
 
 IF (changedMeshFile.OR.changedWithDGOperator) THEN
+  CALL FinalizeSM()
+  CALL FinalizeMoveMesh()
   CALL FinalizeMesh()
   CALL InitMesh(meshMode=2,MeshFile_IN=MeshFile)
+  CALL InitMoveMesh()
+  CALL InitSM()
+END IF
+
+! For moving meshes, we read in the mesh coordinates from each state file
+IF (MovingMesh) THEN
+  CALL OpenDataFile(statefile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+  CALL ReadArray('Mesh_coordinates',5,(/3,(NGeo+1),(NGeo+1),(ZDIM(NGeo)+1),nElems/),offsetElem,5,RealArray=NodeCoords)
+  CALL ReadArray('Mesh_velocity',5,(/3,(NGeo+1),(NGeo+1),(ZDIM(NGeo)+1),nElems/),offsetElem,5,RealArray=v_NGeo)
+  CALL CloseDataFile()
+  CALL BuildCoords(NodeCoords,NodeType,PP_N,Elem_xGP)
+  CALL CalcMetrics(NodeCoords,InitJacobian=.TRUE.)
+  CALL InterpolateMeshVel(v_NGeo,v_NGeo_Face)
 END IF
 
 CALL InitFilter()
@@ -225,6 +249,7 @@ USE MOD_MPI,                 ONLY: FinalizeMPI
 #endif
 USE MOD_IO_HDF5,             ONLY: DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Mesh                ,ONLY: DefineParametersMesh,InitMesh,FinalizeMesh
+USE MOD_MoveMesh            ,ONLY: DefineParametersMoveMesh,InitMoveMesh,FinalizeMoveMesh,InterpolateMeshVel
 USE MOD_ReadInTools         ,ONLY: prms
 USE MOD_ReadInTools         ,ONLY: FinalizeParameters
 USE MOD_Mesh_Vars           ,ONLY: nElems,offsetElem
@@ -232,10 +257,16 @@ USE MOD_HDF5_Input,          ONLY: OpenDataFile,ReadArray,CloseDataFile
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_EOS                 ,ONLY: DefineParametersEos,InitEOS
 USE MOD_Interpolation       ,ONLY: DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
+USE MOD_Interpolation_Vars  ,ONLY: NodeType
 #if FV_ENABLED
 USE MOD_FV_Basis            ,ONLY: InitFV_Basis,FinalizeFV_Basis
 USE MOD_Mortar              ,ONLY: InitMortar,FinalizeMortar
 #endif
+USE MOD_Mesh_Vars           ,ONLY: nElems,Elem_xGP,NodeCoords,NGeo,offsetElem
+USE MOD_MoveMesh_Vars      ,ONLY: v_NGeo,v_NGeo_Face
+USE MOD_Metrics             ,ONLY: CalcMetrics,BuildCoords
+USE MOD_HDF5_Input          ,ONLY: ReadArray,OpenDataFile,CloseDataFile
+USE MOD_SM                  ,ONLY: InitSM,FinalizeSM
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -279,6 +310,7 @@ CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
 CALL DefineParametersMesh()
+CALL DefineParametersMoveMesh()
 CALL DefineParametersEOS()
 CALL prms%read_options(prmfile)
 
@@ -301,8 +333,23 @@ END IF
 
 ! Call mesh init if the mesh file changed or we need a different mesh mode
 IF ((changedMeshFile).OR.(changedMeshMode)) THEN
+  IF(MeshMode_loc.EQ.2) CALL FinalizeSM()
+  CALL FinalizeMoveMesh()
   CALL FinalizeMesh()
   CALL InitMesh(meshMode=meshMode_loc,MeshFile_IN=MeshFile)
+  CALL InitMoveMesh(meshMode=meshMode_loc)
+  IF(MeshMode_loc.EQ.2) CALL InitSM()
+END IF
+
+! For moving meshes, we read in the mesh coordinates from each state file
+IF (MovingMesh) THEN
+  CALL OpenDataFile(statefile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+  CALL ReadArray('Mesh_coordinates',5,(/3,(NGeo+1),(NGeo+1),(ZDIM(NGeo)+1),nElems/),offsetElem,5,RealArray=NodeCoords)
+  CALL ReadArray('Mesh_velocity',5,(/3,(NGeo+1),(NGeo+1),(ZDIM(NGeo)+1),nElems/),offsetElem,5,RealArray=v_NGeo)
+  CALL CloseDataFile()
+  CALL BuildCoords(NodeCoords,NodeType,PP_N,Elem_xGP)
+  IF (meshMode_loc.GT.1) CALL CalcMetrics(NodeCoords,InitJacobian=.TRUE.)
+  IF (meshMode_loc.GT.1) CALL InterpolateMeshVel(v_NGeo,v_NGeo_Face)
 END IF
 
 ! Initialize EOS since some quantities need gas properties like R and kappa

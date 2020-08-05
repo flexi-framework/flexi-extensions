@@ -31,8 +31,13 @@ INTERFACE CROSS
   MODULE PROCEDURE CROSS
 END INTERFACE CROSS
 
+INTERFACE DISTANCE
+  MODULE PROCEDURE DISTANCE
+END INTERFACE DISTANCE
+
 PUBLIC::INVERSE
 PUBLIC::CROSS
+PUBLIC::DISTANCE
 !==================================================================================================================================
 
 CONTAINS
@@ -161,5 +166,22 @@ REAL            :: CROSS(3) !< cross product of vectors
 !==================================================================================================================================
 CROSS=(/v1(2)*v2(3)-v1(3)*v2(2),v1(3)*v2(1)-v1(1)*v2(3),v1(1)*v2(2)-v1(2)*v2(1)/)
 END FUNCTION CROSS
+
+!===================================================================================================================================
+!> Calculate euclidean distance between two points.
+!===================================================================================================================================
+PURE FUNCTION DISTANCE(x,y)
+! INPUT VARIABLES 
+REAL,INTENT(IN) :: x(1:3)    !< Coordinates of first point
+REAL,INTENT(IN) :: y(1:3)    !< Coordinates of second point
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL            :: Distance  !< Output: Euclidean distance between x and y
+!===================================================================================================================================
+
+! d(x,y) = \|x-y\|_2 = \sqrt{(x_{1} - y_{1})^2 + \cdots + (x_{n} - y_{n})^2} = \sqrt{\sum_{i=1}^n (x_i-y_i)^2}
+Distance = SQRT((x(1)-y(1))**2.+(x(2)-y(2))**2.+(x(3)-y(3))**2.)
+
+END FUNCTION DISTANCE
 
 END MODULE MOD_Mathtools

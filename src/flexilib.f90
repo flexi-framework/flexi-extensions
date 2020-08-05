@@ -69,6 +69,14 @@ USE MOD_FV_Basis,          ONLY:InitFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
+#if GCL
+USE MOD_GCL,               ONLY:InitGCL
+#if SPLIT_DG
+USE MOD_GCL,               ONLY:DefineParametersGCL
+#endif /*SPLIT_DG*/
+#endif /*GCL*/
+USE MOD_MoveMesh,          ONLY:DefineParametersMoveMesh,InitMoveMesh
+USE MOD_SM,                ONLY:InitSM
 USE MOD_Restart_Vars      ,ONLY:RestartFile
 USE MOD_StringTools       ,ONLY:STRICMP, GetFileExtension
 IMPLICIT NONE
@@ -116,6 +124,12 @@ CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 CALL DefineParametersMesh()
+CALL DefineParametersMoveMesh()
+#if GCL
+#ifdef SPLIT_DG
+CALL DefineParametersGCL()
+#endif /*SPLIT_DG*/
+#endif /*GCL*/
 CALL DefineParametersEos()
 CALL DefineParametersEquation()
 CALL DefineParametersExactFunc()
@@ -144,31 +158,127 @@ CALL prms%read_options(ParameterFile)
 CALL InitIOHDF5()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A)') &
-"           __________________   _______              __________________   ______      ______   __________________ "
+"                                                     .-."
 SWRITE(UNIT_stdOut,'(A)') &
-"          /                 /) /      /)            /                 /) /      |   _/     /) /                 /)"
+"                                                    (   )"
 SWRITE(UNIT_stdOut,'(A)') &
-"         /       __________// /      //            /      ___________// /__     |_/´     _// /____       ______// "
+"                                                     \'-\'"
 SWRITE(UNIT_stdOut,'(A)') &
-"        /      /)__________) /      //            /      /)__________)  (__|          _/´_)  )___/      /)_____)  "
+"                                                     J L"
 SWRITE(UNIT_stdOut,'(A)') &
-"       /      //___         /      //            /      //___              |       _/´_/´       /      //         "
+"                                                     | |"
 SWRITE(UNIT_stdOut,'(A)') &
-"      /           /)       /      //            /           /)             |     /´ /´         /      //          "
+"                                                    J   L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                                    |   |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                                   J     L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                                 .-\'.___.\'-."
+SWRITE(UNIT_stdOut,'(A)') &
+"                                                /___________\\"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                           _.-""""\'           \`bmw._"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                         .\'                       `."
+SWRITE(UNIT_stdOut,'(A)') &
+"                                       J                            `."
+SWRITE(UNIT_stdOut,'(A)') &
+"                                      F                               L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                     J                                 J"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    J                                  `"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                   L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                   |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                   |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                   J"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                    L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                    |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |             ,.___          ___....--._"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |           ,\'     `""""""""""""""""\'           `-._"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |          J           _____________________`-."
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         F         .-\'   `-88888-\'    `Y8888b.`."
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         |       .\'         `P\'         `88888b \\"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         |      J       #     L      #    q8888b L"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         |      |             |           )8888D )"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         J      \             J           d8888P P"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |          L      `.         .b.         ,88888P /"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |           `.      `-.___,o88888o.___,o88888P\'.\'"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |             `-.__________________________..-\'"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                    |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         .-----.........____________J"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |       .\' |       |      |       |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |      J---|-----..|...___|_______|"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |      |   |       |      |       |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |      Y---|-----..|...___|_______|"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |       `. |       |      |       |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |         `\'-------:....__|______.J"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                    |                                  |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                     L___                              |"
+SWRITE(UNIT_stdOut,'(A)') &
+"                                         """"""----...______________....--\'"
+
+
+
+SWRITE(UNIT_stdOut,'(A)')
+SWRITE(UNIT_stdOut,'(A)')
+
 
 SWRITE(UNIT_stdOut,'(A)') &
-"     /      _____//       /      //            /      _____//            _/´     |/´          /      //           "
+"__/\\\\\\\\\\\\\\\\\\\\\\\\\\____/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\__/\\\\\\\\\\_____/\\\\\\__/\\\\\\\\\\\\\\\\\\\\\\\\_____/\\\\\\\\&
+&\\\\\\\\\\\\\\\\\\\\\\____/\\\\\\\\\\\\\\\\\\_____        "
 SWRITE(UNIT_stdOut,'(A)') &
-"    /      /)____)       /      //            /      /)____)          _/´        |           /      //            "
+" _\\/\\\\\\/////////\\\\\\_\\/\\\\\\///////////__\\/\\\\\\\\\\\\___\\/\\\\\\_\\/\\\\\\////////\\\\\\__\\/\\\\\\///////////___/\\\\&
+&\\///////\\\\\\___       "
+SWRITE(UNIT_stdOut,'(A)') &
+"  _\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\_____________\\/\\\\\\/\\\\\\__\\/\\\\\\_\\/\\\\\\______\\//\\\\\\_\\/\\\\\\_____________\\/&
+&\\\\\\_____\\/\\\\\\___      "
+SWRITE(UNIT_stdOut,'(A)') &
+"   _\\/\\\\\\\\\\\\\\\\\\\\\\\\\\\\__\\/\\\\\\\\\\\\\\\\\\\\\\_____\\/\\\\\\//\\\\\\_\\/\\\\\\_\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\&
+&\\\\\\\\\\\\\\\\_____\\/\\\\\\\\\\\\\\\\\\\\\\/____     "
+SWRITE(UNIT_stdOut,'(A)') &
+"    _\\/\\\\\\/////////\\\\\\_\\/\\\\\\///////______\\/\\\\\\\\//\\\\\\\\/\\\\\\_\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\///////______\&
+&\/\\\\\\//////\\\\\\____    "
+SWRITE(UNIT_stdOut,'(A)') &
+"     _\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\_____________\\/\\\\\\_\\//\\\\\\/\\\\\\_\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\_____________&
+&\\/\\\\\\____\\//\\\\\\___   "
+SWRITE(UNIT_stdOut,'(A)') &
+"      _\\/\\\\\\_______\\/\\\\\\_\\/\\\\\\_____________\\/\\\\\\__\\//\\\\\\\\\\\\_\\/\\\\\\_______/\\\\\\__\\/\\\\\\_____________&
+&\\/\\\\\\_____\\//\\\\\\__  "
+SWRITE(UNIT_stdOut,'(A)') &
+"       _\\/\\\\\\\\\\\\\\\\\\\\\\\\\\/__\\/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_\\/\\\\\\___\\//\\\\\\\\\\_\\/\\\\\\\\\\\\\\\\\\\\\\\\/_&
+&__\\/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_\\/\\\\\\______\\//\\\\\\_ "
+SWRITE(UNIT_stdOut,'(A)') &
+"        _\\/////////////____\\///////////////__\\///_____\\/////__\\////////////_____\\///////////////__\\///________\\///__"
 
-SWRITE(UNIT_stdOut,'(A)') &
-"   /      //            /      //_________   /      //_________   __/´     _     |__   _____/      //____         "
-SWRITE(UNIT_stdOut,'(A)') &
-"  /      //            /                 /) /                 /) /      _/´ |      /) /                 /)        "
-SWRITE(UNIT_stdOut,'(A)') &
-" /______//            /_________________// /_________________// /_____/` _/´|_____// /_________________//         "
-SWRITE(UNIT_stdOut,'(A)') &
-" )______)             )_________________)  )_________________)  )_____)/´   )_____)  )_________________)          "
 SWRITE(UNIT_stdOut,'(A)')
 SWRITE(UNIT_stdOut,'(132("="))')
 ! Measure init duration
@@ -182,6 +292,8 @@ CALL InitFV_Basis()
 CALL InitMortar()
 CALL InitOutput()
 CALL InitMesh(meshMode=2)
+CALL InitMoveMesh()
+CALL InitSM()
 CALL InitRestart()
 CALL InitFilter()
 CALL InitOverintegration()
@@ -191,6 +303,9 @@ CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitDG()
+#if GCL
+CALL InitGCL()
+#endif
 #if FV_ENABLED
 CALL InitFV()
 #endif
@@ -243,6 +358,11 @@ USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
+#if GCL
+USE MOD_GCL,               ONLY:FinalizeGCL
+#endif /*GCL*/
+USE MOD_MoveMesh,          ONLY:FinalizeMoveMesh
+USE MOD_SM,                ONLY:FinalizeSM
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -258,13 +378,18 @@ CALL FinalizeLifting()
 #if FV_ENABLED
 CALL FinalizeFV()
 #endif
+#if GCL
+CALL FinalizeGCL()
+#endif
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeInterpolation()
 CALL FinalizeTimeDisc()
 CALL FinalizeRestart()
+CALL FinalizeMoveMesh()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
+CALL FinalizeSM()
 CALL FinalizeSponge()
 CALL FinalizeOverintegration()
 CALL FinalizeFilter()

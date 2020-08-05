@@ -186,7 +186,7 @@ USE MOD_Mesh_Vars,          ONLY:NGeo,NGeoTree
 USE MOD_Mesh_Vars,          ONLY:NodeCoords,TreeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,offsetTree,nElems,nTrees,nGlobalTrees
 USE MOD_Mesh_Vars,          ONLY:xiMinMax,ElemToTree
-USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
+USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides,nSMSides
 USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
@@ -214,11 +214,11 @@ INTEGER                        :: iLocSide,nbLocSide
 INTEGER                        :: iSide
 INTEGER                        :: FirstSideInd,LastSideInd,FirstElemInd,LastElemInd
 INTEGER                        :: nPeriodicSides,nMPIPeriodics
-INTEGER                        :: ReduceData(10)
+INTEGER                        :: ReduceData(11)
 INTEGER                        :: nSideIDs,offsetSideID
 INTEGER                        :: iMortar,jMortar,nMortars
 #if USE_MPI
-INTEGER                        :: ReduceData_glob(10)
+INTEGER                        :: ReduceData_glob(11)
 INTEGER                        :: iNbProc
 INTEGER                        :: iProc
 INTEGER,ALLOCATABLE            :: MPISideCount(:)
@@ -381,11 +381,13 @@ DO iElem=FirstElemInd,LastElemInd
       nbElemID      = SideInfo(SIDE_nbElemID,iSide)
       aSide%BCindex = SideInfo(SIDE_BCID,iSide)
 
-      ! BC sides don't need a connection, except for periodic (BC_TYPE=1) and "dummy" inner BCs (BC_TYPE=100).
+      ! BC sides don't need a connection, except for periodic (BC_TYPE=1) and "dummy" inner BCs (BC_TYPE=100) and sliding mesh sides
+      ! (BC_TYPE=-100)
       ! For all other BC sides: reset the flip and mortars settings, do not build a connection.
       IF(aSide%BCindex.NE.0)THEN ! BC
-        IF((BoundaryType(aSide%BCindex,BC_TYPE).NE.1).AND.&
-           (BoundaryType(aSide%BCindex,BC_TYPE).NE.100))THEN
+        IF((BoundaryType(aSide%BCindex,BC_TYPE).NE.1)  .AND.&
+           (BoundaryType(aSide%BCindex,BC_TYPE).NE. 100).AND.&
+           (BoundaryType(aSide%BCindex,BC_TYPE).NE.-100))THEN
           aSide%flip  =0
           IF(iMortar.EQ.0) aSide%mortarType  = 0
           IF(iMortar.EQ.0) aSide%nMortars    = 0
@@ -534,6 +536,7 @@ CALL CloseDataFile()
 !                              COUNT SIDES
 !----------------------------------------------------------------------------------------------------------------------------
 nBCSides=0
+nSMSides=0
 nAnalyzeSides=0
 nMortarSides=0
 nSides=0
@@ -580,13 +583,16 @@ DO iElem=FirstElemInd,LastElemInd
         aSide%tmp=-1 ! mark side as counted
         IF(ASSOCIATED(aSide%connection)) aSide%connection%tmp=-1 ! mark connected side as counted
         IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
-          nAnalyzeSides=nAnalyzeSides+1
           IF(ASSOCIATED(aSide%connection))THEN
             IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.1)THEN ! periodic side
               nPeriodicSides=nPeriodicSides+1
 #if USE_MPI
               IF(aSide%NbProc.NE.-1) nMPIPeriodics=nMPIPeriodics+1
 #endif
+            ELSE IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.100)THEN ! AnalyzeSides
+              nAnalyzeSides=nAnalyzeSides+1
+            ELSE IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)THEN ! SlidingMeshSides
+              nSMSides=nSMSides+1
             END IF
           ELSE
             IF(aSide%MortarType.EQ.0)THEN !really a BC side
@@ -597,19 +603,27 @@ DO iElem=FirstElemInd,LastElemInd
         IF(aSide%MortarType.GT.0) nMortarSides=nMortarSides+1
 #if USE_MPI
         IF(aSide%NbProc.NE.-1) THEN ! count total number of MPI sides and number of MPI sides for each neighboring processor
-          nMPISides=nMPISides+1
-          MPISideCount(aSide%NbProc)=MPISideCount(aSide%NbProc)+1
+          IF ((aSide%BCindex).LE.1)THEN ! SlidingMeshSides
+            nMPISides=nMPISides+1
+            MPISideCount(aSide%NbProc)=MPISideCount(aSide%NbProc)+1
+          ELSE
+            IF (.NOT.(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100))THEN ! SlidingMeshSides
+              nMPISides=nMPISides+1
+              MPISideCount(aSide%NbProc)=MPISideCount(aSide%NbProc)+1
+            END IF 
+          END IF 
         END IF
 #endif
       END IF
     END DO !iMortar
   END DO !iLocSide
 END DO !iElem
-nInnerSides=nSides-nBCSides-nMPISides-nMortarSides !periodic side count to inner side!!!
+nInnerSides=nSides-nBCSides-nSMSides-nMPISides-nMortarSides !periodic side count to inner side!!!
 
 LOGWRITE(*,*)'-------------------------------------------------------'
 LOGWRITE(*,'(A22,I8)')'nSides:',      nSides
 LOGWRITE(*,'(A22,I8)')'nBCSides:',    nBCSides
+LOGWRITE(*,'(A22,I8)')'nSMSides:',    nSMSides
 LOGWRITE(*,'(A22,I8)')'nMortarSides:',nMortarSides
 LOGWRITE(*,'(A22,I8)')'nInnerSides:', nInnerSides
 LOGWRITE(*,'(A22,I8)')'nMPISides:',   nMPISides
@@ -661,9 +675,10 @@ ReduceData(7)=nMPISides
 ReduceData(8)=nAnalyzeSides
 ReduceData(9)=nMortarSides
 ReduceData(10)=nMPIPeriodics
+ReduceData(11)=nSMSides
 
 #if USE_MPI
-CALL MPI_REDUCE(ReduceData,ReduceData_glob,10,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+CALL MPI_REDUCE(ReduceData,ReduceData_glob,11,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
 ReduceData=ReduceData_glob
 #endif /*USE_MPI*/
 
@@ -672,6 +687,7 @@ IF(MPIRoot)THEN
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nNodes | ',ReduceData(3) !nNodes
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides        | ',ReduceData(2)-ReduceData(7)/2
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides,    BC | ',ReduceData(6) !nBCSides
+  WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides,    SM | ',ReduceData(11) !nBCSides
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides,   MPI | ',ReduceData(7)/2 !nMPISides
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides, Inner | ',ReduceData(4) !nInnerSides
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nSides,Mortar | ',ReduceData(9) !nMortarSides
@@ -693,8 +709,11 @@ END SUBROUTINE ReadMesh
 SUBROUTINE BuildPartition()
 ! MODULES                                                                                                                          !
 USE MOD_Globals
-USE MOD_Mesh_Vars, ONLY:nElems,nGlobalElems,offsetElem
+USE MOD_Mesh_Vars, ONLY:nElems,nGlobalElems,offsetElem,IAmARotProc,IAmAStatProc
+USE MOD_Mesh_Vars, ONLY:DoSlidingMesh
+USE MOD_SM_Vars,   ONLY:nSlidingMeshPartitions,SlidingMeshType
 #if USE_MPI
+USE MOD_Mesh_Vars, ONLY:nRotElems,nStatElems,nRotProcs,nStatProcs,WeightRot
 USE MOD_MPI_Vars,  ONLY:offsetElemMPI
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------!
@@ -703,8 +722,10 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if USE_MPI
-INTEGER           :: iElem
-INTEGER           :: iProc
+INTEGER           :: nGlobalRotElems
+INTEGER           :: nElemsTmp
+INTEGER           :: nRotProcsGlobal,nRotProcsTmp
+INTEGER           :: iElem,iProc,iPartition
 #endif
 !===================================================================================================================================
 CALL GetDataSize(File_ID,'ElemInfo',nDims,HSize)
@@ -715,29 +736,106 @@ END IF
 CHECKSAFEINT(HSize(2),4)
 nGlobalElems=INT(HSize(2),4)
 DEALLOCATE(HSize)
+
+! Check if mesh file contains sliding mesh and read number of sm partitions
+CALL DatasetExists(File_ID,'SlidingMeshType',DoSlidingMesh,attrib=.TRUE.)
+IF (DoSlidingMesh) THEN
+  CALL ReadAttribute(File_ID,'nSlidingMeshPartitions',1,IntScalar=nSlidingMeshPartitions)
+ELSE
+  SWRITE(UNIT_stdOut,'(A)') 'WARNING: No sliding mesh information is found in mesh file!  A static mesh is assumed.'
+  nSlidingMeshPartitions = 0
+END IF
+
+! Read-in of sliding mesh type for each partition
+IF(ALLOCATED(SlidingMeshType)) DEALLOCATE(SlidingMeshType)
+ALLOCATE(SlidingMeshType(0:nSlidingMeshPartitions))
+SlidingMeshType = SM_TYPE_NONE
+IF (DoSlidingMesh) THEN
+  CALL ReadAttribute(File_ID,'SlidingMeshType',nSlidingMeshPartitions,IntArray=SlidingMeshType(1:nSlidingMeshPartitions))
+END IF
+
 #if USE_MPI
 IF(nGlobalElems.LT.nProcessors) THEN
   CALL Abort(__STAMP__,&
   'ERROR: Number of elements (1) is smaller then number of processors (2)!',nGlobalElems,REAL(nProcessors))
 END IF
 
+IF(nProcessors.LT.(nSlidingMeshPartitions+1)) THEN
+  CALL Abort(__STAMP__,'ERROR: Number of procs (1) is smaller than sum of sliding mesh and stationary partitions (2)!'&
+                                                                                      ,nProcessors,REAL(nSlidingMeshPartitions+1))
+END IF
+
+! Distribution of rotating elements only for sliding mesh
+IF (DoSlidingMesh) THEN
+  IF(ALLOCATED(nRotElems)) DEALLOCATE(nRotElems)
+  IF(ALLOCATED(nRotProcs)) DEALLOCATE(nRotProcs)
+  ALLOCATE(nRotElems(1:nSlidingMeshPartitions))
+  ALLOCATE(nRotProcs(1:nSlidingMeshPartitions))
+  
+  CALL ReadAttribute(File_ID,'nRotatingElems',nSlidingMeshPartitions,IntArray=nRotElems)
+  nGlobalRotElems = SUM(nRotElems)
+  nStatElems=nGlobalelems-nGlobalRotElems
+  WeightRot=1.
+  ! First divide procs into stat and rot 
+  nStatProcs=NINT(nProcessors/(1.+ (nGlobalRotElems*WeightRot/nStatElems)))
+  nStatProcs=MIN(nStatProcs,nProcessors-nSlidingMeshPartitions)
+  nStatProcs=MIN(nStatProcs,nProcessors-1)
+  nStatProcs=MAX(nStatProcs,1             )
+  nRotProcsGlobal=nProcessors-nStatProcs
+  ! Distribute RotProcs to sliding mesh partitions
+  nRotProcsTmp = nRotProcsGlobal
+  DO iPartition=1,nSlidingMeshPartitions
+    nRotProcs(iPartition) = NINT(1.*nRotProcsGlobal/(nGlobalRotElems/nRotElems(iPartition)))
+    ! Ensure that at least 1 proc per sm partition is left over
+    nRotProcs(iPartition) = MIN(nRotProcs(iPartition),(nRotProcsTmp-(nSlidingMeshPartitions-iPartition)))
+    nRotProcs(iPartition) = MIN(nRotProcs(iPartition),nProcessors-1)
+    nRotProcs(iPartition) = MAX(nRotProcs(iPartition),1)
+    ! Update number of remaining procs
+    nRotProcsTmp = nRotProcsTmp - nRotProcs(iPartition)
+  END DO
+ELSE
+  nStatElems = nGlobalElems
+  nStatProcs = nProcessors
+END IF
+
 !simple partition: nGlobalelems/nprocs, do this on proc 0
 IF(ALLOCATED(offsetElemMPI)) DEALLOCATE(offsetElemMPI)
 ALLOCATE(offsetElemMPI(0:nProcessors))
 offsetElemMPI=0
-nElems=nGlobalElems/nProcessors
-iElem=nGlobalElems-nElems*nProcessors
-DO iProc=0,nProcessors-1
+
+nElems=nStatElems/nStatProcs
+iElem=nStatElems-nElems*nStatProcs
+DO iProc=0,nStatProcs-1
   offsetElemMPI(iProc)=nElems*iProc+MIN(iProc,iElem)
 END DO
+offsetElemMPI(nStatProcs)=nStatElems
+
+nRotProcsTmp = nStatProcs
+nElemsTmp    = nStatElems
+DO iPartition=1,nSlidingMeshPartitions
+  nElems=nRotElems(iPartition)/nRotProcs(iPartition)
+  iElem=nRotElems(iPartition)-nElems*nRotProcs(iPartition)
+  DO iProc=nRotProcsTmp,nRotProcsTmp+nRotProcs(iPartition)-1
+    offsetElemMPI(iProc)=nElemsTmp+nElems*(iProc-nRotProcsTmp)+MIN((iProc-nRotProcsTmp),iElem)
+  END DO
+  nRotProcsTmp = nRotProcsTmp+nRotProcs(iPartition)
+  nElemsTmp    = nElemsTmp+nRotElems(iPartition)
+END DO
 offsetElemMPI(nProcessors)=nGlobalElems
+
+IAmARotProc =.FALSE.
+IAmAStatProc=.FALSE.
 !local nElems and offset
 nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
 offsetElem=offsetElemMPI(myRank)
+IF(myRank.GE.nStatProcs) IAmARotProc =.TRUE.
+IF(myRank.LT.nStatProcs) IAmAStatProc=.TRUE.
 LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
 #else /*USE_MPI*/
 nElems=nGlobalElems   !local number of Elements
 offsetElem=0          ! offset is the index of first entry, hdf5 array starts at 0-.GT. -1
+IAmAStatProc=.TRUE.
+IF (DoSlidingMesh) IAmARotProc =.TRUE.
 #endif /*USE_MPI*/
 END SUBROUTINE BuildPartition
 

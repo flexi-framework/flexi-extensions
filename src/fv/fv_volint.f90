@@ -122,6 +122,7 @@ DO iElem=1,nElems
 
     ! 4. calculate advective part of the flux
     CALL Riemann(PP_N,F_FV,UCons_L,UCons_R,UPrim_L,UPrim_R,          &
+        FV_Face_vGPXi(:,:,:,i,iElem), &
         FV_NormVecXi (:,:,:,i,iElem), FV_TangVec1Xi(:,:,:,i,iElem), FV_TangVec2Xi(:,:,:,i,iElem),.FALSE.)
 
 #if PARABOLIC
@@ -170,6 +171,7 @@ DO iElem=1,nElems
 
     ! 4. calculate advective part of the flux
     CALL Riemann(PP_N,F_FV,UCons_L,UCons_R,UPrim_L,UPrim_R,          &
+        FV_Face_vGPEta(:,:,:,j,iElem), &
         FV_NormVecEta (:,:,:,j,iElem), FV_TangVec1Eta(:,:,:,j,iElem), FV_TangVec2Eta(:,:,:,j,iElem),.FALSE.)
 #if PARABOLIC
     ! 5. compute viscous flux in normal direction of the interface
@@ -210,6 +212,7 @@ DO iElem=1,nElems
 
     ! 4. calculate advective part of the flux
     CALL Riemann(PP_N,F_FV,UCons_L,UCons_R,UPrim_L,UPrim_R,          &
+        FV_Face_vGPZeta(:,:,:,k,iElem), &
         FV_NormVecZeta (:,:,:,k,iElem), FV_TangVec1Zeta(:,:,:,k,iElem), FV_TangVec2Zeta(:,:,:,k,iElem),.FALSE.)
 #if PARABOLIC
     ! 5. compute viscous flux in normal direction of the interface

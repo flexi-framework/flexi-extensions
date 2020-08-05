@@ -33,8 +33,12 @@ INTERFACE FillFlux
   MODULE PROCEDURE FillFlux
 END INTERFACE
 
+INTERFACE FillFluxSM
+  MODULE PROCEDURE FillFluxSM
+END INTERFACE
 
-PUBLIC::FillFlux
+
+PUBLIC::FillFlux,FillFluxSM
 !==================================================================================================================================
 
 
@@ -72,7 +76,8 @@ USE MOD_EddyVisc_Vars,   ONLY: muSGS_master,muSGS_slave
 USE MOD_FV
 USE MOD_FV_Vars
 #endif
-USE MOD_EOS,             ONLY: PrimToCons
+USE MOD_EOS             ,ONLY: PrimToCons
+USE MOD_MoveMesh_Vars   ,ONLY: Face_vGP
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -130,6 +135,7 @@ DO SideID=firstSideID_wo_BC,lastSideID
   CALL Riemann(PP_N,Flux_master(:,:,:,SideID),&
       U_master    (:,:,:,SideID),U_slave    (:,:,:,SideID),       &
       UPrim_master(:,:,:,SideID),UPrim_slave(:,:,:,SideID),       &
+      Face_vGP(:,:,:,SideID)  , &
       NormVec (:,:,:,FV_Elems_Max(SideID),SideID), &
       TangVec1(:,:,:,FV_Elems_Max(SideID),SideID), &
       TangVec2(:,:,:,FV_Elems_Max(SideID),SideID),doBC=.FALSE.)
@@ -162,6 +168,7 @@ IF(.NOT.doMPISides)THEN
        gradUy_master(:,:,:,     SideID),&
        gradUz_master(:,:,:,     SideID),&
 #endif
+       Face_vGP(     :,:,:,     SideID),&       
        NormVec(      :,:,:,FVEM,SideID),&
        TangVec1(     :,:,:,FVEM,SideID),&
        TangVec2(     :,:,:,FVEM,SideID),&
@@ -194,6 +201,88 @@ END DO
 #endif
 
 END SUBROUTINE FillFlux
+
+
+
+!==================================================================================================================================
+!> Computes the flux on sliding mesh mortar sides. First calculates primitive variables on the mortars, then calls Riemann.
+!==================================================================================================================================
+SUBROUTINE FillFluxSM(Flux_MorStat,Flux_MorRot,U_MorStat,U_MorRot,UPrim_MorStat,UPrim_MorRot,doMPISides)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_SM_Vars,         ONLY: NormVec_SM,TangVec1_SM,TangVec2_SM,Face_vGPSM
+USE MOD_Mesh_Vars,       ONLY: nSMSides,IAmAStatProc
+USE MOD_ChangeBasisByDim,ONLY: ChangeBasisSurf
+USE MOD_Riemann,         ONLY: Riemann
+USE MOD_EOS,             ONLY: ConsToPrim
+#if PARABOLIC
+USE MOD_Riemann,         ONLY: ViscousFlux
+USE MOD_SM_Vars,         ONLY: gradUx_MorStat,gradUy_MorStat,gradUz_MorStat
+USE MOD_SM_Vars,         ONLY: gradUx_MorRot ,gradUy_MorRot ,gradUz_MorRot 
+#if EDDYVISCOSITY
+USE MOD_SM_Vars,         ONLY: muSGS_MorStat ,muSGS_MorRot
+#endif /*EDDYVISCOSITY*/
+#endif /*PARABOLIC*/
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,INTENT(OUT)   :: Flux_MorStat( 1:PP_nVar    ,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+REAL,INTENT(OUT)   :: Flux_MorRot(  1:PP_nVar    ,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+REAL,INTENT(INOUT) :: U_MorStat(    1:PP_nVar    ,0:PP_N,0:PP_NZ,1:2*nSMSides) !< solution on stator mortars
+REAL,INTENT(INOUT) :: U_MorRot(     1:PP_nVar    ,0:PP_N,0:PP_NZ,1:2*nSMSides) !< solution on rorot mortars
+REAL,INTENT(INOUT) :: UPrim_MorStat(1:PP_nVarPrim,0:PP_N,0:PP_NZ,1:2*nSMSides) !< primitive solution on stator mortars
+REAL,INTENT(INOUT) :: UPrim_MorRot( 1:PP_nVarPrim,0:PP_N,0:PP_NZ,1:2*nSMSides) !< primitive solution on rorot mortars
+LOGICAL,INTENT(IN) :: doMPISides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER :: iiMortar
+#if PARABOLIC
+REAL    :: FluxV_loc(PP_nVar,0:PP_N, 0:PP_NZ)
+#endif
+!==================================================================================================================================
+#if USE_MPI
+IF(doMPISides)THEN
+#endif
+IF(IAmAStatProc) THEN
+  DO iiMortar=1,2*nSMSides
+
+    CALL Riemann(PP_N,&
+                 Flux_MorStat(:,:,:,iiMortar), &
+                 U_MorStat(:,:,:,iiMortar),    &
+                 U_MorRot( :,:,:,iiMortar),    &
+                 UPrim_MorStat(:,:,:,iiMortar),&
+                 UPrim_MorRot( :,:,:,iiMortar),&
+                 Face_vGPSM,                   &
+                 NormVec_SM (:,:,:,iiMortar),  &
+                 TangVec1_SM(:,:,:,iiMortar),  &
+                 TangVec2_SM(:,:,:,iiMortar),  &
+                 doBC=.FALSE.)
+
+#if PARABOLIC
+    ! 1.2) Fill viscous flux for non-BC sides
+    CALL ViscousFlux(PP_N,FluxV_loc,    UPrim_MorStat(:,:,:,iiMortar), UPrim_MorRot  (:,:,:,iiMortar),&
+        gradUx_MorStat(:,:,:,iiMortar),gradUy_MorStat(:,:,:,iiMortar), gradUz_MorStat(:,:,:,iiMortar),&
+        gradUx_MorRot (:,:,:,iiMortar),gradUy_MorRot (:,:,:,iiMortar), gradUz_MorRot (:,:,:,iiMortar),&
+        NormVec_SM(:,:,:,iiMortar)&
+#if EDDYVISCOSITY
+        ,muSGS_MorStat(:,:,:,iiMortar),muSGS_MorRot(:,:,:,iiMortar)&
+#endif
+    )
+    ! 1.3) add up viscous flux
+    Flux_MorStat(:,:,:,iiMortar) = Flux_MorStat(:,:,:,iiMortar) + FluxV_loc
+#endif /*PARABOLIC*/
+
+  END DO ! iiMortar
+  ! 5. copy flux from master side to slave side
+  Flux_MorRot = Flux_MorStat
+END IF 
+#if USE_MPI
+END IF
+#endif
+END SUBROUTINE FillFluxSM
 
 
 

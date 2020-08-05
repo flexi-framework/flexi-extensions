@@ -152,7 +152,7 @@ USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState,WriteBaseFlow
 USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
-USE MOD_DG_Vars             ,ONLY: U
+USE MOD_DG_Vars             ,ONLY: U,JU
 USE MOD_Overintegration     ,ONLY: Overintegration
 USE MOD_Overintegration_Vars,ONLY: OverintegrationType
 USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
@@ -163,6 +163,10 @@ USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
 #if FV_ENABLED
 USE MOD_FV
 #endif
+#if GCL
+USE MOD_GCL                 ,ONLY: GCLTimeDerivative_weakForm
+#endif /*GCL*/
+USE MOD_MoveMesh            ,ONLY: MoveMesh
 use MOD_IO_HDF5
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -208,13 +212,19 @@ END SELECT
 
 ! Do first RK stage of first timestep to fill gradients
 CurrentStage=1
+CALL MoveMesh(t)
+CALL ApplyJacobianCons(U,JU,toPhysical=.FALSE.) ! Transform initial solution to reference space
 CALL DGTimeDerivative_weakForm(t)
+#if GCL
+CALL GCLTimeDerivative_weakForm()
+#endif /*GCL*/
 IF(doCalcIndicator) CALL CalcIndicator(U,t)
 
 #if FV_ENABLED
 ! initial switch to FV sub-cells (must be called after DGTimeDerivative_weakForm, since indicator may require gradients)
 IF(.NOT.DoRestart)THEN
   CALL FV_FillIni()
+  CALL ApplyJacobianCons(U,JU,toPhysical=.FALSE.) ! Transform initial solution to reference space
 END IF
 #endif
 
@@ -280,7 +290,12 @@ DO
 #if FV_ENABLED
   CALL FV_Switch(U,AllowToDG=(nCalcTimestep.LT.1))
 #endif
+  CALL MoveMesh(t)                               !Calculate new mesh positions
+  CALL ApplyJacobianCons(JU,U,toPhysical=.TRUE.) !Get current physical U 
   CALL DGTimeDerivative_weakForm(t)
+#if GCL
+  CALL GCLTimeDerivative_weakForm()
+#endif /*GCL*/
   IF(nCalcTimestep.LT.1)THEN
     dt_Min=CALCTIMESTEP(errType)
     nCalcTimestep=MIN(FLOOR(ABS(LOG10(ABS(dt_MinOld/dt_Min-1.)**2.*100.+EPSILON(0.)))),nCalcTimeStepMax)
@@ -329,7 +344,11 @@ DO
   END IF
 
   ! Call DG operator to fill face data, fluxes, gradients for analyze
-  IF(doAnalyze) CALL DGTimeDerivative_weakForm(t)
+  IF(doAnalyze) THEN
+    CALL MoveMesh(t)                               ! Move mesh to current position
+    CALL ApplyJacobianCons(JU,U,toPhysical=.TRUE.) ! Get most recent physical state
+    CALL DGTimeDerivative_weakForm(t)
+  END IF
 
   ! Call your Analysis Routine for your Testcase here.
   IF((MOD(iter,nAnalyzeTestCase).EQ.0).OR.doAnalyze) CALL AnalyzeTestCase(t)
@@ -394,29 +413,42 @@ END SUBROUTINE TimeDisc
 !> This procedure takes the current time t, the time step dt and the solution at
 !> the current time U(t) and returns the solution at the next time level.
 !> RKA/b/c coefficients are low-storage coefficients, NOT the ones from butcher table.
+!> For moving meshes, we have to advance JU in time and calculate the new physical state after the time integration.
+!> Naming of the variables is INCONSISTENT to get everything done with as little changes as possible.
 !===================================================================================================================================
 SUBROUTINE TimeStepByLSERKW2(t)
 ! MODULES
+USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Vector
-USE MOD_DG           ,ONLY: DGTimeDerivative_weakForm
-USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
-USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
-USE MOD_Mesh_Vars    ,ONLY: nElems
-USE MOD_PruettDamping,ONLY: TempFilterTimeDeriv
-USE MOD_Sponge_Vars  ,ONLY: CalcPruettDamping
-USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
+USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
+USE MOD_DG_Vars             ,ONLY: U,JU,Ut,nTotalU
+#if GCL
+USE MOD_GCL                 ,ONLY: GCLTimeDerivative_weakForm
+USE MOD_GCL_Vars            ,ONLY: nTotalGCL,Jac,Jac_t
+USE MOD_Mesh_Vars           ,ONLY: sJ
+#endif /*GCL*/
+USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
+USE MOD_TimeDisc_Vars       ,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
+USE MOD_Mesh_Vars           ,ONLY: nElems
+USE MOD_PruettDamping       ,ONLY: TempFilterTimeDeriv
+USE MOD_Sponge_Vars         ,ONLY: CalcPruettDamping
+USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
 #if FV_ENABLED
-USE MOD_FV           ,ONLY: FV_Switch
-USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
+USE MOD_FV                  ,ONLY: FV_Switch
+USE MOD_FV_Vars             ,ONLY: FV_toDGinRK
 #endif
+USE MOD_MoveMesh            ,ONLY: MoveMesh
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)  :: t                                     !< current simulation time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL     :: Ut_temp(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) ! temporal variable for Ut
+REAL     :: JUt_temp(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) ! temporal variable for JUt
+#if GCL
+REAL     :: Jact_temp(1,       0:PP_N,0:PP_N,0:PP_NZ,1:nElems) ! temporal variable for Jac_t
+#endif
 REAL     :: tStage,b_dt(1:nRKStages)
 INTEGER  :: iStage
 !===================================================================================================================================
@@ -429,21 +461,37 @@ IF(CalcPruettDamping) CALL TempFilterTimeDeriv(U,dt)
 CurrentStage=1
 tStage=t
 !CALL DGTimeDerivative_weakForm(tStage)      !allready called in timedisc
-CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
-CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-
+CALL VCopy(nTotalU,JUt_temp,Ut)                !JUt_temp = JUt
+CALL VAXPBY(nTotalU,JU,Ut,ConstIn=b_dt(1))     !JU       = JU + JUt*b_dt(1)
+#if GCL
+#if FV_ENABLED
+CALL CollectiveStop(__STAMP__, "FV and GCL are not validated. Think about the theory!!!")
+#endif
+!CALL GCLTimeDerivative_weakForm()
+CALL VCopy(nTotalGCL,Jact_temp,Jac_t)               !Jact_temp = Jac_t
+CALL VAXPBY(nTotalGCL,Jac,Jac_t,ConstIn=b_dt(1))    !Jac       = Jac + Jac_t*b_dt(1)
+sJ(:,:,:,:,0) = 1./Jac(1,:,:,:,:)                   !Set current 1/J
+#endif /*GCL*/
 
 ! Following steps
 DO iStage=2,nRKStages
   CurrentStage=iStage
   tStage=t+dt*RKc(iStage)
+  CALL MoveMesh(tStage)                          !Calculate new mesh positions
+  CALL ApplyJacobianCons(JU,U,toPhysical=.TRUE.) !Get current physical U 
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
-  CALL FV_Switch(U,Ut_temp,AllowToDG=FV_toDGinRK)
+  CALL FV_Switch(U,JUt_temp,AllowToDG=FV_toDGinRK)
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
-  CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
-  CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+  CALL VAXPBY(nTotalU,JUt_temp,Ut,ConstOut=-RKA(iStage)) !JUt_temp = JUt - JUt_temp*RKA(iStage)
+  CALL VAXPBY(nTotalU,JU,JUt_temp,ConstIn =b_dt(iStage)) !JU       = JU  + JUt_temp*b_dt(iStage)
+#if GCL
+  CALL GCLTimeDerivative_weakForm()
+  CALL VAXPBY(nTotalGCL,Jact_temp,Jac_t,ConstOut=-RKA(iStage)) !Jact_temp = Jact - Jact_temp*RKA(iStage)
+  CALL VAXPBY(nTotalGCL,Jac,Jact_temp,ConstIn =b_dt(iStage))   !Jac       = Jac + Jact_temp*b_dt(iStage)
+  sJ(:,:,:,:,0) = 1./Jac(1,:,:,:,:)                            !Set current 1/J
+#endif /*GCL*/
 END DO
 CurrentStage=1
 
@@ -458,27 +506,39 @@ END SUBROUTINE TimeStepByLSERKW2
 !===================================================================================================================================
 SUBROUTINE TimeStepByLSERKK3(t)
 ! MODULES
+USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Vector
-USE MOD_DG           ,ONLY: DGTimeDerivative_weakForm
-USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
-USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
-USE MOD_Mesh_Vars    ,ONLY: nElems
-USE MOD_PruettDamping,ONLY: TempFilterTimeDeriv
-USE MOD_Sponge_Vars  ,ONLY: CalcPruettDamping
-USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
+USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
+USE MOD_DG_Vars             ,ONLY: U,JU,Ut,nTotalU
+#if GCL
+USE MOD_GCL                 ,ONLY: GCLTimeDerivative_weakForm
+USE MOD_GCL_Vars            ,ONLY: nTotalGCL,Jac,Jac_t
+USE MOD_Mesh_Vars           ,ONLY: sJ
+#endif /*GCL*/
+USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
+USE MOD_TimeDisc_Vars       ,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
+USE MOD_Mesh_Vars           ,ONLY: nElems
+USE MOD_PruettDamping       ,ONLY: TempFilterTimeDeriv
+USE MOD_Sponge_Vars         ,ONLY: CalcPruettDamping
+USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
 #if FV_ENABLED
-USE MOD_FV           ,ONLY: FV_Switch
-USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
+USE MOD_FV                  ,ONLY: FV_Switch
+USE MOD_FV_Vars             ,ONLY: FV_toDGinRK
 #endif
+USE MOD_MoveMesh            ,ONLY: MoveMesh
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)  :: t                                     !< current simulation time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL     :: S2(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
-REAL     :: UPrev(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+REAL     :: S2(    1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+REAL     :: JUPrev(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+#if GCL
+REAL     :: Jac_S2( 1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+REAL     :: JacPrev(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+#endif /*GCL*/
 REAL     :: tStage,b_dt(1:nRKStages)
 INTEGER  :: iStage
 !===================================================================================================================================
@@ -493,23 +553,44 @@ b_dt=RKb*dt
 
 CurrentStage=1
 tStage=t
-CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
-CALL VCopy(nTotalU,S2,U)                       !S2=U
+CALL VCopy(nTotalU,JUprev,JU)                  !JUprev=JU
+CALL VCopy(nTotalU,S2,JU)                      !S2=JU
 !CALL DGTimeDerivative_weakForm(t)             ! allready called in timedisc
-CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+CALL DGTimeDerivative_weakForm(t)
+CALL VAXPBY(nTotalU,JU,Ut,ConstIn=b_dt(1))     !JU      = JU + JUt*b_dt(1)
+#if GCL
+#if FV_ENABLED
+CALL CollectiveStop(__STAMP__, "FV and GCL are not validated. Think about the theory!!!")
+#endif
+CALL VCopy(nTotalGCL,JacPrev,Jac)                !JacPrev=Jac
+CALL VCopy(nTotalGCL,Jac_S2,Jac)                 !Jac_S2=Jac
+!CALL GCLTimeDerivative_weakForm()
+CALL VAXPBY(nTotalGCL,Jac,Jac_t,ConstIn=b_dt(1)) !Jac = Jac + Jac_t*b_dt(1)
+sJ(:,:,:,:,0) = 1./Jac(1,:,:,:,:)                !Set current 1/J
+#endif /*GCL*/
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
   tStage=t+dt*RKc(iStage)
+  CALL MoveMesh(tStage)                          !Calculate new mesh positions
+  CALL ApplyJacobianCons(JU,U,toPhysical=.TRUE.) !Get current physical U 
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
-  CALL FV_Switch(U,Uprev,S2,AllowToDG=FV_toDGinRK)
+  CALL FV_Switch(U,JUprev,S2,AllowToDG=FV_toDGinRK)
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
-  CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)
-  CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
-  CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
-  CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
+  CALL VAXPBY(nTotalU,S2,JU,ConstIn=RKdelta(iStage))               !S2 = S2 + JU*RKdelta(iStage)
+  CALL VAXPBY(nTotalU,JU,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !JU = RKg1(iStage)*JU + RKg2(iStage)*S2
+  CALL VAXPBY(nTotalU,JU,JUprev,ConstIn=RKg3(iStage))               !JU = JU + RKg3(ek)*JUprev
+  CALL VAXPBY(nTotalU,JU,Ut,ConstIn=b_dt(iStage))                   !JU = JU + jUt*b_dt(iStage)
+#if GCL
+  CALL GCLTimeDerivative_weakForm()
+  CALL VAXPBY(nTotalGCL,Jac_S2,Jac,ConstIn=RKdelta(iStage))                    !Jac_S2 = Jac_S2 + Jac*RKdelta(iStage)
+  CALL VAXPBY(nTotalGCL,Jac,Jac_S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !Jac = RKg1(iStage)*Jac + RKg2(iStage)*Jac_S2
+  CALL VAXPBY(nTotalGCL,Jac,JacPrev,ConstIn=RKg3(iStage))                      !Jac = Jac + RKg3(ek)*JacPrev
+  CALL VAXPBY(nTotalGCL,Jac,Jac_t,ConstIn=b_dt(iStage))                        !Jac = Jac + Jac_t*b_dt(iStage)
+  sJ(:,:,:,:,0) = 1./Jac(1,:,:,:,:)                                            !Set current 1/J
+#endif /*GCL*/
 END DO
 CurrentStage=1
 

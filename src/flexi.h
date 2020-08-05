@@ -138,3 +138,15 @@
 #define PP_NZ   PP_N
 #define DIMV    1:3
 #endif
+
+! sliding mesh
+#define SM_SIDE_TO_POSITION   1
+#define SM_SIDE_TO_LAYER      2
+#define SM_SIDE_TO_ELEM_ID    3
+#define SM_SIDE_TO_NB_ELEM_ID 4
+#define SM_SIDE_TO_INTERFACE  5
+
+#define SM_TYPE_NONE            0
+#define SM_TYPE_ROTATION_RADIAL 1
+#define SM_TYPE_PLANAR          2
+#define SM_TYPE_ROTATION_AXIAL  3

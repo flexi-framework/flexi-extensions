@@ -23,10 +23,12 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL,ALLOCATABLE,TARGET :: M_0_1(:,:)    !< 1D-Mortar Operator: interpolation full interval 0: [-1,1] to left interval 1: [-1,0]
-REAL,ALLOCATABLE,TARGET :: M_0_2(:,:)    !< 1D-Mortar Operator: interpolation full interval 0: [-1,1] to right intervall 2: [0,1]
-REAL,ALLOCATABLE,TARGET :: M_1_0(:,:)    !< 1D-Mortar Operator: projection left interval 1: [-1,0]  to full intervall 0: [-1,1]
-REAL,ALLOCATABLE,TARGET :: M_2_0(:,:)    !< 1D-Mortar Operator: projection right interval 2: [0,1]  to full intervall 0: [-1,1]
+REAL,ALLOCATABLE,TARGET :: M_0_1(:,:)      !< 1D-Mortar Operator: interpolation full interval 0: [-1,1] to left interval 1: [-1,0]
+REAL,ALLOCATABLE,TARGET :: M_0_2(:,:)      !< 1D-Mortar Operator: interpolation full interval 0: [-1,1] to right intervall 2: [0,1]
+REAL,ALLOCATABLE,TARGET :: M_0_1_Mesh(:,:) !< 1D-Mortar Operator on NGeo
+REAL,ALLOCATABLE,TARGET :: M_0_2_Mesh(:,:) !< 1D-Mortar Operator on NGeo
+REAL,ALLOCATABLE,TARGET :: M_1_0(:,:)      !< 1D-Mortar Operator: projection left interval 1: [-1,0]  to full intervall 0: [-1,1]
+REAL,ALLOCATABLE,TARGET :: M_2_0(:,:)      !< 1D-Mortar Operator: projection right interval 2: [0,1]  to full intervall 0: [-1,1]
 #if FV_ENABLED
 REAL,ALLOCATABLE,TARGET :: FV_M_0_1(:,:) !< 1D-Mortar Operator FV: interpolation full interval 0: [-1,1] to left interval 1: [-1,0]
 REAL,ALLOCATABLE,TARGET :: FV_M_0_2(:,:) !< 1D-Mortar Operator FV: interpolation full interval 0: [-1,1] to right intervall 2:[0,1]

@@ -247,8 +247,10 @@ CALL GetDataProps(nVar_State,PP_N,nElems_State,NodeType_State)
 ! read options from posti parameter file
 CALL prms%read_options(postifile)
 NVisu             = GETINT("NVisu",INTTOSTR(PP_N))
+MovingMesh        = GETLOGICAL("MovingMesh")
 
 ! again read MeshFile from posti prm file (this overwrites the MeshFile read from the state file)
+
 Meshfile          =  GETSTR("MeshFile",MeshFile_state)
 IF (.NOT.FILEEXISTS(MeshFile)) THEN
   !!!!!!
@@ -498,6 +500,7 @@ CALL prms%CreateLogicalOption("Avg2DHDF5Output" , "Write averaged solution to HD
 CALL prms%CreateStringOption( "NodeTypeVisu"    , "NodeType for visualization. Visu, Gauss,Gauss-Lobatto,Visu_inner"    ,"VISU")
 CALL prms%CreateLogicalOption("DGonly"          , "Visualize FV elements as DG elements."    ,".FALSE.")
 CALL prms%CreateStringOption( "BoundaryName"    , "Names of boundaries for surfaces, which should be visualized.", multiple=.TRUE.)
+CALL prms%CreateLogicalOption("MovingMesh"      , "Simulation uses a moving mesh",".FALSE.")
 
 IF (doPrintHelp.GT.0) THEN
   CALL PrintDefaultParameterFile(doPrintHelp.EQ.2,statefile) !statefile string conatains --help etc!
@@ -618,12 +621,12 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
 
 
   ! Convert coordinates to visu grid
-  IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedAvg2D) THEN
+  IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedAvg2D.OR.MovingMesh) THEN
     CALL BuildVisuCoords()
   END IF
   IF (doSurfVisu) THEN
     ! Convert surface coordinates to visu grid
-    IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedBCnames) THEN
+    IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedBCnames.OR.MovingMesh) THEN
       CALL BuildSurfVisuCoords()
     END IF
   END IF

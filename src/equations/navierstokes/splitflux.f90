@@ -34,17 +34,19 @@ PRIVATE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ABSTRACT INTERFACE
-  PPURE SUBROUTINE VolumeFlux(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+  PPURE SUBROUTINE VolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
     REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef,U
     REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef,UPrim
+    REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef,MeshVel
     REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef,M
     REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux
   END SUBROUTINE
 END INTERFACE
 
 ABSTRACT INTERFACE
-  PPURE SUBROUTINE SurfaceFlux(U_LL,U_RR,F)
+  PPURE SUBROUTINE SurfaceFlux(U_LL,U_RR,MeshVel,F)
     REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL,U_RR
+    REAL,                   INTENT(IN)  :: MeshVel
     REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F
   END SUBROUTINE
 END INTERFACE
@@ -145,7 +147,7 @@ END SUBROUTINE InitSplitDG
 !> Computes the Split-Flux retaining the standard NS-Equations
 !> Attention 1: Factor 2 from differentiation matrix is already been considered
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxSD(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxSD(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -155,6 +157,8 @@ REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef          !< conserved variables
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U             !< conserved variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef      !< primitive variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim         !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel       !< mesh velocities
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef          !< metric terms
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: M             !< metric terms
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux          !< flux in reverence space
@@ -199,6 +203,31 @@ hTilde(4) = (URef(4)*UPrimRef(4)+UPrimRef(5) + U(4)*UPrim(4)+UPrim(5)) ! {rho*v�
 hTilde(5) = (rhoEpRef*UPrimRef(4) + rhoEp*UPrim(4))                    ! {(rho*E+p)*w}
 #endif
 
+! ALE fluxes
+fTilde(1) = fTilde(1)-0.5*(MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))
+fTilde(2) = fTilde(2)-0.5*(MeshVelRef(1)+MeshVel(1))*(URef(2)+U(2))
+fTilde(3) = fTilde(3)-0.5*(MeshVelRef(1)+MeshVel(1))*(URef(3)+U(3))
+#if PP_dim == 3
+fTilde(4) = fTilde(4)-0.5*(MeshVelRef(1)+MeshVel(1))*(URef(4)+U(4))
+#endif
+fTilde(5) = fTilde(5)-0.5*(MeshVelRef(1)+MeshVel(1))*(URef(5)+U(5))
+
+gTilde(1) = gTilde(1)-0.5*(MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))
+gTilde(2) = gTilde(2)-0.5*(MeshVelRef(2)+MeshVel(2))*(URef(2)+U(2))
+gTilde(3) = gTilde(3)-0.5*(MeshVelRef(2)+MeshVel(2))*(URef(3)+U(3))
+#if PP_dim == 3
+gTilde(4) = gTilde(4)-0.5*(MeshVelRef(2)+MeshVel(2))*(URef(4)+U(4))
+#endif
+gTilde(5) = gTilde(5)-0.5*(MeshVelRef(2)+MeshVel(2))*(URef(5)+U(5))
+
+#if PP_dim == 3
+hTilde(1) = hTilde(1)-0.5*(MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))
+hTilde(2) = hTilde(2)-0.5*(MeshVelRef(3)+MeshVel(3))*(URef(2)+U(2))
+hTilde(3) = hTilde(3)-0.5*(MeshVelRef(3)+MeshVel(3))*(URef(3)+U(3))
+hTilde(4) = hTilde(4)-0.5*(MeshVelRef(3)+MeshVel(3))*(URef(4)+U(4))
+hTilde(5) = hTilde(5)-0.5*(MeshVelRef(3)+MeshVel(3))*(URef(5)+U(5))
+#endif
+
 ! transform into reference space
 Flux(:) = 0.5*(MRef(1)+M(1))*fTilde(:) + &
 #if PP_dim == 3
@@ -211,7 +240,7 @@ END SUBROUTINE SplitVolumeFluxSD
 !==================================================================================================================================
 !> Computes the surface flux for the split formulation retaining the standard NS-Equations
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxSD(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxSD(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -219,6 +248,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL      !< variables at the left surfaces
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR      !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel   !< mesh velocity
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F         !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -234,6 +264,15 @@ F(4)= 0.
 #endif
 F(5)= 0.5*((U_LL(ENER)+U_LL(PRES))*U_LL(VEL1)+(U_RR(ENER)+U_RR(PRES))*U_RR(VEL1))! {(rho*E+p)*u}
 
+
+! ALE fluxes
+F(1)=F(1)-0.5*MeshVel*(U_LL(DENS)+U_RR(DENS))
+F(2)=F(2)-0.5*MeshVel*(U_LL(MOM1)+U_RR(MOM1))
+F(3)=F(3)-0.5*MeshVel*(U_LL(MOM2)+U_RR(MOM2))
+#if PP_dim == 3
+F(4)=F(4)-0.5*MeshVel*(U_LL(MOM3)+U_RR(MOM3))
+#endif
+F(5)=F(5)-0.5*MeshVel*(U_LL(ENER)+U_RR(ENER))
 END SUBROUTINE SplitSurfaceFluxSD
 
 !==================================================================================================================================
@@ -243,7 +282,7 @@ END SUBROUTINE SplitSurfaceFluxSD
 !> skew-symmetric-like schemes in structured meshes: application to compressible flows." 
 !> Journal of Computational Physics 161.1 (2000): 114-139.
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxDU(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxDU(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -253,6 +292,8 @@ REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef          !< conserved variables
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U             !< conserved variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef      !< primitive variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim         !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel       !< mesh velocities
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef          !< metric terms
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: M             !< metric terms
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux          !< flux in reverence space
@@ -293,6 +334,13 @@ hTilde(4) = 0.5*(URef(4)+U(4))*(UPrimRef(4)+UPrim(4)) + (UPrimRef(5)+UPrim(5)) !
 hTilde(5) = 0.5*(URef(5)+U(5)+UPrimRef(5)+UPrim(5))*(UPrimRef(4)+UPrim(4))     ! ({rho*E}+{p})*{w}
 #endif
 
+! Kinetic energy stable ALE fluxes
+CALL KepALEVolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,fTilde,gTilde&
+#if PP_dim == 3
+                                  ,hTilde&
+#endif
+                                 )
+
 ! transform into reference space
 Flux(:) = 0.5*(MRef(1)+M(1))*fTilde(:) + &
 #if PP_dim == 3
@@ -305,7 +353,7 @@ END SUBROUTINE SplitVolumeFluxDU
 !==================================================================================================================================
 !> Computes the surface flux for the split formulation of Ducros
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxDU(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxDU(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -313,6 +361,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL      !< variables at the left surfaces
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR      !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel   !< mesh velocity
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F         !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -327,6 +376,9 @@ F(4)= 0.
 #endif
 F(5)= 0.25*(U_LL(ENER)+U_RR(ENER)+U_LL(PRES)+U_RR(PRES))*(U_LL(VEL1)+U_RR(VEL1))         ! ({rho*E}+{p})*{u}
 
+! Kinetic energy stable ALE fluxes
+CALL KepALESurfaceFlux(U_LL,U_RR,MeshVel,F)
+
 END SUBROUTINE SplitSurfaceFluxDU
 
 !==================================================================================================================================
@@ -336,7 +388,7 @@ END SUBROUTINE SplitSurfaceFluxDU
 !> Navier–Stokes equations for a compressible fluid." Journal of Computational Physics 227.3 (2008): 1676-1700.
 !> Uses a quadratic splitting for u*p and a cubic splitting for rho*e*u in the energy equation. 
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxKG(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxKG(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -346,6 +398,8 @@ REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef          !< conserved variables
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U             !< conserved variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef      !< primitive variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim         !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel       !< mesh velocities
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef          !< metric terms
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: M             !< metric terms
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux          !< flux in reverence space
@@ -394,6 +448,12 @@ hTilde(5) = 0.25*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))*(eRef+e) + &
             0.5 *(UPrimRef(5)+UPrim(5))*(UPrimRef(4)+UPrim(4))                     ! {rho}*{E}*{w}+{p}*{w}
 #endif
 
+! Kinetic energy stable ALE fluxes
+CALL KepALEVolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,fTilde,gTilde&
+#if PP_dim == 3
+                                  ,hTilde&
+#endif
+                                 )
 ! transform into reference space
 Flux(:) = 0.5*(MRef(1)+M(1))*fTilde(:) + &
 #if PP_dim == 3
@@ -406,7 +466,7 @@ END SUBROUTINE SplitVolumeFluxKG
 !==================================================================================================================================
 !> Computes the surface flux for the split formulation of Kennedy and Gruber
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxKG(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxKG(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -414,6 +474,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL      !< variables at the left surfaces
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR      !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel   !< mesh velocity
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F         !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -434,6 +495,9 @@ F(4)= 0.
 F(5)= 0.125*(U_LL(DENS)+U_RR(DENS))*(E_LL+E_RR)*(U_LL(VEL1)+U_RR(VEL1)) + &
       0.25 *(U_LL(PRES)+U_RR(PRES))*(U_LL(VEL1)+U_RR(VEL1))                                  ! {rho}*{E}*{u}+{p}*{u}
 
+! Kinetic energy stable ALE fluxes
+CALL KepALESurfaceFlux(U_LL,U_RR,MeshVel,F)
+
 END SUBROUTINE SplitSurfaceFluxKG
 
 !==================================================================================================================================
@@ -444,7 +508,7 @@ END SUBROUTINE SplitSurfaceFluxKG
 !> Reference: Morinishi, Yohei. "Skew-symmetric form of convective terms and fully conservative finite difference schemes for
 !> variable density low-Mach number flows." Journal of Computational Physics 229.2 (2010): 276-300.
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxMO(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxMO(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -454,6 +518,8 @@ REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef          !< conserved variables
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U             !< conserved variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef      !< primitive variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim         !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel       !< mesh velocities
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef          !< metric terms
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: M             !< metric terms
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux          !< flux in reverence space
@@ -517,6 +583,13 @@ hTilde(5) = (rhoepRef*UPrimRef(4)+rhoep*UPrim(4)) + &                          !
             0.5*(URef(4)*UPrimRef(4)*UPrimRef(4)+U(4)*UPrim(4)*UPrim(4))       !{rho*w³})
 #endif
 
+! Kinetic energy stable ALE fluxes
+CALL KepALEVolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,fTilde,gTilde&
+#if PP_dim == 3
+                                  ,hTilde&
+#endif
+                                 )
+
 ! transform into reference space
 Flux(:) = 0.5*(MRef(1)+M(1))*fTilde(:) + &
 #if PP_dim == 3
@@ -529,7 +602,7 @@ END SUBROUTINE SplitVolumeFluxMO
 !==================================================================================================================================
 !> Computes the surface flux for the split formulation of Morinishi
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxMO(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxMO(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -537,6 +610,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL !< variables at the left surfaces
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel   !< mesh velocity
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F    !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -563,6 +637,9 @@ F(5)= 0.5 *(rhoep_LL*U_LL(VEL1)+rhoep_RR*U_RR(VEL1)) +  &                       
       0.25*(U_LL(MOM1)*U_LL(VEL2)*U_LL(VEL2)+U_RR(MOM1)*U_RR(VEL2)*U_RR(VEL2)) - &       !{rho*u*v²} +
       0.25*(U_LL(MOM1)*U_LL(VEL3)*U_LL(VEL3)+U_RR(MOM1)*U_RR(VEL3)*U_RR(VEL3))           !{rho*u*w²})
 
+! Kinetic energy stable ALE fluxes
+CALL KepALESurfaceFlux(U_LL,U_RR,MeshVel,F)
+
 END SUBROUTINE SplitSurfaceFluxMO
 
 !==================================================================================================================================
@@ -572,7 +649,7 @@ END SUBROUTINE SplitSurfaceFluxMO
 !> equation. It was presented in the (worth reading) overview: Pirozzoli, Sergio. "Numerical methods for high-speed flows."
 !> Annual review of fluid mechanics 43 (2011): 163-194.
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxPI(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxPI(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -582,6 +659,8 @@ REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef          !< conserved variables
 REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U             !< conserved variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef      !< primitive variables
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim         !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel       !< mesh velocities
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef          !< metric terms
 REAL,DIMENSION(1:3        ),INTENT(IN)  :: M             !< metric terms
 REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux          !< flux in reverence space
@@ -627,6 +706,13 @@ hTilde(4) = 0.25*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))**2 + (UPrimRef(5)+UPrim(5
 hTilde(5) = 0.25*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))*(HRef+H)                    ! {rho}*{H}*{w}
 #endif
 
+! Kinetic energy stable ALE fluxes
+CALL KepALEVolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,fTilde,gTilde&
+#if PP_dim == 3
+                                  ,hTilde&
+#endif
+                                 )
+
 ! transform into reference space
 Flux(:) = 0.5*(MRef(1)+M(1))*fTilde(:) + &
 #if PP_dim == 3
@@ -639,7 +725,7 @@ END SUBROUTINE SplitVolumeFluxPI
 !==================================================================================================================================
 !> Computes the surface flux for the split formulation of Pirozzoli
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxPI(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxPI(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 IMPLICIT NONE
@@ -647,6 +733,7 @@ IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL      !< variables at the left surfaces
 REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR      !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel   !< mesh velocity
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F         !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -666,6 +753,9 @@ F(4)= 0.
 #endif
 F(5)= 0.125*(U_LL(DENS)+U_RR(DENS))*(H_LL+H_RR)*(U_LL(VEL1)+U_RR(VEL1))                      ! {rho}*{H}*{u}
 
+! Kinetic energy stable ALE fluxes
+CALL KepALESurfaceFlux(U_LL,U_RR,MeshVel,F)
+
 END SUBROUTINE SplitSurfaceFluxPI
 
 !==================================================================================================================================
@@ -676,25 +766,28 @@ END SUBROUTINE SplitSurfaceFluxPI
 !> Reference: Chandrashekar, Praveen. "Kinetic energy preserving and entropy stable finite volume schemes for compressible Euler
 !> and Navier-Stokes equations." Communications in Computational Physics 14.5 (2013): 1252-1286.
 !==================================================================================================================================
-PPURE SUBROUTINE SplitVolumeFluxCH(URef,UPrimRef,U,UPrim,MRef,M,Flux)
+PPURE SUBROUTINE SplitVolumeFluxCH(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,MRef,M,Flux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Vars, ONLY:sKappaM1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef     !< conserved variables
-REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U        !< conserved variables
-REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef !< primitive variables
-REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim    !< primitive variables
-REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef     !< metric terms
-REAL,DIMENSION(1:3        ),INTENT(IN)  :: M        !< metric terms
-REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux     !< flux in reverence space
+REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: URef       !< conserved variables
+REAL,DIMENSION(PP_nVar    ),INTENT(IN)  :: U          !< conserved variables
+REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrimRef   !< primitive variables
+REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: UPrim      !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVelRef !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MeshVel    !< mesh velocities
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: MRef       !< metric terms
+REAL,DIMENSION(1:3        ),INTENT(IN)  :: M          !< metric terms
+REAL,DIMENSION(PP_nVar    ),INTENT(OUT) :: Flux       !< flux in reverence space
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                    :: beta,betaRef            ! auxiliary variables for the inverse Temperature
-REAL                                    :: pHatMean,HMean          ! auxiliary variable for the mean pressure and specific enthalpy
+REAL                                    :: pHatMean,HMeanMod          ! auxiliary variable for the mean pressure and specific enthalpy
 REAL                                    :: uMean,vMean,wMean       ! auxiliary variable for the average velocities
+REAL                                    :: uRelMean,vRelMean,wRelMean ! auxiliary variable for the average relative velocities
 REAL                                    :: rhoLogMean,betaLogMean  ! auxiliary variable for the logarithmic means
 REAL                                    :: rhoMean                 ! auxiliary variable for the mean density
 REAL,DIMENSION(PP_nVar)                 :: fTilde,gTilde           ! flux in physical space
@@ -706,6 +799,9 @@ REAL,DIMENSION(PP_nVar)                 :: hTilde                  ! flux in phy
 uMean = 0.5*(UPrimRef(2) + UPrim(2))
 vMean = 0.5*(UPrimRef(3) + UPrim(3))
 wMean = 0.5*(UPrimRef(4) + UPrim(4))
+uRelMean = 0.5*(UPrimRef(2)-MeshVelRef(1) + UPrim(2)-MeshVel(1))
+vRelMean = 0.5*(UPrimRef(3)-MeshVelRef(2) + UPrim(3)-MeshVel(2))
+wRelMean = 0.5*(UPrimRef(4)-MeshVelRef(3) + UPrim(4)-MeshVel(3))
 
 ! inverse temperature
 betaRef  = 0.5*URef(1)/UPrimRef(5)
@@ -714,38 +810,41 @@ beta     = 0.5*U(1)/UPrim(5)
 ! Density and inverse temperature logarithmic average
 CALL GetLogMean(URef(1),U(1),rhoLogMean)
 CALL GetLogMean(betaRef,beta,betaLogMean)
-! Average of pressure and specific enthalpy
+! Average of pressure and enthalpy - enthalpy is modified so we can use it with the mesh velocity
 pHatMean = 0.5*(URef(1)+U(1))/(betaRef+beta)
-HMean    = 0.5*sKappaM1/betaLogMean + pHatMean/rhoLogMean + &
+HMeanMod = 0.5*sKappaM1/betaLogMean + &
            0.5*(UPrimRef(2)*UPrim(2) + UPrimRef(3)*UPrim(3) + UPrimRef(4)*UPrim(4))
 
 ! local Euler fluxes x-direction
-fTilde(1) = rhoLogMean*uMean                                                       ! {rho}_log*{u}
-fTilde(2) = rhoLogMean*uMean**2 + pHatMean                                         ! {rho}_log*{u}²+{pHat}
-fTilde(3) = rhoLogMean*uMean*vMean                                                 ! {rho}_log*{u}*{v}
+fTilde(1) = rhoLogMean*uRelMean                                                    ! {rho}_log*{u-u_m}
+fTilde(2) = rhoLogMean*uRelMean*uMean + pHatMean                                      ! {rho}_log*{u-u_m}*{u}+{p}
+fTilde(3) = rhoLogMean*uRelMean*vMean                                              ! {rho}_log*{u-u_m}*{v}
 #if PP_dim == 3
-fTilde(4) = rhoLogMean*uMean*wMean                                                 ! {rho}_log*{u}*{w}
+fTilde(4) = rhoLogMean*uRelMean*wMean                                              ! {rho}_log*{u_m}*{w}
 #else
 fTilde(4) = 0.
 #endif
-fTilde(5) = rhoLogMean*HMean*uMean                                                 ! {rho}_log*{H}*{u}
+! {rho}_log*{u-u_m}/(2*(kappa-1*{beta}_log))+0.5*{rho}_log*{u-u_m}*{|u|^2}+{rho}*{u}/(2*{beta})
+fTilde(5) = rhoLogMean*HMeanMod*uRelMean + pHatMean*uMean
 ! local Euler fluxes y-direction
-gTilde(1) = rhoLogMean*vMean                                                       ! {rho}_log*{v}
-gTilde(2) = rhoLogMean*vMean*uMean                                                 ! {rho}_log*{v}*{u}
-gTilde(3) = rhoLogMean*vMean**2 +pHatMean                                          ! {rho}_log*{v}²+{pHat}
+gTilde(1) = rhoLogMean*vRelMean                                                    ! {rho}_log*{v-v_m}
+gTilde(2) = rhoLogMean*vRelMean*uMean                                              ! {rho}_log*{v-v_m}*{u}
+gTilde(3) = rhoLogMean*vRelMean*vMean + pHatMean                                      ! {rho}_log*{v-v_m}*{v_m}+{p}
 #if PP_dim == 3
-gTilde(4) = rhoLogMean*vMean*wMean                                                 ! {rho}_log*{v}*{w}
+gTilde(4) = rhoLogMean*vRelMean*wMean                                              ! {rho}_log*{v-v_m}*{w}
 #else
 gTilde(4) = 0.
 #endif
-gTilde(5) = rhoLogMean*HMean*vMean                                                 ! {rho}_log*{H}*{v}
+! {rho}_log*{v-v_m}/(2*(kappa-1*{beta}_log))+0.5*{rho}_log*{v-v_m}*{|u|^2}+{rho}*{v}/(2*{beta})
+gTilde(5) = rhoLogMean*HMeanMod*vRelMean + pHatMean*vMean
 #if PP_dim == 3
 ! local Euler fluxes z-direction
-hTilde(1) = rhoLogMean*wMean                                                       ! {rho}_log*{w}
-hTilde(2) = rhoLogMean*wMean*uMean                                                 ! {rho}_log*{w}*{u}
-hTilde(3) = rhoLogMean*wMean*vMean                                                 ! {rho}_log*{w}*{v}
-hTilde(4) = rhoLogMean*wMean**2 + pHatMean                                         ! {rho}_log*{w}²+{pHat}
-hTilde(5) = rhoLogMean*HMean*wMean                                                 ! {rho}_log*{H}*{w}
+hTilde(1) = rhoLogMean*wRelMean                                                       ! {rho}_log*{w-w_m}
+hTilde(2) = rhoLogMean*wRelMean*uMean                                                 ! {rho}_log*{w-w_m}*{u}
+hTilde(3) = rhoLogMean*wRelMean*vMean                                                 ! {rho}_log*{w-w_m}*{v}
+hTilde(4) = rhoLogMean*wRelMean*wMean + pHatMean                                         ! {rho}_log*{w-w_m}*{w}+{p}
+! {rho}_log*{w-w_m}/(2*(kappa-1*{beta}_log))+0.5*{rho}_log*{w-w_m}*{|u|^2}+{rho}*{w}/(2*{beta})
+hTilde(5) = rhoLogMean*HMeanMod*wRelMean + pHatMean*wMean
 #endif
 
 ! transform into reference space
@@ -765,27 +864,29 @@ END SUBROUTINE SplitVolumeFluxCH
 !> The flux after Chanrashekar uses a special computation of the pressure, based on the averages of density and inverse 
 !> temperature, which correspondonds to using the harmonic average of the temperature when applying the ideal gas law.
 !==================================================================================================================================
-PPURE SUBROUTINE SplitSurfaceFluxCH(U_LL,U_RR,F)
+PPURE SUBROUTINE SplitSurfaceFluxCH(U_LL,U_RR,MeshVel,F)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Vars, ONLY:sKappaM1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL !< variables at the left surfaces
-REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR !< variables at the right surfaces
-REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F    !< resulting flux
+REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_LL    !< variables at the left surfaces
+REAL,DIMENSION(PP_2Var),INTENT(IN)  :: U_RR    !< variables at the right surfaces
+REAL,                   INTENT(IN)  :: MeshVel !< mesh velocity
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: F       !< resulting flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: beta_LL,beta_RR        ! auxiliary variables for the inverse Temperature
-REAL                                :: pHatMean,HMean         ! auxiliary variable for the mean pressure and specific enthalpy
-REAL                                :: uMean,vMean,wMean      ! auxiliary variable for the average velocities
+REAL                                :: pHatMean,HMeanMod         ! auxiliary variable for the mean pressure and enthalpy
+REAL                                :: uMean,vMean,wMean,uRelMean ! auxiliary variable for the average velocities
 REAL                                :: rhoLogMean,betaLogMean ! auxiliary variable for the logarithmic mean
 !==================================================================================================================================
 ! average velocities
 uMean = 0.5*(U_LL(VEL1) + U_RR(VEL1))
 vMean = 0.5*(U_LL(VEL2) + U_RR(VEL2))
 wMean = 0.5*(U_LL(VEL3) + U_RR(VEL3))
+uRelMean = 0.5*(U_LL(VEL1) - MeshVel + U_RR(VEL1) - MeshVel)
 
 ! inverse temperature
 beta_LL = 0.5*U_LL(DENS)/U_LL(PRES)
@@ -797,15 +898,15 @@ CALL GetLogMean(U_LL(DENS),U_RR(DENS),rhoLogMean)
 CALL GetLogMean(beta_LL,beta_RR,betaLogMean)
 ! "standard" average
 pHatMean = 0.5*(U_LL(DENS)+U_RR(DENS))/(beta_LL+beta_RR)
-HMean    = 0.5*sKappaM1/betaLogMean + pHatMean/rhoLogMean + &
+HMeanMod = 0.5*sKappaM1/betaLogMean + &
            0.5*(U_LL(VEL1)*U_RR(VEL1) + U_LL(VEL2)*U_RR(VEL2) + U_LL(VEL3)*U_RR(VEL3))
 
 !compute flux
-F(1) = rhoLogMean*uMean
+F(1) = rhoLogMean*uRelMean
 F(2) = F(1)*uMean + pHatMean
 F(3) = F(1)*vMean
 F(4) = F(1)*wMean
-F(5) = F(1)*HMean
+F(5) = F(1)*HMeanMod + pHatMean * uMean
 
 END SUBROUTINE SplitSurfaceFluxCH
 
@@ -837,5 +938,82 @@ ENDIF
 
 UMean = (U_L+U_R)/(2.*N)
 END SUBROUTINE getLogMean
+
+!==================================================================================================================================
+!> Computes the kinetic energy preservign surface flux
+!==================================================================================================================================
+PPURE SUBROUTINE KepALESurfaceFlux(U_LL,U_RR,MeshVel,F)
+! MODULES
+USE MOD_PreProc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,DIMENSION(PP_2Var),INTENT(IN)    :: U_LL,U_RR !< variables at the left-/right-Surfaces
+REAL,                   INTENT(IN)    :: MeshVel   !< mesh velocity
+REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: F         !< flux, will be augmented by KEP ALE flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+! Kinetic energy stable ALE fluxes
+F(1)=F(1)-0.5* MeshVel*(U_LL(DENS)+U_RR(DENS))
+F(2)=F(2)-0.25*MeshVel*(U_LL(DENS)+U_RR(DENS))*(U_LL(VEL1)+U_RR(VEL1))
+F(3)=F(3)-0.25*MeshVel*(U_LL(DENS)+U_RR(DENS))*(U_LL(VEL2)+U_RR(VEL2))
+#if PP_dim == 3
+F(4)=F(4)-0.25*MeshVel*(U_LL(DENS)+U_RR(DENS))*(U_LL(VEL3)+U_RR(VEL3))
+#endif
+F(5)=F(5)-0.25*MeshVel*(U_LL(DENS)+U_RR(DENS))*(U_LL(ENER)/U_LL(DENS)+U_RR(ENER)/U_RR(DENS))
+
+END SUBROUTINE KepALESurfaceFlux
+
+!==================================================================================================================================
+!> Computes the kinetic energy preserving Split-Flux
+!> Attention: Factor 2 from differentiation matrix is already been considered
+!==================================================================================================================================
+PPURE SUBROUTINE KepALEVolumeFlux(URef,UPrimRef,MeshVelRef,U,UPrim,MeshVel,fTilde,gTilde&
+#if PP_dim == 3
+                                  ,hTilde&
+#endif
+                                 )
+! MODULES
+USE MOD_PreProc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar    ),INTENT(IN)    :: URef,U             !< conserved variables
+REAL,DIMENSION(PP_nVarPrim),INTENT(IN)    :: UPrimRef,UPrim     !< primitive variables
+REAL,DIMENSION(1:3        ),INTENT(IN)    :: MeshVelRef,MeshVel !< mesh velocities
+REAL,DIMENSION(PP_nVar)    ,INTENT(INOUT) :: fTilde,gTilde      !< flux in physical space
+#if PP_dim == 3
+REAL,DIMENSION(PP_nVar)    ,INTENT(INOUT) :: hTilde             !< flux in physical space
+#endif
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+! Kinetic energy stable ALE fluxes
+fTilde(1) = fTilde(1)-0.5*( MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))
+fTilde(2) = fTilde(2)-0.25*(MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))*(UPrimRef(2)+UPrim(2))
+fTilde(3) = fTilde(3)-0.25*(MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))*(UPrimRef(3)+UPrim(3))
+#if PP_dim == 3
+fTilde(4) = fTilde(4)-0.25*(MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))
+#endif
+fTilde(5) = fTilde(5)-0.25*(MeshVelRef(1)+MeshVel(1))*(URef(1)+U(1))*(URef(5)/URef(1)+U(5)/U(1))
+
+gTilde(1) = gTilde(1)-0.5*( MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))
+gTilde(2) = gTilde(2)-0.25*(MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))*(UPrimRef(2)+UPrim(2))
+gTilde(3) = gTilde(3)-0.25*(MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))*(UPrimRef(3)+UPrim(3))
+#if PP_dim == 3
+gTilde(4) = gTilde(4)-0.25*(MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))
+#endif
+gTilde(5) = gTilde(5)-0.25*(MeshVelRef(2)+MeshVel(2))*(URef(1)+U(1))*(URef(5)/URef(1)+U(5)/U(1))
+
+#if PP_dim == 3
+hTilde(1) = hTilde(1)-0.5*( MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))
+hTilde(2) = hTilde(2)-0.25*(MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))*(UPrimRef(2)+UPrim(2))
+hTilde(3) = hTilde(3)-0.25*(MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))*(UPrimRef(3)+UPrim(3))
+hTilde(4) = hTilde(4)-0.25*(MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))*(UPrimRef(4)+UPrim(4))
+hTilde(5) = hTilde(5)-0.25*(MeshVelRef(3)+MeshVel(3))*(URef(1)+U(1))*(URef(5)/URef(1)+U(5)/U(1))
+#endif
+
+END SUBROUTINE KepALEVolumeFlux
 
 END MODULE MOD_SplitFlux

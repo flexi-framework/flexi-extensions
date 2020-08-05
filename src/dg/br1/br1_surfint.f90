@@ -51,13 +51,14 @@ CONTAINS
 !> \f$ -1 \f$. This means we don't have to flip the sign on the flux for the slave side in strong form as we normally do to
 !> get the flux on the slave side.
 !==================================================================================================================================
-PPURE SUBROUTINE Lifting_SurfInt(Nloc,Flux,gradU,doMPISides,L_HatMinus,L_HatPlus,weak)
+SUBROUTINE Lifting_SurfInt(Nloc,Flux_master,Flux_slave,gradU,doMPISides,L_HatMinus,L_HatPlus,weak)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SurfintPrim,        ONLY: DoSurfIntPrim
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nSides,nElems
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,lastMPISide_MINE
+USE MOD_Mesh_Vars,          ONLY: firstSMSide,lastSMSide
 USE MOD_Mesh_Vars,          ONLY: S2V2
 USE MOD_Mesh_Vars,          ONLY: nElems
 #if FV_ENABLED
@@ -66,39 +67,59 @@ USE MOD_FV_Vars,            ONLY: FV_Elems_master,FV_Elems_slave
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-INTEGER,INTENT(IN) :: Nloc                                             !< polynomial degree
-LOGICAL,INTENT(IN) :: doMPISides                                       !< = .TRUE. only MPISides_YOUR+MPIMortar are filled
-                                                                       !< =.FALSE. BCSides+(Mortar-)InnerSides+MPISides_MINE
-REAL,INTENT(IN)    :: Flux(1:PP_nVarPrim,0:Nloc,0:ZDIM(Nloc),nSides)         !< flux to be filled
-REAL,INTENT(IN)    :: L_HatPlus(0:Nloc)                                !< lagrange polynomials at xi=+1 and pre-divided by
-                                                                       !< integration weight
-REAL,INTENT(IN)    :: L_HatMinus(0:Nloc)                               !< lagrange polynomials at xi=-1 and pre-divided by
-                                                                       !< integration weight
-REAL,INTENT(INOUT) :: gradU(PP_nVarPrim,0:Nloc,0:Nloc,0:ZDIM(Nloc),1:nElems) !< time derivative of solution
-LOGICAL,INTENT(IN) :: weak                                             !< switch for weak or strong formulation
+INTEGER,INTENT(IN)     :: Nloc                                             !< polynomial degree
+LOGICAL,INTENT(IN)     :: doMPISides                                       !< = .TRUE. only MPISides_YOUR+MPIMortar are filled
+                                                                           !< =.FALSE. BCSides+(Mortar-)InnerSides+MPISides_MINE
+REAL,TARGET,INTENT(IN) :: Flux_master(1:PP_nVarPrim,0:Nloc,0:ZDIM(Nloc),nSides)   !< lifting flux (identical for master and slace)
+REAL,TARGET,INTENT(IN) :: Flux_slave( 1:PP_nVarPrim,0:Nloc,0:ZDIM(Nloc),nSides)   !< slave lifting flux, only for sm without MPI
+                                                                                  !< Otherwise dummy argument
+REAL,INTENT(IN)        :: L_HatPlus(0:Nloc)                                !< lagrange polynomials at xi=+1 and pre-divided by
+                                                                           !< integration weight
+REAL,INTENT(IN)        :: L_HatMinus(0:Nloc)                               !< lagrange polynomials at xi=-1 and pre-divided by
+                                                                           !< integration weight
+REAL,INTENT(INOUT)     :: gradU(PP_nVarPrim,0:Nloc,0:Nloc,0:ZDIM(Nloc),1:nElems) !< time derivative of solution
+LOGICAL,INTENT(IN)     :: weak                                             !< switch for weak or strong formulation
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: ElemID,nbElemID,locSideID,nblocSideID,SideID,p,q,flip
-INTEGER            :: firstSideID,lastSideID
+INTEGER            :: firstSideID,lastSideID,firstCycleID,lastCycleID
 REAL               :: FluxTmp(1:PP_nVarPrim,0:Nloc,0:ZDIM(Nloc))
+REAL,POINTER       :: Flux(:,:,:,:)
 !==================================================================================================================================
-IF(doMPISides)THEN
-  ! MPI YOUR
-  firstSideID = firstMPISide_YOUR
-   lastSideID = nSides
+IF(doMPISides)THEN       ! Only start with SM sides if there are any.
+     firstSideID = MERGE(firstSMSide,firstMPISide_YOUR,lastSMSide.GE.firstSMSide)
+      lastSideID = nSides
+    firstCycleID = lastSMSide+1
+     lastCycleID = firstMPISide_YOUR-1
 ELSE
-  ! inner sides and MPI mine
-  firstSideID = 1
-   lastSideID = lastMPISide_MINE
+     firstSideID = 1
+      lastSideID = lastMPISide_MINE
+#if USE_MPI
+    firstCycleID = firstSMSide
+     lastCycleID = lastSMSide
+#endif
 END IF
 
+! Generally use master flux, as master and slave lifting fluxes are identical (not on sm sides!)
+Flux => Flux_master
+
 DO SideID=firstSideID,lastSideID
+#if USE_MPI
+  IF((SideID.GE.firstCycleID).AND.(SideID.LE.lastCycleID)) CYCLE
+#endif
+
   ElemID      = SideToElem(S2E_ELEM_ID,   SideID)
   nbElemID    = SideToElem(S2E_NB_ELEM_ID,SideID)
 
   ! master sides
   IF(ElemID.GT.0)THEN
     IF (FV_Elems_master(SideID).EQ.0) THEN ! DG element
+
+#if !(USE_MPI)
+      ! Reset flux pointer to master flux
+      Flux => Flux_master
+#endif
+
       locSideID = SideToElem(S2E_LOC_SIDE_ID,SideID)
       flip      = 0
       ! orient flux to fit flip and locSide to element local system
@@ -117,6 +138,16 @@ DO SideID=firstSideID,lastSideID
   ! slave sides
   IF(nbElemID.GT.0)THEN
     IF (FV_Elems_slave(SideID).EQ.0) THEN ! DG element
+
+#if !(USE_MPI)
+      ! Without MPI, the proc has the master and slave SM sides, which have different lifting
+      ! fluxes, due to their changing position over time.  We therefore have to differentiate
+      ! between master and slave sm lifting fluxes for use without MPI.
+      IF ((SideID.GE.firstSMSide).AND.(SideID.LE.lastSMSide)) THEN
+        Flux => Flux_slave
+      END IF
+#endif
+
       nblocSideID = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
       flip        = SideToElem(S2E_FLIP,SideID)
       ! orient flux to fit flip and locSide to element local system

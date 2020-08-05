@@ -61,9 +61,10 @@ SUBROUTINE setLocalSideIDs()
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars,  ONLY:tElem,tSide
-USE MOD_Mesh_Vars,  ONLY: nElems,nInnerSides,nSides,nBCSides,offsetElem
+USE MOD_Mesh_Vars,  ONLY: nElems,nInnerSides,nSides,nBCSides,nSMSides,offsetElem
 USE MOD_Mesh_Vars,  ONLY: Elems,nMPISides_MINE,nMPISides_YOUR,BoundaryType,nBCs
 USE MOD_Mesh_Vars,  ONLY: nMortarSides,nMortarInnerSides,nMortarMPISides
+USE MOD_Mesh_Vars,  ONLY: GETNEWSIDE
 #if USE_MPI
 USE MOD_ReadInTools,ONLY: GETLOGICAL
 USE MOD_MPI_Vars
@@ -75,7 +76,7 @@ IMPLICIT NONE
 TYPE(tElem),POINTER :: aElem
 TYPE(tSide),POINTER :: aSide
 INTEGER   :: iElem,FirstElemInd,LastElemInd
-INTEGER   :: iLocSide,iSide,iInnerSide,iBCSide
+INTEGER   :: iLocSide,iSide,iInnerSide,iBCSide,iSMSide
 INTEGER   :: iMortar,iMortarInnerSide,iMortarMPISide,nMortars,lastMortarInnerSide
 INTEGER   :: i,j
 INTEGER   :: PeriodicBCMap(nBCs)       !connected periodic BCs
@@ -189,10 +190,13 @@ IF((nMortarInnerSides+nMortarMPISides).NE.nMortarSides) &
 
 ! Iterate over all elements and within each element over all sides (6 for hexas in 3D, 4 for quads in 2D)
 ! and for each big Mortar side over all small virtual sides and set the 'SideID'.
-iSide=0
-iBCSide=0                             ! BC sides are the first sides in list of all sides (see mesh.f90)
-iMortarInnerSide=nBCSides             ! inner Mortar sides come directly after BC sides
-iInnerSide=nBCSides+nMortarInnerSides ! inner (non-Mortar) side come next
+! Fill the initial list
+
+iSide=0 
+iBCSide=0                             ! BC sides are the first sides in list of all sides (see mesh.f90) 
+iSMSide=nBCSides ! Sliding Mesh sides come directly after BC sides 
+iMortarInnerSide=nBCSides+nSMSides    ! inner Mortar sides come directly after BC
+iInnerSide=nBCSides+nSMSides+nMortarInnerSides ! inner (non-Mortar) side come next
 iMortarMPISide=nSides-nMortarMPISides ! MPI Mortar sides come last
 DO iElem=FirstElemInd,LastElemInd
   aElem=>Elems(iElem)%ep
@@ -209,10 +213,26 @@ DO iElem=FirstElemInd,LastElemInd
       IF(aSide%sideID.EQ.-1)THEN   ! SideID not set so far
         IF(aSide%NbProc.EQ.-1)THEN ! no MPI Sides
           IF(ASSOCIATED(aSide%connection))THEN ! side has a connection => inner side
-            iInnerSide=iInnerSide+1
-            iSide=iSide+1
-            aSide%SideID=iInnerSide            ! set SideID for this side
-            aSide%connection%SideID=iInnerSide ! and set same SideID for connected side
+            ! Sliding Mesh Sides
+            IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
+              IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)THEN ! SlidingMeshSides
+                iSMSide=iSMSide+1
+                iSide=iSide+1
+                aSide%SideID=iSMSide            ! set SideID for this side
+                aSide%connection%SideID=iSMSide ! and set same SideID for connected side
+              ELSE
+                ! periodic sides and analyze sides
+                iInnerSide=iInnerSide+1
+                iSide=iSide+1
+                aSide%SideID=iInnerSide            ! set SideID for this side
+                aSide%connection%SideID=iInnerSide ! and set same SideID for connected side
+              END IF
+            ELSE ! Important: set InnerSideID
+              iInnerSide=iInnerSide+1
+              iSide=iSide+1
+              aSide%SideID=iInnerSide            ! set SideID for this side
+              aSide%connection%SideID=iInnerSide ! and set same SideID for connected side
+            END IF
           ELSE  ! side has no connection => big Mortar or BC side
             IF(aSide%MortarType.GT.0) THEN ! if big Mortar side
               IF(aSide%tmp.EQ.-1)THEN         ! if MPI Mortar side
@@ -229,12 +249,21 @@ DO iElem=FirstElemInd,LastElemInd
               aSide%SideID=iBCSide
             END IF ! mortar
           END IF ! associated connection
+        ELSE ! .NOT. MPISide
+          IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
+            IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)THEN ! SlidingMeshSides
+              iSMSide=iSMSide+1
+              iSide=iSide+1
+              aSide%SideID=iSMSide            ! set SideID for this side
+              aSide%connection%SideID=iSMSide ! and set same SideID for connected side
+            END IF
+          END IF
         END IF ! .NOT. MPISide
       END IF ! sideID EQ -1
     END DO ! iMortar
   END DO ! iLocSide=1,6
 END DO ! iElem
-IF(iSide.NE.nInnerSides+nBCSides+nMortarInnerSides) STOP 'not all SideIDs are set!'
+IF(iSide.NE.nInnerSides+nBCSides+nSMSides+nMortarInnerSides) STOP 'not all SideIDs are set!'
 LOGWRITE(*,*)'-------------------------------------------------------'
 LOGWRITE(*,'(A22,I8)')'nMortarSides:',nMortarSides
 LOGWRITE(*,'(A22,I8)')'nMortarInnerSides:',nMortarInnerSides
@@ -274,7 +303,7 @@ ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
 offsetMPISides_MINE=0
 offsetMPISides_YOUR=0
 ! compute offset, first all MINE , then all YOUR MPISides
-offsetMPISides_MINE(0)=nInnerSides+nBCSides+nMortarInnerSides
+offsetMPISides_MINE(0)=nInnerSides+nBCSides+nMortarInnerSides+nSMSides
 DO iNbProc=1,nNbProcs
   offsetMPISides_MINE(iNbProc)=offsetMPISides_MINE(iNbProc-1)+nMPISides_MINE_Proc(iNbProc)
 END DO
@@ -304,6 +333,9 @@ DO iNbProc=1,nNbProcs
       nMortars=aSide%nMortars
       DO iMortar=0,nMortars
         IF(iMortar.GT.0) aSide=>aElem%Side(iLocSide)%sp%mortarSide(iMortar)%sp ! point to small virtual side
+        IF(aSide%BCindex.NE.0)THEN !side is BC or periodic IF
+          IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)CYCLE
+        END IF 
         IF(aSide%NbProc.NE.NbProc(iNbProc))CYCLE
         iSide=iSide+1
         ! optimization: put non-mortars first to optimize addtoInnerMortars (also small virtual sides are marked with MortarType<0)
@@ -325,6 +357,9 @@ DO iNbProc=1,nNbProcs
       nMortars=aSide%nMortars
       DO iMortar=0,nMortars
         IF(iMortar.GT.0) aSide=>aElem%Side(iLocSide)%sp%mortarSide(iMortar)%sp ! point to small virtual side
+        IF(aSide%BCindex.NE.0)THEN !side is BC or periodic IF
+          IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)CYCLE
+        END IF 
         IF(aSide%NbProc.NE.NbProc(iNbProc))CYCLE
         ! For the side get index of global index in sorted SideIDMap and set this as SideID of the side (offset is added below).
         aSide%SideID=INVMAP(aSide%ind,nMPISides_Proc(iNbProc),SideIDMap)
@@ -421,7 +456,7 @@ IF(nMortarSides.GT.0)THEN
   ! Shift all InnerSides, MPI_MINE and MPI_YOUR sides rearwards by the number of big Mortars that will be moved.
   ! Therewith the space/gap in the InnerMortars for the big Mortars, that will be moved, is created.
   IF(addToInnerMortars.GT.0)THEN
-    lastMortarInnerSide=nBCSides+nMortarInnerSides ! SideID of the last InnerMortar (before the move)
+    lastMortarInnerSide=nBCSides+nSMSides+nMortarInnerSides ! SideID of the last InnerMortar (before the move)
     ! Iterate over all elements and within each element over all sides (6 for hexas)
     DO iElem=FirstElemInd,LastElemInd
       aElem=>Elems(iElem)%ep
@@ -451,7 +486,7 @@ IF(nMortarSides.GT.0)THEN
     nMortarInnerSides=nMortarInnerSides+addToInnerMortars  ! increase number of inner Mortars
     nMortarMPISides  =nMortarMPISides  -addToInnerMortars  ! decrease number of MPI Mortars
     iMortarMPISide=nSides-nMortarMPISides                  ! first index of the remaining MPI Mortars
-    iMortarInnerSide=nBCSides                              ! first index of the new inner Mortars
+    iMortarInnerSide=nBCSides+nSMSides                     ! first index of the new inner Mortars
 
     ! Until now only the InnerSides, MPI_MINE and MPI_YOUR are moved. Since the BCSides come before the
     ! InnerMortars they stay untouched. It only remains to adjust the SideIDs of the InnerMortars and the MPIMortars.
@@ -838,6 +873,7 @@ SUBROUTINE exchangeFlip()
 USE MOD_Globals
 USE MOD_Mesh_Vars,ONLY: nElems,offsetElem
 USE MOD_Mesh_Vars,ONLY: tElem,tSide,Elems
+USE MOD_Mesh_Vars,ONLY: BoundaryType
 USE MOD_MPI_Vars
 IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
@@ -905,6 +941,9 @@ DO iElem=1,nElems
     DO iMortar=0,nMortars
       IF(iMortar.GT.0) aSide=>aElem%Side(LocSideID)%sp%mortarSide(iMortar)%sp ! point to small virtual side
       IF(aSide%NbProc.EQ.-1) CYCLE !no MPISide
+      IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
+        IF(BoundaryType(aSide%BCindex,BC_TYPE).EQ.-100)CYCLE
+      END IF 
       IF(aSide%SideID.GT.offsetMPISides_YOUR(0))THEN
         IF(aSide%flip.EQ.0)THEN
           IF(Flip_YOUR(aSide%SideID).EQ.0) STOP 'problem in exchangeflip'

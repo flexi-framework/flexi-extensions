@@ -51,7 +51,7 @@ CONTAINS
 !==================================================================================================================================
 !> Compute linear scalar advection fluxes with velocity AdvVel(3) using the conservative variables for a single element.
 !==================================================================================================================================
-SUBROUTINE EvalFlux3D(Nloc,ULoc,dummy,f,g,h)
+SUBROUTINE EvalFlux3D(Nloc,ULoc,dummy,MeshVel,f,g,h)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:AdvVel
@@ -61,16 +61,17 @@ IMPLICIT NONE
 INTEGER,INTENT(IN)                                     :: Nloc     !< Polynomial degree
 REAL,DIMENSION(1,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: ULoc     !< Solution
 REAL,DIMENSION(1,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(IN)  :: dummy    !< primitive solution (useless here)
+REAL,DIMENSION(3,0:NLoc,0:NLoc,0:ZDIM(Nloc)),INTENT(IN)  :: MeshVel  !< Velocity of mesh
 REAL,DIMENSION(1,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: f        !< Cartesian fluxes (iVar,i,j,k)
 REAL,DIMENSION(1,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: g        !< Cartesian fluxes (iVar,i,j,k)
 REAL,DIMENSION(1,0:Nloc,0:Nloc,0:ZDIM(Nloc)),INTENT(OUT) :: h        !< Cartesian fluxes (iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-f = AdvVel(1)*Uloc(:,:,:,:)
-g = AdvVel(2)*Uloc(:,:,:,:)
+f(1,:,:,:) = (AdvVel(1)-MeshVel(1,:,:,:))*Uloc(1,:,:,:)
+g(1,:,:,:) = (AdvVel(2)-MeshVel(2,:,:,:))*Uloc(1,:,:,:)
 #if PP_dim==3
-h = AdvVel(3)*Uloc(:,:,:,:)
+h(1,:,:,:) = (AdvVel(3)-MeshVel(3,:,:,:))*Uloc(1,:,:,:)
 #endif
 END SUBROUTINE EvalFlux3D
 

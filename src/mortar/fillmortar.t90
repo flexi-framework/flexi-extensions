@@ -344,3 +344,196 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
 #endif
 END DO !MortarSideID
 END SUBROUTINE Flux_Mortar
+
+
+
+!==================================================================================================================================
+!> Fills the sliding mesh mortar sides with the variables needed for flux calculation.
+!> This includes rotating (flipping) indices p and q into the global mortar system, interpolating and switching indices from iSide
+!> and iMortar (1/2) to iiMortar (globally sorted index)
+!==================================================================================================================================
+SUBROUTINE U_MortarSM(&
+#ifdef WITHnVar
+        TP_nVar, &
+#endif
+            U_master,U_slave,U_MorStat,U_MorRot,doMPISides)
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Mesh_Vars, ONLY: firstSMSIde,lastSMSide,nSides,IAmAStatProc,IAmARotProc,nSMSides
+USE MOD_Mesh_Vars, ONLY: LocToGlobInterface,SlidingMeshInfo
+USE MOD_SM_Vars,   ONLY: M_SM_0_1,M_SM_0_2,SMFlip,SMMortarToStatSide,SMMortarToRotSide
+USE MOD_SM_Vars,   ONLY: nSlidingMeshInterfaces
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+#ifdef WITHnVar
+INTEGER,INTENT(IN) :: TP_nVar
+#endif
+REAL,INTENT(IN)    :: U_master( 1:TP_nVar,0:PP_N,0:PP_NZ,1:nSides)     !<
+REAL,INTENT(IN)    :: U_slave(  1:TP_nVar,0:PP_N,0:PP_NZ,1:nSides)     !<
+REAL,INTENT(INOUT) :: U_MorStat(1:TP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+REAL,INTENT(INOUT) :: U_MorRot( 1:TP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+LOGICAL,INTENT(IN) :: doMPISides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER,POINTER    :: SMMortarToSide(:,:)
+INTEGER            :: iSide,iiMortar(2),iInterface
+REAL               :: U_tmp (1:TP_nVar,0:PP_N,0:PP_NZ)
+REAL,POINTER       :: M1(:,:),M2(:,:)
+!==================================================================================================================================
+#if USE_MPI
+IF(doMPISides)THEN
+#endif
+
+! STATOR LOOP
+IF(IAmAStatProc)THEN; DO iInterface=1,nSlidingMeshInterfaces
+  M1=>M_SM_0_1(:,:,iInterface); M2=>M_SM_0_2(:,:,iInterface)
+  DO iSide=firstSMSide,lastSMSide
+    IF (SlidingMeshInfo(SM_SIDE_TO_INTERFACE,iSide).NE.LocToGlobInterface(iInterface)) CYCLE
+
+    SMMortarToSide=>SMMortarToStatSide
+    iiMortar=SMMortarToSide(:,iSide)
+
+    CALL DoFlip(&
+#ifdef WITHnVar
+       TP_nVar,&
+#endif
+       U_Master(:,:,:,iSide),U_tmp,SMFlip(iSide))
+
+    CALL InterpolateSM(&
+#ifdef WITHnVar
+       TP_nVar,&
+#endif
+       U_tmp,U_MorStat(:,:,:,iiMortar(1)),U_MorStat(:,:,:,iiMortar(2)),M1,M2,isRotor=.FALSE.)
+
+  END DO !iSide
+END DO; END IF !iInterface
+
+! ROTOR LOOP
+IF(IAmARotProc)THEN; DO iInterface=1,nSlidingMeshInterfaces
+  M1=>M_SM_0_1(:,:,iInterface); M2=>M_SM_0_2(:,:,iInterface)
+  DO iSide=firstSMSide,lastSMSide
+    IF (SlidingMeshInfo(SM_SIDE_TO_INTERFACE,iSide).NE.LocToGlobInterface(iInterface)) CYCLE
+
+    SMMortarToSide=>SMMortarToRotSide
+    iiMortar=SMMortarToSide(:,iSide)
+
+    CALL DoFlip(&
+#ifdef WITHnVar
+       TP_nVar,&
+#endif
+       U_Slave(:,:,:,iSide),U_tmp,SMFlip(iSide))
+
+    CALL InterpolateSM(&
+#ifdef WITHnVar
+       TP_nVar,&
+#endif
+       U_tmp,U_MorRot(:,:,:,iiMortar(1)),U_MorRot(:,:,:,iiMortar(2)),M1,M2,isRotor=.TRUE.)
+
+  END DO !iSide
+END DO; END IF !iInterface
+#if USE_MPI
+END IF
+#endif
+END SUBROUTINE U_MortarSM
+
+
+
+!==================================================================================================================================
+!> Projects the fluxes from the sliding mesh mortar sides back onto the adjacent sides
+!> and flips indices p and q back into the local side system; also switches indices from iiMortar (globally sorted index)
+!> back to local side index iSide
+!==================================================================================================================================
+SUBROUTINE Flux_MortarSM(&
+#ifdef WITHnVar
+        TP_nVar, &
+#endif
+            Flux_master,Flux_slave,Flux_MorStat,Flux_MorRot,doMPISides)
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Mesh_Vars, ONLY:firstSMSIde,lastSMSide,nSides,SurfElem,IAmARotProc,IAmAStatProc,nSMSides,SlidingMeshInfo
+USE MOD_Mesh_Vars, ONLY:LocToGlobInterface,SlidingMeshInfo
+USE MOD_SM_Vars,   ONLY:M_SM_1_0,M_SM_2_0,SMFlip,SMMortarToStatSide,SMMortarToRotSide
+USE MOD_SM_Vars,   ONLY:nSlidingMeshInterfaces
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+#ifdef WITHnVar
+INTEGER,INTENT(IN) :: TP_nVar
+#endif
+REAL,INTENT(INOUT) :: Flux_master (1:TP_nVar,0:PP_N,0:PP_NZ,1:nSides)     !<
+REAL,INTENT(INOUT) :: Flux_slave  (1:TP_nVar,0:PP_N,0:PP_NZ,1:nSides)     !<
+REAL,INTENT(IN)    :: Flux_MorStat(1:TP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+REAL,INTENT(IN)    :: Flux_MorRot (1:TP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !<
+LOGICAL,INTENT(IN) :: doMPISides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER,POINTER    :: SMMortarToSide(:,:)
+REAL               :: Flux_tmp (1:TP_nVar,0:PP_N,0:PP_NZ)
+REAL               :: Flux_tmp2(1:TP_nVar,0:PP_N,0:PP_NZ)
+REAL,POINTER       :: M1(:,:),M2(:,:)
+INTEGER            :: p,q,iSide,iiMortar(2),iInterface
+!==================================================================================================================================
+#if USE_MPI
+IF(doMPISides)THEN
+#endif
+
+!STATOR LOOP
+IF(IAmAStatProc)THEN; DO iInterface=1,nSlidingMeshInterfaces
+  M1=>M_SM_1_0(:,:,iInterface); M2=>M_SM_2_0(:,:,iInterface)
+  DO iSide=firstSMSide,lastSMSide
+    IF (SlidingMeshInfo(SM_SIDE_TO_INTERFACE,iSide).NE.LocToGlobInterface(iInterface)) CYCLE
+
+    SMMortarToSide=>SMMortarToStatSide
+    iiMortar=SMMortarToSide(:,iSide)
+
+    CALL ProjectSM(&
+#ifdef WITHnVar
+         TP_nVar, &
+#endif
+         Flux_MorStat(:,:,:,iiMortar(1)),Flux_MorStat(:,:,:,iiMortar(2)),Flux_tmp,M1,M2,isRotor=.FALSE.)
+
+    CALL DoFlip(&
+#ifdef WITHnVar
+         TP_nVar, &
+#endif
+         Flux_tmp,Flux_tmp2,-SMFlip(iSide)) !negative Flip is backwards
+
+    DO q=0,PP_NZ; DO p=0,PP_N
+      Flux_master(:,p,q,iSide) = Flux_tmp2(:,p,q) * SurfElem(p,q,0,iSide)
+    END DO; END DO
+  END DO !iSide
+END DO; END IF !iInterface
+
+!ROTOR LOOP
+IF(IAmARotProc)THEN; DO iInterface=1,nSlidingMeshInterfaces
+  M1=>M_SM_1_0(:,:,iInterface); M2=>M_SM_2_0(:,:,iInterface)
+  DO iSide=firstSMSide,lastSMSide
+    IF (SlidingMeshInfo(SM_SIDE_TO_INTERFACE,iSide).NE.LocToGlobInterface(iInterface)) CYCLE
+
+    SMMortarToSide=>SMMortarToRotSide
+    iiMortar=SMMortarToSide(:,iSide)
+
+    CALL ProjectSM(&
+#ifdef WITHnVar
+         TP_nVar,&
+#endif
+         Flux_MorRot(:,:,:,iiMortar(1)),Flux_MorRot(:,:,:,iiMortar(2)),Flux_tmp,M1,M2,isRotor=.TRUE.)
+
+    CALL DoFlip(&
+#ifdef WITHnVar
+         TP_nVar,&
+#endif
+         Flux_tmp,Flux_tmp2,-SMFlip(iSide)) !negative Flip is backwards
+
+    DO q=0,PP_NZ; DO p=0,PP_N
+      Flux_slave(:,p,q,iSide) = Flux_tmp2(:,p,q) * SurfElem(p,q,0,iSide)
+    END DO; END DO
+  END DO !iSide
+END DO; END IF !iInterface
+#if USE_MPI
+END IF
+#endif
+END SUBROUTINE Flux_MortarSM

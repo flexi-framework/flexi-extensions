@@ -25,7 +25,7 @@ PPURE SUBROUTINE SurfInt(&
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars ,ONLY: SideToElem,nSides
-USE MOD_Mesh_Vars ,ONLY: firstMPISide_YOUR,lastMPISide_MINE
+USE MOD_Mesh_Vars ,ONLY: firstMPISide_YOUR,lastMPISide_MINE,firstSMSide,lastSMSide
 USE MOD_Mesh_Vars ,ONLY: S2V2,nElems
 #if FV_ENABLED
 USE MOD_FV_Vars   ,ONLY: FV_Elems_master,FV_Elems_slave,FV_w_inv
@@ -47,21 +47,27 @@ REAL,INTENT(INOUT) :: Ut(TP_nVar,0:Nloc,0:Nloc,0:ZDIM(Nloc),1:nElems)   !< (INOU
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: ElemID,nbElemID,locSideID,nblocSideID,SideID,p,q,flip
-INTEGER            :: firstSideID,lastSideID
+INTEGER            :: firstSideID,lastSideID,firstCycleID,lastCycleID
 REAL               :: FluxTmp(1:TP_nVar,0:Nloc,0:ZDIM(Nloc))
 !==================================================================================================================================
-
-IF(doMPISides)THEN
-  ! MPI YOUR
-  firstSideID = firstMPISide_YOUR
-   lastSideID = nSides
+IF(doMPISides)THEN       ! Only start with SM sides if there are any.
+     firstSideID = MERGE(firstSMSide,firstMPISide_YOUR,lastSMSide.GE.firstSMSide)
+      lastSideID = nSides
+    firstCycleID = lastSMSide+1
+     lastCycleID = firstMPISide_YOUR -1
 ELSE
-  ! inner sides and MPI mine
-  firstSideID = 1
-   lastSideID = lastMPISide_MINE
+     firstSideID = 1
+      lastSideID = lastMPISide_MINE
+#if USE_MPI
+    firstCycleID = firstSMSide
+     lastCycleID = lastSMSide
+#endif
 END IF
 
 DO SideID=firstSideID,lastSideID
+#if USE_MPI
+  IF((SideID.GE.firstCycleID).AND.(SideID.LE.lastCycleID)) CYCLE
+#endif
   ElemID      = SideToElem(S2E_ELEM_ID,   SideID)
   nbElemID    = SideToElem(S2E_NB_ELEM_ID,SideID)
 

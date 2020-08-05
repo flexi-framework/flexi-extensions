@@ -30,9 +30,12 @@ REAL,ALLOCATABLE :: gradUz_slave(:,:,:,:)          !< slave side gradients in z-
 REAL,ALLOCATABLE :: gradUx_master(:,:,:,:)         !< master side gradients in x-dir
 REAL,ALLOCATABLE :: gradUy_master(:,:,:,:)         !< master side gradients in y-dir
 REAL,ALLOCATABLE :: gradUz_master(:,:,:,:)         !< master side gradients in z-dir
-REAL,ALLOCATABLE :: FluxX(:,:,:,:)                !< gradient flux in x-dir
-REAL,ALLOCATABLE :: FluxY(:,:,:,:)                !< gradient flux in y-dir
-REAL,ALLOCATABLE :: FluxZ(:,:,:,:)                !< gradient flux in z-dir
+REAL,ALLOCATABLE :: FluxX(:,:,:,:)                 !< gradient flux in x-dir
+REAL,ALLOCATABLE :: FluxY(:,:,:,:)                 !< gradient flux in y-dir
+REAL,ALLOCATABLE :: FluxZ(:,:,:,:)                 !< gradient flux in z-dir
+REAL,ALLOCATABLE :: FluxX_slave(:,:,:,:)           !< slave gradient flux in x-dir (only relevant for sliding mesh sides)
+REAL,ALLOCATABLE :: FluxY_slave(:,:,:,:)           !< slave gradient flux in y-dir (only relevant for sliding mesh sides)
+REAL,ALLOCATABLE :: FluxZ_slave(:,:,:,:)           !< slave gradient flux in z-dir (only relevant for sliding mesh sides)
 ! the lifted gradients needed for NSE
 REAL,ALLOCATABLE :: gradUx(:,:,:,:,:)             !< gradients in x-dir at degree N
 REAL,ALLOCATABLE :: gradUy(:,:,:,:,:)             !< gradients in y-dir at degree N

@@ -32,8 +32,12 @@ REAL              :: IniAxis(3)        !< parameter used for Shu vortex
 REAL              :: IniFrequency      !< parameter used for Shu vortex
 REAL              :: IniAmplitude      !< parameter used for Shu vortex
 REAL              :: IniHalfwidth      !< parameter used for Shu vortex
+LOGICAL           :: UsePerBound       !< parameter used for Shu vortex for periodic boundaries
+REAL              :: LowerPerBound(3)  !< parameter used for Shu vortex for periodic boundaries
+REAL              :: UpperPerBound(3)  !< parameter used for Shu vortex for periodic boundaries
 REAL              :: P_Parameter       !< parameter for Couette-Poiseuille flow
 REAL              :: U_Parameter       !< parameter for Couette-Poiseuille flow
+REAL              :: UMean             !< parameter for Turek testcase
 #if PARABOLIC
 REAL              :: delta99_in        !< boundary layer thickness for Blasius solution
 REAL              :: x_in(2)           !< inflow position for Blasius solution

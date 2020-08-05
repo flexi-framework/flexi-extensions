@@ -61,6 +61,7 @@ USE MOD_Lifting_Vars ,ONLY: gradUx,gradUy,gradUz
 #if FV_ENABLED
 USE MOD_FV_Vars      ,ONLY: FV_Elems
 #endif
+USE MOD_MoveMesh_Vars ,ONLY: Elem_vGP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -80,7 +81,7 @@ DO iElem=1,nElems
 #endif
   ! Cut out the local DG solution for a grid cell iElem and all Gauss points from the global field
   ! Compute for all Gauss point values the Cartesian flux components
-  CALL EvalFlux3D(PP_N,U(:,:,:,:,iElem),UPrim(:,:,:,:,iElem),f,g,h)
+  CALL EvalFlux3D(PP_N,U(:,:,:,:,iElem),UPrim(:,:,:,:,iElem),Elem_vGP(:,:,:,:,iElem),f,g,h)
 #if PARABOLIC
   CALL EvalDiffFlux3D( UPrim(:,:,:,:,iElem),&
                       gradUx(:,:,:,:,iElem),&
@@ -137,6 +138,7 @@ SUBROUTINE VolInt_splitForm(Ut)
 USE MOD_PreProc
 USE MOD_DG_Vars      ,ONLY: DVolSurf,nDOFElem,UPrim,U
 USE MOD_Mesh_Vars    ,ONLY: Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
+USE MOD_Flux         ,ONLY: EvalFlux3D      ! computes volume fluxes in local coordinates
 #if PARABOLIC
 USE MOD_DG_Vars      ,ONLY: D_Hat_T
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D  ! computes volume fluxes in local coordinates
@@ -146,6 +148,7 @@ USE MOD_Lifting_Vars ,ONLY: gradUx,gradUy,gradUz
 USE MOD_FV_Vars      ,ONLY: FV_Elems
 #endif
 USE MOD_SplitFlux    ,ONLY:SplitDGVolume_pointer ! computes volume fluxes in split formulation
+USE MOD_MoveMesh_Vars ,ONLY: Elem_vGP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -198,8 +201,8 @@ DO iElem=1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
     DO l=i+1,PP_N
        ! compute split flux in x-direction
-       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem), &
-                                  U(:,l,j,k,iElem),UPrim(:,l,j,k,iElem), &
+       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem),Elem_vGP(:,i,j,k,iElem), &
+                                  U(:,l,j,k,iElem),UPrim(:,l,j,k,iElem),Elem_vGP(:,l,j,k,iElem), &
                                   Metrics_fTilde(:,i,j,k,iElem,0),Metrics_fTilde(:,l,j,k,iElem,0),Flux)
 #if PARABOLIC
        ! add up time derivative
@@ -216,8 +219,8 @@ DO iElem=1,nElems
 
     DO l=j+1,PP_N
        ! compute split flux in y-direction
-       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem), &
-                                  U(:,i,l,k,iElem),UPrim(:,i,l,k,iElem), &
+       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem),Elem_vGP(:,i,j,k,iElem), &
+                                  U(:,i,l,k,iElem),UPrim(:,i,l,k,iElem),Elem_vGP(:,i,l,k,iElem), &
                                   Metrics_gTilde(:,i,j,k,iElem,0),Metrics_gTilde(:,i,l,k,iElem,0),Flux)
 #if PARABOLIC
        ! add up time derivative
@@ -235,8 +238,8 @@ DO iElem=1,nElems
 #if PP_dim==3
     DO l=k+1,PP_N
        ! compute split flux in z-direction
-       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem), &
-                                  U(:,i,j,l,iElem),UPrim(:,i,j,l,iElem), &
+       CALL SplitDGVolume_pointer(U(:,i,j,k,iElem),UPrim(:,i,j,k,iElem),Elem_vGP(:,i,j,k,iElem), &
+                                  U(:,i,j,l,iElem),UPrim(:,i,j,l,iElem),Elem_vGP(:,i,j,l,iElem), &
                                   Metrics_hTilde(:,i,j,k,iElem,0),Metrics_hTilde(:,i,j,l,iElem,0),Flux)
 #if PARABOLIC
        ! add up time derivative

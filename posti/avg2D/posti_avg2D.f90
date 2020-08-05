@@ -54,8 +54,8 @@ IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
 
 CALL ParseCommandlineArguments()
 ! Check for correct number of input files
-IF (nArgs.NE.1) THEN
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: posti_avg2D statefile.h5')
+IF (nArgs.LT.1) THEN
+  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: posti_avg2D statefile.h5 [h5-Datasets to NOT average]')
 END IF
 
 ! Read the mesh file and node type from the statefile
@@ -110,60 +110,65 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
   END IF
   CALL CloseDataFile()
 
-  
-  ! Compute the averages
-  IF (nDims.EQ.2) THEN
-    ! Elementwise data set
-    ALLOCATE(RealElemAvg(nVar,nElems_IJK(1),nElems_IJK(2)))
-    RealElemAvg = 0.
-    DO iElem=1,nElems
-      ! Indixes in the IJK sorting
-      i = Elem_IJK(1,iElem)
-      j = Elem_IJK(2,iElem)
-      ! Build sum
-      RealElemAvg(:,i,j) = RealElemAvg(:,i,j) + RealElemArray(:,iElem)
-    END DO ! iElem
-    ! Finish sum
-    RealElemAvg = RealElemAvg / nElems_IJK(3)
-    ! Write back to the array itself
-    DO iElem=1,nElems
-      ! Indixes in the IJK sorting
-      i = Elem_IJK(1,iElem)
-      j = Elem_IJK(2,iElem)
-      RealElemArray(:,iElem) = RealElemAvg(:,i,j)
-    END DO ! iElem
-  ELSE IF (nDims.EQ.5) THEN
-    ! Pointwise data set
-    ALLOCATE(RealAvg(nVar,0:N,0:N,nElems_IJK(1),nElems_IJK(2)))
-    RealAvg = 0.
-    DO iElem=1,nElems
-      ! Indixes in the IJK sorting
-      i = Elem_IJK(1,iElem)
-      j = Elem_IJK(2,iElem)
-      ! Build sum
-      DO q=0,N; DO p=0,N
-        DO l = 0,N
-          RealAvg(:,p,q,i,j) = RealAvg(:,p,q,i,j) + RealArray(:,p,q,l,iElem)*wGP(l)/2.
-        END DO ! l = 0,N
-      END DO; END DO ! p,q=0,PP_N
-    END DO ! iElem
-    ! Finish sum
-    RealAvg = RealAvg / (nElems_IJK(3))
-    ! Write back to the array itself
-    DO iElem=1,nElems
-      ! Indixes in the IJK sorting
-      i = Elem_IJK(1,iElem)
-      j = Elem_IJK(2,iElem)
-      ! Build sum
-      DO q=0,N; DO p=0,N
-        DO l = 0,N
-          RealArray(:,p,q,l,iElem) = RealAvg(:,p,q,i,j)
-        END DO ! l = 0,N
-      END DO; END DO ! p,q=0,PP_N
-    END DO ! iElem
-  END IF
+  ! Skip the Datasets given as commandline arguments
+  IF (ANY(TRIM(tmpDatasetNames(iDataset))==Args(2:nArgs))) THEN
+    ! Simply leave the real array untouched
+    WRITE(*,*) 'NOT averaging dataset ',tmpDatasetNames(iDataset)
+  ELSE
+    ! Compute the averages
+    IF (nDims.EQ.2) THEN
+      ! Elementwise data set
+      ALLOCATE(RealElemAvg(nVar,nElems_IJK(1),nElems_IJK(2)))
+      RealElemAvg = 0.
+      DO iElem=1,nElems
+        ! Indixes in the IJK sorting
+        i = Elem_IJK(1,iElem)
+        j = Elem_IJK(2,iElem)
+        ! Build sum
+        RealElemAvg(:,i,j) = RealElemAvg(:,i,j) + RealElemArray(:,iElem)
+      END DO ! iElem
+      ! Finish sum
+      RealElemAvg = RealElemAvg / nElems_IJK(3)
+      ! Write back to the array itself
+      DO iElem=1,nElems
+        ! Indixes in the IJK sorting
+        i = Elem_IJK(1,iElem)
+        j = Elem_IJK(2,iElem)
+        RealElemArray(:,iElem) = RealElemAvg(:,i,j)
+      END DO ! iElem
+    ELSE IF (nDims.EQ.5) THEN
+      ! Pointwise data set
+      ALLOCATE(RealAvg(nVar,0:N,0:N,nElems_IJK(1),nElems_IJK(2)))
+      RealAvg = 0.
+      DO iElem=1,nElems
+        ! Indixes in the IJK sorting
+        i = Elem_IJK(1,iElem)
+        j = Elem_IJK(2,iElem)
+        ! Build sum
+        DO q=0,N; DO p=0,N
+          DO l = 0,N
+            RealAvg(:,p,q,i,j) = RealAvg(:,p,q,i,j) + RealArray(:,p,q,l,iElem)*wGP(l)/2.
+          END DO ! l = 0,N
+        END DO; END DO ! p,q=0,PP_N
+      END DO ! iElem
+      ! Finish sum
+      RealAvg = RealAvg / (nElems_IJK(3))
+      ! Write back to the array itself
+      DO iElem=1,nElems
+        ! Indixes in the IJK sorting
+        i = Elem_IJK(1,iElem)
+        j = Elem_IJK(2,iElem)
+        ! Build sum
+        DO q=0,N; DO p=0,N
+          DO l = 0,N
+            RealArray(:,p,q,l,iElem) = RealAvg(:,p,q,i,j)
+          END DO ! l = 0,N
+        END DO; END DO ! p,q=0,PP_N
+      END DO ! iElem
+    END IF
 
-  
+  END IF ! skipDataset
+
   ! Open new file and write the array
   WRITE(*,*) 'Write dataset ',tmpDatasetNames(iDataset)
   CALL OpenDataFile(TRIM(NewFileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)

@@ -58,12 +58,15 @@ END INTERFACE
 
 PUBLIC::InitMPIvars
 PUBLIC::StartReceiveMPIData
+PUBLIC::StartReceiveSM_MPIData
 PUBLIC::StartSendMPIData
+PUBLIC::StartSendSM_MPIData
 #if FV_ENABLED
 PUBLIC::StartExchange_FV_Elems
 #endif
 PUBLIC::FinishExchangeMPIData
 PUBLIC::FinalizeMPI
+PUBLIC::StartExchange_MeshMortar
 #endif
 !==================================================================================================================================
 
@@ -157,6 +160,8 @@ IF(.NOT.InterpolationInitIsDone)THEN
 END IF
 
 ALLOCATE(MPIRequest_U(nNbProcs,2)    )
+ALLOCATE(MPIRequestSM_U(0:nProcessors-1) )
+ALLOCATE(MPIRequestSM_Flux(0:nProcessors-1) )
 ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
 MPIRequest_U      = MPI_REQUEST_NULL
 MPIRequest_Flux   = MPI_REQUEST_NULL
@@ -168,11 +173,13 @@ MPIRequest_FV_gradU = MPI_REQUEST_NULL
 #endif
 #if EDDYVISCOSITY
 ALLOCATE(MPIRequest_SGS(nNbProcs,2) )
+ALLOCATE(MPIRequestSM_SGS(0:nProcessors-1) )
 MPIRequest_SGS     = MPI_REQUEST_NULL
 #endif
 
 #if PARABOLIC
 ALLOCATE(MPIRequest_gradU(nNbProcs,3,2))
+ALLOCATE(MPIRequestSM_gradU(0:nProcessors-1,3))
 MPIRequest_gradU = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
 
@@ -181,6 +188,9 @@ DataSizeSideSGS= (PP_N+1)*(PP_NZ+1)
 #endif
 DataSizeSide      =PP_nVar*(PP_N+1)*(PP_NZ+1)
 DataSizeSidePrim  =PP_nVarPrim*(PP_N+1)*(PP_NZ+1)
+#if GCL
+DataSizeSideGCL   =1*(PP_N+1)*(PP_NZ+1)
+#endif
 
 ! split communicator into smaller groups (e.g. for local nodes)
 GroupSize=GETINT('GroupSize','0')
@@ -286,6 +296,136 @@ DO iNbProc=1,nNbProcs
 END DO !iProc=1,nNBProcs
 END SUBROUTINE StartSendMPIData
 
+
+
+!==================================================================================================================================
+!> Subroutine that controls the receive operations for the sliding mesh face data that has to be exchanged between processors.
+!==================================================================================================================================
+SUBROUTINE StartReceiveSM_MPIData(nVar_In,FaceData,MPIRequestSM,SendID)
+! MODULES
+USE MOD_Globals
+USE MOD_MPI_Vars
+USE MOD_PreProc
+USE MOD_Mesh_Vars, ONLY:IAmARotProc,IAmAStatProc,nSMSides
+USE MOD_SM_Vars,   ONLY:SM_nMPIMortars_Proc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)           :: SendID                                   !< defines the send / receive direction -> 1=send MINE
+                                                                         !< / receive YOUR, 2=send YOUR / receive MINE
+INTEGER,INTENT(IN)           :: nVar_In
+INTEGER,INTENT(OUT)          :: MPIRequestSM(0:nProcessors-1)            !< communication handles
+REAL,   INTENT(OUT)          :: FaceData(1:nVar_In,0:PP_N,0:PP_NZ,1:2*nSMSides)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                      :: iProc,DataSize,firstInd,lastInd
+!==================================================================================================================================
+DataSize=nVar_In*(PP_N+1)*(PP_NZ+1)
+
+IF((IAmARotProc.AND.(SendID.EQ.1)).OR. (IAmAStatProc.AND.(SendID.EQ.2)))THEN
+  DO iProc=0,nProcessors-1
+    IF(SM_nMPIMortars_Proc(iProc).EQ.0) THEN
+      MPIRequestSM(iProc)=MPI_REQUEST_NULL
+    ELSE
+      DataSize=nVar_In*(PP_N+1)*(PP_NZ+1)*SM_nMPIMortars_Proc(iProc)
+      lastInd=SUM(SM_nMPIMortars_Proc(0:iProc))
+      firstInd=lastInd-SM_nMPIMortars_Proc(iProc)+1
+      CALL MPI_IRECV(FaceData(:,:,:,firstInd:lastInd),DataSize*SM_nMPIMortars_Proc(iProc),&
+                     MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_FLEXI,MPIRequestSM(iProc),iError)
+    END IF
+  END DO
+END IF
+END SUBROUTINE StartReceiveSM_MPIData
+
+
+
+!==================================================================================================================================
+!> Subroutine that performs the send operations for the sliding mesh face data that has to be exchanged between processors.
+!==================================================================================================================================
+SUBROUTINE StartSendSM_MPIData(nVar_In,FaceData,MPIRequestSM,SendID)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_MPI_Vars
+USE MOD_Mesh_Vars, ONLY:IAmAStatProc,IAmARotProc,nSMSides
+USE MOD_SM_Vars,   ONLY:SM_nMPIMortars_Proc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)           :: SendID                                   !< defines the send / receive direction -> 1=send MINE
+                                                                         !< / receive YOUR, 2=send YOUR / receive MINE
+INTEGER,INTENT(IN)           :: nVar_In
+REAL,   INTENT(IN)           :: FaceData(1:nVar_In,0:PP_N,0:PP_NZ,1:2*nSMSides)
+INTEGER,INTENT(INOUT)        :: MPIRequestSM(0:nProcessors-1)            !< communication handles
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                      :: iProc,DataSize,firstInd,lastInd
+!==================================================================================================================================
+DataSize=nVar_In*(PP_N+1)*(PP_NZ+1)
+
+IF((IAmAStatProc.AND.(SendID.EQ.1)).OR. (IAmARotProc.AND.(SendID.EQ.2)))THEN
+  DO iProc=0,nProcessors-1
+    IF(SM_nMPIMortars_Proc(iProc).EQ.0) THEN
+      MPIRequestSM(iProc)=MPI_REQUEST_NULL
+    ELSE
+      lastInd=SUM(SM_nMPIMortars_Proc(0:iProc))
+      firstInd=lastInd-SM_nMPIMortars_Proc(iProc)+1
+      CALL MPI_ISEND(FaceData(:,:,:,firstInd:lastInd),DataSize*SM_nMPIMortars_Proc(iProc),&
+                     MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_FLEXI,MPIRequestSM(iProc),iError)
+    END IF
+  END DO
+END IF
+END SUBROUTINE StartSendSM_MPIData
+
+
+!===================================================================================================================================
+!> Start the communcication of the mesh movement information for non-conforming interfaces
+!===================================================================================================================================
+SUBROUTINE StartExchange_MeshMortar(SendBufferDisp,RcvBufferDisp,SendBufferVel,RcvBufferVel)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_MoveMesh_Vars    ,ONLY: nSmallMortarMPISidesSend,nMortarSidesSend,nMortarSidesRcv
+USE MOD_MoveMesh_Vars    ,ONLY: nSmallMortarMPISidesRcv,nNbProcsMortarRcv,nNbProcsMortarSend,NbProcsMortarSend,NbProcsMortarRcv
+USE MOD_MoveMesh_Vars    ,ONLY: offsetMortarSidesRcv,offsetMortarSidesSend
+USE MOD_MPI_Vars         ,ONLY: DataSizeSideMesh,nRecVal,nSendVal,SideID_start,SideID_end
+USE MOD_MPI_Vars         ,ONLY: MPIRequest_MeshMortarRcv,MPIRequest_MeshMortarSend
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(INOUT)               :: SendBufferDisp(DataSizeSideMesh,1:nSmallMortarMPISidesSend)
+REAL,INTENT(INOUT)               :: RcvBufferDisp( DataSizeSideMesh,1:nSmallMortarMPISidesRcv)
+REAL,INTENT(INOUT)               :: SendBufferVel( DataSizeSideMesh,1:nSmallMortarMPISidesSend)
+REAL,INTENT(INOUT)               :: RcvBufferVel(  DataSizeSideMesh,1:nSmallMortarMPISidesRcv)
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER            :: iNbProc
+!===================================================================================================================================
+! Start the recieve and send operations for the non-conforming MPI interfaces
+DO iNbProc = 1,nNbProcsMortarRcv
+  nRecVal = DataSizeSideMesh*nMortarSidesRcv(iNbProc)
+  SideID_start = offsetMortarSidesRcv(iNbProc)+1
+  SideID_end   = offsetMortarSidesRcv(iNbProc+1)
+  CALL MPI_IRECV(RcvBufferDisp(:,SideID_start:SideID_end),nRecVal,MPI_DOUBLE_PRECISION, &
+                 NbProcsMortarRcv(iNbProc),0,MPI_COMM_FLEXI,MPIRequest_MeshMortarRcv(1,iNbProc),iError)
+  CALL MPI_IRECV(RcvBufferVel( :,SideID_start:SideID_end),nRecVal,MPI_DOUBLE_PRECISION, &
+                 NbProcsMortarRcv(iNbProc),1,MPI_COMM_FLEXI,MPIRequest_MeshMortarRcv(2,iNbProc),iError)
+END DO
+DO iNbProc = 1,nNbProcsMortarSend
+  nSendVal = DataSizeSideMesh*nMortarSidesSend(iNbProc)
+  SideID_start = offsetMortarSidesSend(iNbProc)+1
+  SideID_end   = offsetMortarSidesSend(iNbProc+1)
+  CALL MPI_ISEND(SendBufferDisp(:,SideID_start:SideID_end),nSendVal,MPI_DOUBLE_PRECISION, &
+                 NbProcsMortarSend(iNbProc),0,MPI_COMM_FLEXI,MPIRequest_MeshMortarSend(1,iNbProc),iError)
+  CALL MPI_ISEND(SendBufferVel( :,SideID_start:SideID_end),nSendVal,MPI_DOUBLE_PRECISION, &
+                 NbProcsMortarSend(iNbProc),1,MPI_COMM_FLEXI,MPIRequest_MeshMortarSend(2,iNbProc),iError)
+END DO
+
+END SUBROUTINE StartExchange_MeshMortar
+
 #if FV_ENABLED
 !==================================================================================================================================
 !> Subroutine that performs the send and receive operations for the FV_elems information at the face
@@ -341,18 +481,25 @@ END SUBROUTINE StartExchange_FV_Elems
 !==================================================================================================================================
 !> We have to complete our non-blocking communication operations before we can (re)use the send / receive buffers
 !==================================================================================================================================
-SUBROUTINE FinishExchangeMPIData(nRequests,MPIRequest)
+SUBROUTINE FinishExchangeMPIData(nRequests,MPIRequest,MPIRequestSM)
 ! MODULES
 USE MOD_Globals
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-INTEGER,INTENT(IN)          :: nRequests             !< size of the handles
-INTEGER,INTENT(INOUT)       :: MPIRequest(nRequests) !< communication handles
+INTEGER,INTENT(IN)             :: nRequests                     !< size of the handles
+INTEGER,INTENT(INOUT)          :: MPIRequest(nRequests)         !< communication handles
+INTEGER,INTENT(INOUT),OPTIONAL :: MPIRequestSM(0:nProcessors-1) !< communication handles
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+#if LUSTRE
+CALL MPI_WaitAll(nRequests,MPIRequest,MPI_STATUS_IGNORE,iError)
+IF(PRESENT(MPIRequestSM)) CALL MPI_WaitAll(nProcessors,MPIRequestSM,MPI_STATUS_IGNORE,iError)
+#else
 CALL MPI_WaitAll(nRequests,MPIRequest,MPI_STATUSES_IGNORE,iError)
+IF(PRESENT(MPIRequestSM)) CALL MPI_WaitAll(nProcessors,MPIRequestSM,MPI_STATUSES_IGNORE,iError)
+#endif
 END SUBROUTINE FinishExchangeMPIData
 
 !==================================================================================================================================
@@ -364,16 +511,20 @@ USE MOD_MPI_Vars
 IMPLICIT NONE
 !==================================================================================================================================
 SDEALLOCATE(MPIRequest_U)
+SDEALLOCATE(MPIRequestSM_U)
 SDEALLOCATE(MPIRequest_Flux)
+SDEALLOCATE(MPIRequestSM_Flux)
 #if FV_ENABLED
 SDEALLOCATE(MPIRequest_FV_Elems)
 SDEALLOCATE(MPIRequest_FV_gradU)
 #endif
 #if EDDYVISCOSITY
 SDEALLOCATE(MPIRequest_SGS)
+SDEALLOCATE(MPIRequestSM_SGS)
 #endif
 #if PARABOLIC
 SDEALLOCATE(MPIRequest_gradU)
+SDEALLOCATE(MPIRequestSM_gradU)
 #endif /*PARABOLIC*/
 SDEALLOCATE(NbProc)
 SDEALLOCATE(nMPISides_Proc)

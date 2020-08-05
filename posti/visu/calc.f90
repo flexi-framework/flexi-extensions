@@ -66,20 +66,22 @@ USE MOD_EOS_Posti          ,ONLY: CalcQuantities
 USE MOD_Mesh_Vars          ,ONLY: nElems
 USE MOD_DG_Vars            ,ONLY: U
 USE MOD_StringTools        ,ONLY: STRICMP
-#if PARABOLIC
-USE MOD_Lifting_Vars       ,ONLY: gradUx,gradUy,gradUz
+USE MOD_MoveMesh_Vars      ,ONLY: Elem_vGP
+USE MOD_ChangeBasisByDim   ,ONLY: ChangeBasisVolume
 USE MOD_Interpolation      ,ONLY: GetVandermonde
 USE MOD_Interpolation_Vars ,ONLY: NodeType
-USE MOD_ChangeBasisByDim   ,ONLY: ChangeBasisVolume
+#if PARABOLIC
+USE MOD_Lifting_Vars       ,ONLY: gradUx,gradUy,gradUz
 #endif
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER            :: iElem,iElemDG
 INTEGER            :: maskCalc(nVarDep),nVal(4)
+REAL               :: Vdm_N_NCalc(0:NCalc,0:PP_N)
+REAL,ALLOCATABLE,DIMENSION(:,:,:,:,:) :: MeshVel_tmp
 #if PARABOLIC
 REAL,ALLOCATABLE,DIMENSION(:,:,:,:,:) :: gradUx_tmp,gradUy_tmp,gradUz_tmp
-REAL               :: Vdm_N_NCalc(0:NCalc,0:PP_N)
-INTEGER            :: iElem,iElemDG
 #endif
 !===================================================================================================================================
 ! calc DG solution
@@ -93,6 +95,14 @@ maskCalc = 1
 CALL FillCopy(nVar_State,PP_N,NCalc,nElems,U,nElems_DG,mapDGElemsToAllElems,UCalc_DG,maskCalc)
 
 IF(TRIM(FileType).EQ.'State')THEN
+  ! Get Mesh Velocity
+  ALLOCATE(MeshVel_tmp(3,0:NCalc,0:NCalc,0:ZDIM(NCalc),nElems_DG))
+  CALL GetVandermonde(PP_N,NodeType,NCalc,NodeType,Vdm_N_NCalc,modal=.FALSE.)
+  DO iElemDG = 1, nElems_DG
+    iElem = mapDGElemsToAllElems(iElemDG)
+    CALL ChangeBasisVolume(3,PP_N,NCalc,Vdm_N_NCalc,Elem_vGP(:,:,:,:,iElem),MeshVel_tmp(:,:,:,:,iElemDG))
+  END DO ! i = 1, nElems_DG
+
   IF(withDGOperator.AND.PARABOLIC.EQ.1)THEN
 #if PARABOLIC
     CALL GetVandermonde(PP_N,NodeType,NCalc,NodeType,Vdm_N_NCalc,modal=.FALSE.)
@@ -105,12 +115,14 @@ IF(TRIM(FileType).EQ.'State')THEN
       CALL ChangeBasisVolume(PP_nVarPrim,PP_N,NCalc,Vdm_N_NCalc,gradUy(:,:,:,:,iElem),gradUy_tmp(:,:,:,:,iElemDG))
       CALL ChangeBasisVolume(PP_nVarPrim,PP_N,NCalc,Vdm_N_NCalc,gradUz(:,:,:,:,iElem),gradUz_tmp(:,:,:,:,iElemDG))
     END DO ! i = 1, nElems_DG
-    CALL CalcQuantities(nVarCalc,nVal,mapDGElemsToAllElems,mapDepToCalc,UCalc_DG,maskCalc,gradUx_tmp,gradUy_tmp,gradUz_tmp)
+    CALL CalcQuantities(nVarCalc,nVal,mapDGElemsToAllElems,mapDepToCalc,UCalc_DG,maskCalc,gradUx_tmp,gradUy_tmp,gradUz_tmp, &
+                                                                                                              MeshVel=MeshVel_tmp)
     DEALLOCATE(gradUx_tmp,gradUy_tmp,gradUz_tmp)
 #endif
   ELSE
-    CALL CalcQuantities(nVarCalc,nVal,mapDGElemsToAllElems,mapDepToCalc,UCalc_DG,maskCalc)
+    CALL CalcQuantities(nVarCalc,nVal,mapDGElemsToAllElems,mapDepToCalc,UCalc_DG,maskCalc,MeshVel=MeshVel_tmp)
   END IF
+  DEALLOCATE(MeshVel_tmp)
 END IF
 END SUBROUTINE CalcQuantities_DG
 
@@ -134,6 +146,7 @@ USE MOD_StringTools        ,ONLY: STRICMP
 USE MOD_Interpolation      ,ONLY: GetVandermonde
 USE MOD_Interpolation_Vars ,ONLY: NodeType
 USE MOD_ChangeBasisByDim   ,ONLY: ChangeBasisSurf
+USE MOD_MoveMesh_Vars      ,ONLY: Face_vGP
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -148,6 +161,7 @@ REAL,ALLOCATABLE   :: gradUzFace(:,:,:,:)
 REAL,ALLOCATABLE   :: NormVec_loc(:,:,:,:)
 REAL,ALLOCATABLE   :: TangVec1_loc(:,:,:,:)
 REAL,ALLOCATABLE   :: TangVec2_loc(:,:,:,:)
+REAL,ALLOCATABLE   :: MeshVel_tmp(:,:,:,:)
 !===================================================================================================================================
 CALL GetVandermonde(PP_N,NodeType,NCalc,NodeType,Vdm_N_NCalc,modal=.FALSE.)
 
@@ -166,6 +180,8 @@ ALLOCATE(NormVec_loc (1:3,0:NCalc,0:ZDIM(NCalc),nBCSidesVisu_DG))
 ALLOCATE(TangVec1_loc(1:3,0:NCalc,0:ZDIM(NCalc),nBCSidesVisu_DG))
 ALLOCATE(TangVec2_loc(1:3,0:NCalc,0:ZDIM(NCalc),nBCSidesVisu_DG))
 
+ALLOCATE(MeshVel_tmp(1:3,0:NCalc,0:ZDIM(NCalc),nBCSidesVisu_DG))
+
 maskCalc=1
 CALL ProlongToFace_independent(nVarCalc,nBCSidesVisu_DG,nElems_DG,maskCalc,UCalc_DG,USurfCalc_DG &
 #if PARABOLIC
@@ -180,17 +196,18 @@ IF(TRIM(FileType).EQ.'State')THEN
       CALL ChangeBasisSurf(3,PP_N,NCalc,Vdm_N_NCalc,NormVec (:,:,0:PP_NZ,0,iSide),NormVec_loc (:,:,:,iSide2))
       CALL ChangeBasisSurf(3,PP_N,NCalc,Vdm_N_NCalc,TangVec1(:,:,0:PP_NZ,0,iSide),TangVec1_loc(:,:,:,iSide2))
       CALL ChangeBasisSurf(3,PP_N,NCalc,Vdm_N_NCalc,TangVec2(:,:,0:PP_NZ,0,iSide),TangVec2_loc(:,:,:,iSide2))
+      CALL ChangeBasisSurf(3,PP_N,NCalc,Vdm_N_NCalc,Face_vGP(:,:,0:PP_NZ,  iSide),MeshVel_tmp( :,:,:,iSide2))
     END IF
   END DO
   IF(withDGOperator.AND.PARABOLIC.EQ.1)THEN
 #if PARABOLIC
     CALL CalcQuantities(nVarCalc,nValSide,mapAllBCSidesToDGVisuBCSides,mapDepToCalc,USurfCalc_DG,maskCalc*(1-DepVolumeOnly),&
         gradUxFace,gradUyFace,gradUzFace,&
-        NormVec_loc(:,:,:,:),TangVec1_loc(:,:,:,:),TangVec2_loc(:,:,:,:))
+        NormVec_loc(:,:,:,:),TangVec1_loc(:,:,:,:),TangVec2_loc(:,:,:,:),MeshVel=MeshVel_tmp)
 #endif
   ELSE
     CALL CalcQuantities(nVarCalc,nValSide,mapAllBCSidesToDGVisuBCSides,mapDepToCalc,USurfCalc_DG,maskCalc*(1-DepVolumeOnly),&
-        NormVec=NormVec_loc(:,:,:,:),TangVec1=TangVec1_loc(:,:,:,:),TangVec2=TangVec2_loc(:,:,:,:))
+        NormVec=NormVec_loc(:,:,:,:),TangVec1=TangVec1_loc(:,:,:,:),TangVec2=TangVec2_loc(:,:,:,:),MeshVel=MeshVel_tmp)
   END IF
 END IF
 
@@ -202,6 +219,8 @@ DEALLOCATE(gradUzFace)
 DEALLOCATE(NormVec_loc )
 DEALLOCATE(TangVec1_loc)
 DEALLOCATE(TangVec2_loc)
+
+DEALLOCATE(MeshVel_tmp)
 
 END SUBROUTINE CalcSurfQuantities_DG
 

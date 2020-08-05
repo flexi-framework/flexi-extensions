@@ -45,6 +45,7 @@ SET (HDF5TAG "hdf5-1_10_4" CACHE STRING "HDF5 version tag")
 # =========================================================================
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
+STRING(FIND "${CMAKE_HOSTNAME}" "login"  ONHAWK)
 # Set options that need to be enabled BEFORE ANY PROJECT OR LANGUAGE COMMAND
 IF (ONHORNET GREATER -1)
   SET(CMAKE_C_COMPILER       cc)
@@ -53,6 +54,19 @@ IF (ONHORNET GREATER -1)
   SET(HDF5_USE_STATIC_LIBRARIES TRUE)
   MARK_AS_ADVANCED(C_PATH CXX_PATH Fortran_PATH)
   MESSAGE(STATUS "Compiling on Hazelhen")
+  ADD_DEFINITIONS(-DLUSTRE)
+ENDIF()
+IF (ONHAWK GREATER -1)
+  SET(CMAKE_C_COMPILER       mpicc)
+  SET(CMAKE_CXX_COMPILER     mpicxx)
+  SET(CMAKE_Fortran_COMPILER mpif90) # mpif08 wrapper seems to have issues
+  # set the next few lines for the AOCC compiler, wrappers don't seem to work
+  #SET(CMAKE_C_COMPILER       clang)
+  #SET(CMAKE_CXX_COMPILER     clang)
+  #SET(CMAKE_Fortran_COMPILER flang)
+  #SET(HDF5_USE_STATIC_LIBRARIES TRUE)
+  MARK_AS_ADVANCED(C_PATH CXX_PATH Fortran_PATH)
+  MESSAGE(STATUS "Compiling on Hawk")
   ADD_DEFINITIONS(-DLUSTRE)
 ENDIF()
 
@@ -108,6 +122,7 @@ CMAKE_DEPENDENT_OPTION(FLEXI_EDDYVISCOSITY "Enable eddy viscosity modells" OFF
 OPTION(FLEXI_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLEXI_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLEXI_FV "Enable Finite Volume subcell shock capturing" OFF)
+OPTION(FLEXI_GCL "Compile with or without GCL" ON)
 OPTION(FLEXI_2D "Enable two dimensional computation" OFF)
 CMAKE_DEPENDENT_OPTION(FLEXI_FV_RECONSTRUCTION "Enable 2nd order reconstruction for FV" ON
                                                "FLEXI_FV" OFF)
@@ -244,6 +259,15 @@ ELSE()
 ENDIF()
 
 # =========================================================================
+# GCL
+# =========================================================================
+IF (FLEXI_GCL)
+	ADD_DEFINITIONS(-DGCL=1)
+ELSE()
+	ADD_DEFINITIONS(-DGCL=0)
+ENDIF()
+
+# =========================================================================
 # USERBLOCK + Preproc_flags
 # =========================================================================
 
@@ -281,7 +305,11 @@ IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE Release CACHE STRING
       "Choose the type of build, options are: Debug Release Profile."
       FORCE)
-  SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile)
+   IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+     SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile SANI)
+   ELSE()
+     SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile)
+   ENDIF()
 ENDIF (NOT CMAKE_BUILD_TYPE)
 
 
@@ -316,6 +344,8 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   #environment specific variables
   IF(ONHORNET GREATER -1)
     SET(FLEXI_INSTRUCTION "-march=core-avx2")
+  ELSEIF(ONHAWK GREATER -1)
+    SET(FLEXI_INSTRUCTION "-march=znver2")
   ELSE()
     SET(FLEXI_INSTRUCTION "-march=native")
   ENDIF()
@@ -324,6 +354,23 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLEXI_INSTRUCTION} -finline-functions -fstack-arrays")
   SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLEXI_INSTRUCTION} -finline-functions -fstack-arrays")
   SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -ffpe-trap=invalid -fbounds-check -finit-real=snan -fbacktrace  -Wall")
+  SET (CMAKE_Fortran_FLAGS_SANI    "${CMAKE_Fortran_FLAGS} -g  -O0 -ggdb3 -fcheck=bounds,do,mem,pointer -finit-real=snan -ffpe-trap=invalid,zero,overflow -fbacktrace  -Wall -fsanitize=address,undefined,leak -fno-omit-frame-pointer -Wc-binding-type -Wuninitialized")
+  # add flags only for compiling not linking!
+  SET (FLEXI_COMPILE_FLAGS "-xf95-cpp-input -fPIC")
+
+ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Flang")
+  #environment specific variables
+  IF(ONHAWK GREATER -1)
+     # why do they use the AVX architecture instead of zen? test difference!
+    SET(FLEXI_INSTRUCTION "-march=core-avx2")
+  ELSE()
+    SET(FLEXI_INSTRUCTION "-march=native")
+  ENDIF()
+  # set Flags
+  SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -fdefault-real-8 -std=f2008 -DFLANG")
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLEXI_INSTRUCTION} -finline-functions ")
+  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLEXI_INSTRUCTION} -finline-functions ")
+  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -ffpe-trap=invalid -fbounds-check -finit-real=snan -fbacktrace  -Wall")
   # add flags only for compiling not linking!
   SET (FLEXI_COMPILE_FLAGS "-xf95-cpp-input -fPIC")
 
@@ -331,6 +378,8 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
   #environment specific variables
   IF(ONHORNET GREATER -1)
      SET(FLEXI_INSTRUCTION "-xCORE-AVX2")
+  ELSEIF(ONHAWK GREATER -1)
+    SET(FLEXI_INSTRUCTION "-march=core-avx2")
   ELSE()
      SET(FLEXI_INSTRUCTION "-xHost")
   ENDIF()
@@ -462,6 +511,9 @@ MESSAGE(STATUS "Using BLAS/Lapack library")
 IF (FLEXI_MKL)
   SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
 ENDIF()
+#IF (ONHAWK GREATER -1)
+  #SET(BLA_VENDOR "FLAME") #search only for Intel BLAS (=MKL)
+#ENDIF()
 FIND_PACKAGE(LAPACK QUIET)
 IF (LAPACK_FOUND)
   LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
@@ -543,6 +595,7 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/sponge/*.f90
                            ./src/filter/*.f90
                            ./src/io_hdf5/*.f90
+                           ./src/sm/*.f90
                            ./src/timedisc/*.f90
                            ./src/testcase/${FLEXI_TESTCASE}/*.f90
                            ./src/flexilib.f90
@@ -585,6 +638,10 @@ LIST(APPEND flexiF90 ${dgF90})
 IF (FLEXI_FV)
   FILE(GLOB fvF90 ./src/fv/*.f90)
   LIST(APPEND flexiF90 ${fvF90})
+ENDIF()
+IF (FLEXI_GCL)
+  FILE(GLOB gclF90     ./src/gcl/*.f90)
+  LIST(APPEND flexiF90 ${gclF90})
 ENDIF()
 
 # define libs

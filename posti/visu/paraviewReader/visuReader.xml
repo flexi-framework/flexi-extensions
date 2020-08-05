@@ -66,6 +66,18 @@
                User-defined NodeType at which to visualize. 
             </Documentation>
          </StringVectorProperty>
+         <IntVectorProperty command="SetMovingMesh"
+           default_values="0"
+           animateable="0"
+           name="MovingMesh"
+           number_of_elements="1"
+           label="Moving Mesh"
+           panel_visibility="advanced">
+           <BooleanDomain name="bool" />
+           <Documentation>
+           Set if simulation was run on a moving mesh
+           </Documentation>
+         </IntVectorProperty>
 #if PP_dim == 3
          <IntVectorProperty command="SetAvg2d"
            default_values="0"

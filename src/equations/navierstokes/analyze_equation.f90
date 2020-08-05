@@ -60,12 +60,14 @@ IMPLICIT NONE
 CALL prms%SetSection("AnalyzeEquation")
 CALL prms%CreateLogicalOption('CalcBodyForces'   , "Set true to compute body forces at walls"         , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcBulkState'    , "Set true to compute the flows bulk quantities"    , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcBulkEntropy'  , "Set true to compute the bulk entropy"             , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcMeanFlux'     , "Set true to compute mean flux through boundaries" , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcWallVelocity' , "Set true to compute velocities at wall boundaries", '.FALSE.')
 CALL prms%CreateLogicalOption('CalcTotalStates'  , "Set true to compute total states (e.g. Tt,pt)"    , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcTimeAverage'  , "Set true to compute time averages"                , '.FALSE.')
 CALL prms%CreateLogicalOption('WriteBodyForces'  , "Set true to write bodyforces to file"             , '.TRUE.')
 CALL prms%CreateLogicalOption('WriteBulkState'   , "Set true to write bulk state to file"             , '.TRUE.')
+CALL prms%CreateLogicalOption('WriteBulkEntropy' , "Set true to write bulk entropy to file"           , '.TRUE.')
 CALL prms%CreateLogicalOption('WriteMeanFlux'    , "Set true to write mean flux to file"              , '.TRUE.')
 CALL prms%CreateLogicalOption('WriteWallVelocity', "Set true to write wall velolcities file"          , '.TRUE.')
 CALL prms%CreateLogicalOption('WriteTotalStates' , "Set true to write total states to file"           , '.TRUE.')
@@ -99,11 +101,13 @@ INTEGER          :: i
 ! Get the various analysis/output variables
 doCalcBodyForces    =GETLOGICAL('CalcBodyForces'   ,'.FALSE.')
 doCalcBulkState     =GETLOGICAL('CalcBulkState'    ,'.FALSE.')
+doCalcBulkEntropy   =GETLOGICAL('CalcBulkEntropy'  ,'.FALSE.')
 doCalcMeanFlux      =GETLOGICAL('CalcMeanFlux'     ,'.FALSE.')
 doCalcWallVelocity  =GETLOGICAL('CalcWallVelocity' ,'.FALSE.')
 doCalcTotalStates   =GETLOGICAL('CalcTotalStates'  ,'.FALSE.')
 doWriteBodyForces   =GETLOGICAL('WriteBodyForces'  ,'.TRUE.')
 doWriteBulkState    =GETLOGICAL('WriteBulkState'   ,'.TRUE.')
+doWriteBulkEntropy  =GETLOGICAL('WriteBulkEntropy' ,'.TRUE.')
 doWriteMeanFlux     =GETLOGICAL('WriteMeanFlux'    ,'.TRUE.')
 doWriteWallVelocity =GETLOGICAL('WriteWallVelocity','.TRUE.')
 doWriteTotalStates  =GETLOGICAL('WriteTotalStates' ,'.TRUE.')
@@ -159,6 +163,10 @@ IF(MPIRoot)THEN
     FileName_Bulk  = TRIM(ProjectName)//'_Bulk'
     CALL InitOutputToFile(FileName_Bulk,'Bulk',2*PP_nVar-1,[StrVarNamesPrim,StrVarNames(2:PP_nVar)])
   END IF
+  IF(doCalcBulkEntropy.AND.doWriteBulkEntropy)THEN
+    FileName_BulkEntropy  = TRIM(ProjectName)//'_BulkEntropy'
+    CALL InitOutputToFile(FileName_BulkEntropy,'BulkEntropy',1,['Entropy'])
+  END IF
   IF(doCalcMeanFlux.AND.doWriteMeanFlux)THEN
     ALLOCATE(Filename_MeanFlux(nBCs))
     DO i=1,nBCs
@@ -198,7 +206,7 @@ REAL,DIMENSION(3,nBCs)          :: Fv,Fp,BodyForce ! viscous/pressure/resulting 
 REAL,DIMENSION(PP_nVar,nBCs)    :: MeanFlux
 REAL,DIMENSION(4,nBCs)          :: meanTotals
 REAL,DIMENSION(nBCs)            :: meanV,maxV,minV
-REAL                            :: BulkPrim(PP_nVarPrim),BulkCons(PP_nVar)
+REAL                            :: BulkPrim(PP_nVarPrim),BulkCons(PP_nVar),BulkEntropy
 INTEGER                         :: i
 !==================================================================================================================================
 ! Calculate derived quantities
@@ -206,6 +214,7 @@ IF(doCalcBodyforces)   CALL CalcBodyforces(Bodyforce,Fp,Fv)
 IF(doCalcWallVelocity) CALL CalcWallVelocity(maxV,minV,meanV)
 IF(doCalcMeanFlux)     CALL CalcMeanFlux(MeanFlux)
 IF(doCalcBulkState)    CALL CalcBulkState(bulkPrim,bulkCons)
+IF(doCalcBulkEntropy)  CALL CalcBulkEntropy(bulkEntropy)
 IF(doCalcTotalStates)  CALL CalcKessel(meanTotals)
 
 
@@ -248,6 +257,13 @@ IF(MPIRoot.AND.doCalcBulkState)THEN
   WRITE(UNIT_StdOut,formatStr)' Bulk Prims : ',bulkPrim
   WRITE(formatStr,'(A,I2,A)')'(A14,',PP_nVar,'ES18.9)'
   WRITE(UNIT_StdOut,formatStr)' Bulk Cons  : ',bulkCons
+END IF
+
+IF(MPIRoot.AND.doCalcBulkEntropy)THEN
+  IF (doWriteBulkEntropy) &
+    CALL OutputToFile(FileName_BulkEntropy,(/Time/),(/1,1/),(/BulkEntropy/))
+  WRITE(formatStr,'(A,I2,A)')'(A14,',1,'ES18.9)'
+  WRITE(UNIT_StdOut,formatStr)' Bulk Entropy : ',BulkEntropy
 END IF
 
 IF(MPIRoot.AND.doCalcTotalStates)THEN
@@ -332,6 +348,72 @@ BulkPrim=BulkPrim/Vol
 BulkCons=BulkCons/Vol
 
 END SUBROUTINE CalcBulkState
+
+!==================================================================================================================================
+!> Calculates bulk quantities over whole domain
+!==================================================================================================================================
+SUBROUTINE CalcBulkEntropy(BulkEntropy)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U,UPrim
+USE MOD_EOS,                ONLY: ConsToPrim
+USE MOD_EOS_Vars,           ONLY: R,sKappaM1
+#if FV_ENABLED
+USE MOD_FV_Vars,            ONLY: FV_Elems,FV_w
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: BulkEntropy     !> Bulk entropy
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                            :: IntegrationWeight
+INTEGER                         :: iElem,i,j,k
+#if USE_MPI
+REAL                            :: box(1)
+#endif
+#if FV_ENABLED
+REAL                            :: FV_w3
+#endif
+!==================================================================================================================================
+BulkEntropy=0.
+#if FV_ENABLED
+FV_w3 = FV_w**3
+#endif
+DO iElem=1,nElems
+#if FV_ENABLED
+  IF (FV_Elems(iElem).GT.0) THEN ! FV Element
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      IntegrationWeight=FV_w3/sJ(i,j,k,iElem,1)
+      BulkEntropy      =BulkEntropy+(R*(sKappaM1*LOG(UPrim(6,i,j,k,iElem)) - LOG(U(1,i,j,k,iElem))))*IntegrationWeight
+    END DO; END DO; END DO !i,j,k
+  ELSE ! DG element
+#endif
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem,0)
+      BulkEntropy      =BulkEntropy+(R*(sKappaM1*LOG(UPrim(6,i,j,k,iElem)) - LOG(U(1,i,j,k,iElem))))*IntegrationWeight
+    END DO; END DO; END DO !i,j,k
+#if FV_ENABLED
+  END IF
+#endif
+END DO ! iElem
+
+#if USE_MPI
+Box(1:1)=BulkEntropy; 
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,box,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  BulkEntropy=Box(1)
+ELSE
+  CALL MPI_REDUCE(Box         ,0  ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+END IF
+#endif
+
+BulkEntropy=BulkEntropy/Vol
+
+END SUBROUTINE CalcBulkEntropy
 
 
 !===================================================================================================================================
@@ -456,6 +538,7 @@ USE MOD_AnalyzeEquation_Vars, ONLY: isWall
 #if FV_ENABLED
 USE MOD_FV_Vars,              ONLY: FV_Elems_master,FV_w
 #endif
+USE MOD_MoveMesh_Vars,        ONLY: Face_vGP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -480,9 +563,10 @@ DO iSide=1,nBCSides
   iBC=BC(iSide)
   IF(.NOT.isWall(iBC)) CYCLE
   DO j=0,PP_NZ; DO i=0,PP_N
-    Vel=UPrim_master(2:4,i,j,iSide)
+    ! Substract the mesh velocity to calculate wall velocities in the moving reference frame
+    Vel=UPrim_master(2:4,i,j,iSide) - Face_vGP(1:3,i,j,iSide)
     ! Calculate velocity magnitude
-    locV=NORM2(vel)
+    locV=SQRT(DOT_PRODUCT(vel,vel))
     maxV(iBC)=MAX(maxV(iBC),locV)
     minV(iBC)=MIN(minV(iBC),locV)
 #if FV_ENABLED

@@ -93,20 +93,22 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars
 USE MOD_HDF5_Input
+USE MOD_Interpolation_Vars, ONLY:InterpolationInitIsDone,NodeTypeVISU,NodeTypeCL,NodeType
 USE MOD_ChangeBasisByDim   ,ONLY:ChangeBasisVolume
 USE MOD_Interpolation      ,ONLY:GetVandermonde
-USE MOD_Interpolation_Vars, ONLY:InterpolationInitIsDone,NodeType,NodeTypeVISU
 USE MOD_Mesh_ReadIn,        ONLY:readMesh
 USE MOD_Prepare_Mesh,       ONLY:setLocalSideIDs,fillMeshInfo
 USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR,GETREAL,GETINT
 USE MOD_Metrics,            ONLY:BuildCoords,CalcMetrics
 USE MOD_DebugMesh,          ONLY:writeDebugMesh
 USE MOD_Mappings,           ONLY:buildMappings
+USE MOD_ChangeBasis,        ONLY:ChangeBasis3D
+USE MOD_Interpolation,      ONLY:GetVandermonde
 #if USE_MPI
 USE MOD_Prepare_Mesh,       ONLY:exchangeFlip
 #endif
 #if FV_ENABLED
-USE MOD_FV_Metrics,         ONLY:InitFV_Metrics
+USE MOD_FV_Metrics,         ONLY:InitFV_Metrics,FV_CalcMetrics
 #endif
 USE MOD_IO_HDF5,            ONLY:AddToElemData,ElementOut
 #if (PP_dim == 2)
@@ -121,15 +123,18 @@ CHARACTER(LEN=255),INTENT(IN),OPTIONAL :: MeshFile_IN !< file name of mesh to be
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL              :: x(3),meshScale
-REAL,POINTER      :: coords(:,:,:,:,:),coordsTmp(:,:,:,:,:),Vdm_EQNGeo_EQNGeoOverride(:,:)
+REAL,POINTER      :: coords(:,:,:,:,:),coordsTmp(:,:,:,:,:),Vdm_CLNGeo_CLNGeoOverride(:,:)
 INTEGER           :: iElem,i,j,k,nElemsLoc
 LOGICAL           :: validMesh
+REAL,ALLOCATABLE  :: Vdm_EQNgeo_CLNgeo(:,:) ! Vandermonde from equidistant mesh points to CL points on NGeo
+REAL,ALLOCATABLE  :: XCL_Ngeo(:,:,:,:)      ! CL mesh points in a single element
 INTEGER           :: firstMasterSide     ! lower side ID of array U_master/gradUx_master...
 INTEGER           :: lastMasterSide      ! upper side ID of array U_master/gradUx_master...
 INTEGER           :: firstSlaveSide      ! lower side ID of array U_slave/gradUx_slave...
 INTEGER           :: lastSlaveSide       ! upper side ID of array U_slave/gradUx_slave...
 INTEGER           :: iSide,LocSideID,SideID
 INTEGER           :: NGeoOverride
+INTEGER           :: nLocMortars
 !==================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.MeshInitIsDone) THEN
   CALL CollectiveStop(__STAMP__,&
@@ -161,6 +166,21 @@ ENDIF
 
 CALL readMesh(MeshFile) !set nElems
 
+! Preparation step: Interpolate mesh points form equidistant to CL on Ngeo.
+! Subsequent operations from mesh movement will live on CL points!
+ALLOCATE(Vdm_EQNgeo_CLNgeo(0:Ngeo,0:Ngeo))
+CALL GetVandermonde(Ngeo,NodeTypeVISU,Ngeo,NodeTypeCL,Vdm_EQNgeo_CLNgeo,modal=.FALSE.)
+
+ALLOCATE(XCL_Ngeo(3,0:Ngeo,0:Ngeo,0:Ngeo))
+DO iElem=1,nElems
+  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_CLNGeo,NodeCoords(:,:,:,:,iElem),XCL_Ngeo)
+  ! Overwrite NodeCoords array (equidistant up to now)
+  NodeCoords(:,:,:,:,iElem) = XCL_Ngeo
+END DO
+
+DEALLOCATE(Vdm_EQNgeo_CLNgeo)
+DEALLOCATE(XCL_Ngeo)
+
 #if (PP_dim == 2)
 ! If this is a two dimensional calculation, all subsequent operations are performed on the reduced mesh.
 SWRITE(UNIT_StdOut,'(A)') " RUNNING A 2D SIMULATION! "
@@ -172,6 +192,11 @@ NodeCoords(3,:,:,:,:) = 0.
 ! if trees are available: compute metrics on tree level and interpolate to elements
 interpolateFromTree=.FALSE.
 IF(isMortarMesh) interpolateFromTree=GETLOGICAL('interpolateFromTree','.TRUE.')
+
+! At the moment, interpolation from tree not working for moving meshes!
+IF (interpolateFromTree) &
+      CALL abort(__STAMP__,'At the moment, interpolation from tree not working for moving meshes!')
+
 IF(interpolateFromTree)THEN
 #if (PP_dim == 2)
   CALL CollectiveStop(__STAMP__,&
@@ -188,10 +213,10 @@ ENDIF
 NGeoOverride=GETINT('NGeoOverride','-1')
 IF(NGeoOverride.GT.0)THEN
   ALLOCATE(CoordsTmp(3,0:NGeoOverride,0:NGeoOverride,0:NGeoOverride,nElemsLoc))
-  ALLOCATE(Vdm_EQNGeo_EQNGeoOverride(0:NGeoOverride,0:NGeo))
-  CALL GetVandermonde(Ngeo, NodeTypeVISU, NgeoOverride, NodeTypeVISU, Vdm_EQNgeo_EQNgeoOverride, modal=.FALSE.)
+  ALLOCATE(Vdm_CLNGeo_CLNGeoOverride(0:NGeoOverride,0:NGeo))
+  CALL GetVandermonde(Ngeo, NodeTypeCL, NgeoOverride, NodeTypeCL, Vdm_CLNgeo_CLNgeoOverride, modal=.FALSE.)
   DO iElem=1,nElemsLoc
-    CALL ChangeBasisVolume(3,Ngeo,NgeoOverride,Vdm_EQNGeo_EQNGeoOverride,coords(:,:,:,:,iElem),coordsTmp(:,:,:,:,iElem))
+    CALL ChangeBasisVolume(3,Ngeo,NgeoOverride,Vdm_CLNGeo_CLNGeoOverride,coords(:,:,:,:,iElem),coordsTmp(:,:,:,:,iElem))
   END DO
   ! cleanup
   IF(interpolateFromTree)THEN
@@ -205,7 +230,7 @@ IF(NGeoOverride.GT.0)THEN
   END IF
   Coords = CoordsTmp
   NGeo = NGeoOverride
-  DEALLOCATE(CoordsTmp, Vdm_EQNGeo_EQNGeoOverride)
+  DEALLOCATE(CoordsTmp, Vdm_CLNGeo_CLNGeoOverride)
 END IF
 
 SWRITE(UNIT_StdOut,'(a3,a30,a3,i0)')' | ','Ngeo',' | ', Ngeo
@@ -261,13 +286,15 @@ IF (meshMode.GT.0) THEN
   !-----------------|-----------------|-------------------|
 
   firstBCSide          = 1
-  firstMortarInnerSide = firstBCSide         +nBCSides
+  firstSMSide          = firstBCSide         +nBCSides
+  firstMortarInnerSide = firstSMSide         +nSMSides
   firstInnerSide       = firstMortarInnerSide+nMortarInnerSides
   firstMPISide_MINE    = firstInnerSide      +nInnerSides
   firstMPISide_YOUR    = firstMPISide_MINE   +nMPISides_MINE
   firstMortarMPISide   = firstMPISide_YOUR   +nMPISides_YOUR
 
-  lastBCSide           = firstMortarInnerSide-1
+  lastBCSide           = firstSMSide-1
+  lastSMSide           = firstMortarInnerSide-1 
   lastMortarInnerSide  = firstInnerSide    -1
   lastInnerSide        = firstMPISide_MINE -1
   lastMPISide_MINE     = firstMPISide_YOUR -1
@@ -283,10 +310,11 @@ IF (meshMode.GT.0) THEN
   nSidesSlave     = lastSlaveSide -firstSlaveSide+1
 
   LOGWRITE(*,*)'-------------------------------------------------------'
-  LOGWRITE(*,'(A25,I8)')   'first/lastMasterSide     ', firstMasterSide,lastMasterSide
-  LOGWRITE(*,'(A25,I8)')   'first/lastSlaveSide      ', firstSlaveSide, lastSlaveSide
+  LOGWRITE(*,'(A25,I8,I8)')'first/lastMasterSide     ', firstMasterSide,lastMasterSide
+  LOGWRITE(*,'(A25,I8,I8)')'first/lastSlaveSide      ', firstSlaveSide, lastSlaveSide
   LOGWRITE(*,*)'-------------------------------------------------------'
   LOGWRITE(*,'(A25,I8,I8)')'first/lastBCSide         ', firstBCSide         ,lastBCSide
+  LOGWRITE(*,'(A25,I8,I8)')'first/lastSMSide         ', firstSMSide         ,lastSMSide
   LOGWRITE(*,'(A25,I8,I8)')'first/lastMortarInnerSide', firstMortarInnerSide,lastMortarInnerSide
   LOGWRITE(*,'(A25,I8,I8)')'first/lastInnerSide      ', firstInnerSide      ,lastInnerSide
   LOGWRITE(*,'(A25,I8,I8)')'first/lastMPISide_MINE   ', firstMPISide_MINE   ,lastMPISide_MINE
@@ -362,9 +390,19 @@ IF (meshMode.GT.1) THEN
   crossProductMetrics=GETLOGICAL('crossProductMetrics','.FALSE.')
 #endif
   SWRITE(UNIT_stdOut,'(A)') "NOW CALLING calcMetrics..."
-  CALL CalcMetrics()     ! DG metrics
+  CALL CalcMetrics(NodeCoords,InitJacobian=.TRUE.)     ! DG metrics
+  
+  ! Save reference GP position for better performance in moving mesh
+  ALLOCATE(Elem_xGP_ref(3,0:PP_N,0:PP_N ,0:PP_NZ     ,1:nElems))
+  ALLOCATE(Face_xGP_ref(3,0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
+  Elem_xGP_ref = Elem_xGP
+  Face_xGP_ref = Face_xGP
+
 #if FV_ENABLED
   CALL InitFV_Metrics()  ! FV metrics
+  SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO') '  Build FV-Metrics ...'
+  CALL FV_CalcMetrics()  ! FV metrics
+  SWRITE(UNIT_stdOut,'(A)')' Done !'
 #endif
   ! debugmesh: param specifies format to output, 0: no output, 1: tecplot ascii, 2: tecplot binary, 3: paraview binary
   CALL WriteDebugMesh(GETINT('debugmesh','0'))
@@ -373,32 +411,233 @@ END IF
 IF (meshMode.GT.0) THEN
   ALLOCATE(SideToGlobalSide(nSides))
   DO iElem=1,nElems
+    nLocMortars=0
+
 #if PP_dim == 3
     DO LocSideID=1,6
 #else
     DO LocSideID=2,5
 #endif
       SideID = ElemToSide(E2S_SIDE_ID,LocSideID,iElem)
-      iSide = ElemInfo(3,iElem+offsetElem) + LocSideID
+      iSide  = ElemInfo(3,iElem+offsetElem) + LocSideID + nLocMortars
+
+      ! Skip side if it is a virtual small mortar (104: linear, 204: curved) and increment element mortar counter
+      DO WHILE ((SideInfo(1,iSide).EQ.104).OR.(SideInfo(1,iSide).EQ.204))
+        nLocMortars = nLocMortars + 1
+        iSide  = ElemInfo(3,iElem+offsetElem) + LocSideID + nLocMortars
+      END DO
+
       SideToGlobalSide(SideID) = ABS(SideInfo(2,iSide))
     END DO
   END DO ! iElem
 END IF
 
-SDEALLOCATE(NodeCoords)
-SDEALLOCATE(dXCL_N)
-SDEALLOCATE(Ja_Face)
 SDEALLOCATE(TreeCoords)
 SDEALLOCATE(xiMinMax)
 SDEALLOCATE(ElemToTree)
-IF (.NOT.postiMode) DEALLOCATE(scaledJac)
+! Do not deallocate this here as we may actually re-calcualted it for deforming meshes.
+!IF (.NOT.postiMode) DEALLOCATE(scaledJac)
 
 CALL AddToElemData(ElementOut,'myRank',IntScalar=myRank)
+
+! Build SM communication structure 
+IF(DoSlidingMesh) CALL SlidingMeshConnect(MeshMode,MeshFile,meshScale)
 
 MeshInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MESH DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitMesh
+
+
+
+!==================================================================================================================================
+!> This routine reads in the SlidingMeshInfo. In axial direction of the rotation, the sides on the sliding mesh interface are 
+!> sorted per layer. In each layer, the nAzimuthalSides are sorted by an increasing angle. 
+!> The SlidingMeshInfo gives the globalSideID for the n-th side in the i-th layer
+!==================================================================================================================================
+SUBROUTINE SlidingMeshConnect(MeshMode,FileString,meshScale)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_HDF5_Input,    ONLY:OpenDataFile,CloseDataFile,DatasetExists,File_ID,GetDataSize,HSize,nDims,ReadArray,ReadAttribute
+USE MOD_Mesh_Vars,     ONLY:nAzimuthalSides,nLayers,SlidingMeshInfo,SideToGlobalSide,firstSMSide,lastSMSide,SideToElem &
+                            ,AL_ToRotProc,AL_ToStatProc,IntToPart,IAmAStatProc,IAmARotProc,mySMPartition
+USE MOD_MoveMesh_Vars, ONLY:RotationCenter
+USE MOD_SM_Vars,       ONLY:SlidingMeshDirection,SlidingMeshBoundaries,nSlidingMeshInterfaces,nSlidingMeshPartitions
+USE MOD_Mesh_Vars,     ONLY:nElems,RotatingElem,offsetElem
+USE MOD_Mesh_Vars,     ONLY:nStatProcs,GlobalSlidingMeshInfo
+USE MOD_Mesh_Vars,     ONLY:LocToGlobInterface,GlobToLocInterface
+USE MOD_IO_HDF5,       ONLY:AddToElemData,ElementOut
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)              :: meshScale  !< (IN) meshScale
+INTEGER,INTENT(IN)           :: MeshMode   !< (IN) mesh mode flag
+CHARACTER(LEN=*),INTENT(IN)  :: FileString !< (IN) mesh filename
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+LOGICAL                      :: SlidingMeshInfoFound
+INTEGER                      :: Offset=0 ! Every process reads all BCs
+INTEGER                      :: iLayer,iAzimuthalSide
+!INTEGER,ALLOCATABLE          :: GlobalSlidingMeshInfo(:,:)
+INTEGER                      :: nGlobalSlidingMeshInterfaces
+INTEGER                      :: GlobalSideID,iSide
+INTEGER                      :: iInterface,iGlobInterface
+CHARACTER(LEN=255)           :: str
+INTEGER                      :: idx
+#if USE_MPI
+INTEGER                      :: iAz,iL
+#endif
+!==================================================================================================================================
+! read-in Sliding Mesh Data
+CALL OpenDataFile(FileString,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+
+CALL ReadAttribute(File_ID,'nSlidingMeshInterfaces',1,IntScalar=nGlobalSlidingMeshInterfaces)
+CALL ReadAttribute(File_ID,'nSlidingMeshPartitions',1,IntScalar=nSlidingMeshPartitions)
+
+ALLOCATE(GlobalSlidingMeshInfo(nGlobalSlidingMeshInterfaces))
+ALLOCATE(nAzimuthalSides(nGlobalSlidingMeshInterfaces))
+ALLOCATE(nLayers(        nGlobalSlidingMeshInterfaces))
+ALLOCATE(IntToPart(      nGlobalSlidingMeshInterfaces))
+
+ALLOCATE(SlidingMeshDirection(   1:nSlidingMeshPartitions))
+ALLOCATE(RotationCenter(3,       1:nSlidingMeshPartitions))
+ALLOCATE(SlidingMeshBoundaries(2,1:nSlidingMeshPartitions))
+
+CALL ReadAttribute(File_ID,'SM_InterfaceToPartition',nGlobalSlidingMeshInterfaces,IntArray=IntToPart)
+
+CALL ReadArray('SlidingMeshDirection', 1,(/  nSlidingMeshPartitions/),0,1, IntArray=SlidingMeshDirection)
+CALL ReadArray('SlidingMeshCenter',    2,(/3,nSlidingMeshPartitions/),0,1,RealArray=RotationCenter)
+CALL ReadArray('SlidingMeshBoundaries',2,(/2,nSlidingMeshPartitions/),0,1,RealArray=SlidingMeshBoundaries)
+! Instantly multiply Boundaries with mesh scaling factor
+SlidingMeshBoundaries = meshScale * SlidingMeshBoundaries
+
+! read-in SlidingMeshInfo
+DO iInterface=1,nGlobalSlidingMeshInterfaces
+  WRITE(str,'(I0)') iInterface
+  CALL DatasetExists(File_ID,TRIM('SlidingMeshInfo'//str),SlidingMeshInfoFound)
+  IF(.NOT.SlidingMeshInfoFound) CALL CollectiveStop(&
+    __STAMP__,&
+        "SlidingMeshInfo not found in meshfile!")
+  CALL GetDataSize(File_ID,TRIM('SlidingMeshInfo'//str),nDims,HSize)
+  CHECKSAFEINT(HSize(1),4)
+  nAzimuthalSides(iInterface)=INT(HSize(1),4)
+  CHECKSAFEINT(HSize(2),4)
+  nLayers(        iInterface)=INT(HSize(2),4)
+  ALLOCATE(GlobalSlidingMeshInfo(iInterface)%Sides(1:nAzimuthalSides(iInterface),1:nLayers(iInterface)))
+  OffSet=0
+  CALL ReadArray(TRIM('SlidingMeshInfo'//str),2,(/nAzimuthalSides(iInterface),nLayers(iInterface)/),0,1,IntArray=GlobalSlidingMeshInfo(iInterface)%Sides)
+END DO
+
+!Debug output
+ALLOCATE(RotatingElem(1:nElems))
+CALL ReadArray('RotatingElem',1,(/nElems/),offsetElem,1,IntArray=RotatingElem)
+CALL CloseDataFile()
+
+! Only build SM mappings for meshMode greater then 0
+IF (MeshMode.GT.0) THEN
+  ! map the global-SideID from the SlidingMeshInfo to the local side structure
+  ALLOCATE(SlidingMeshInfo(1:5,firstSMSide:lastSMSide))
+  SlidingMeshInfo=0
+
+  ! Get number of different SM Interfaces adjacent to elems of this proc
+  ALLOCATE(GlobToLocInterface(1:nGlobalSlidingMeshInterfaces))
+  GlobToLocInterface = 0
+  nSlidingMeshInterfaces = 0
+  DO iSide=firstSMSide,lastSMSide
+    GlobalSideID=SideToGlobalSide(iSide)
+    DO iInterface=1,nGlobalSlidingMeshInterfaces
+      DO iLayer=1,nLayers(iInterface)
+        DO iAzimuthalSide=1,nAzimuthalSides(iInterface)
+          IF(GlobalSideID.EQ.GlobalSlidingMeshInfo(iInterface)%Sides(iAzimuthalSide,iLayer))THEN
+            GlobToLocInterface(iInterface) = 1
+          END IF
+        END DO
+      END DO
+    END DO
+  END DO
+  nSlidingMeshInterfaces = SUM(GlobToLocInterface)
+
+  ALLOCATE(LocToGlobInterface(1:nSlidingMeshInterfaces))
+  LocToGlobInterface = 0
+  ! Build mapping from local to global interface
+  idx = 1
+  DO iInterface=1,nGlobalSlidingMeshInterfaces
+    IF(GlobToLocInterface(iInterface).EQ.1) THEN
+      LocToGlobInterface(idx) = iInterface
+      idx = idx + 1
+    END IF
+  END DO
+
+  ! match each local sliding mesh side with it's azimuthal position and position in the i-th layer
+  ! loop over all SM sides to map the side to it's position, layer, ElemID and Neighbor-ElemID
+  DO iInterface=1,nSlidingMeshInterfaces
+    iGlobInterface=LocToGlobInterface(iInterface)
+    ! loop over all layers and azimuthal-sides per layer to get the position and layer of the side
+    DO iSide=firstSMSide,lastSMSide
+      GlobalSideID=SideToGlobalSide(iSide)
+      DO iLayer=1,nLayers(iGlobInterface)
+        DO iAzimuthalSide=1,nAzimuthalSides(iGlobInterface)
+          IF(GlobalSideID.EQ.GlobalSlidingMeshInfo(iGlobInterface)%Sides(iAzimuthalSide,iLayer))THEN
+            SlidingMeshInfo(SM_SIDE_TO_INTERFACE ,iSide)=iGlobInterface
+            SlidingMeshInfo(SM_SIDE_TO_POSITION  ,iSide)=iAzimuthalSide
+            SlidingMeshInfo(SM_SIDE_TO_LAYER     ,iSide)=iLayer
+            ! and store the corresponding elements, duplicate but simpler?
+            SlidingMeshInfo(SM_SIDE_TO_ELEM_ID   ,iSide)=SideToElem(S2E_ELEM_ID,iSide)
+            SlidingMeshInfo(SM_SIDE_TO_NB_ELEM_ID,iSide)=SideToElem(S2E_NB_ELEM_ID,iSide)
+          END IF
+        END DO ! iAzimuthalSide=1,nAzimuthalSides
+      END DO ! iLayer=1,nLayers
+    END DO ! iSide=firstSMSide,lastSMSide
+  END DO ! iInterface1,nSlidingMeshInterface
+END IF
+
+CALL AddToElemData(ElementOut,'RotatingElem',IntArray=RotatingElem)
+
+! Deallocate data structure
+DO iInterface=1,nGlobalSlidingMeshInterfaces
+  SDEALLOCATE(GlobalSlidingMeshInfo(iInterface)%Sides)
+END DO
+SDEALLOCATE(GlobalSlidingMeshInfo)
+
+! Save sm partition if proc only has moving elems
+IF(IAmAStatProc) THEN
+  mySMPartition = -1
+ELSEIF(IAmARotProc) THEN
+  mySMPartition = RotatingElem(1)
+END IF
+
+! TODO: Replace with data structure to avoid unneccessary big array
+ALLOCATE(AL_ToStatProc(1:nGlobalSlidingMeshInterfaces,1:MAXVAL(nAzimuthalSides),1:MAXVAL(nLayers)))
+ALLOCATE(AL_ToRotProc( 1:nGlobalSlidingMeshInterfaces,1:MAXVAL(nAzimuthalSides),1:MAXVAL(nLayers)))
+AL_ToStatProc=-1
+AL_ToRotProc=-1
+
+!write a matrix with all sm sides sorted by azimuth and layer, 
+!and communicate to all procs in which proc the side is
+#if USE_MPI
+DO iSide=firstSMSide,lastSMSide
+  DO iInterface=1,nSlidingMeshInterfaces
+    iGlobInterface = LocToGlobInterface(iInterface)
+    IF (iGlobInterface.NE.SlidingMeshInfo(SM_SIDE_TO_INTERFACE  ,iSide)) CYCLE
+    iAz=SlidingMeshInfo(SM_SIDE_TO_POSITION  ,iSide)
+    iL =SlidingMeshInfo(SM_SIDE_TO_LAYER     ,iSide)
+    IF(myRank.LT.nStatProcs)THEN
+      AL_ToStatProc(iGlobInterface,iAz,iL)=myRank
+    ELSE
+      AL_ToRotProc( iGlobInterface,iAz,iL)=myRank
+    END IF
+  END DO
+END DO
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,AL_ToStatProc,nGlobalSlidingMeshInterfaces*MAXVAL(nAzimuthalSides)*MAXVAL(nLayers),MPI_INTEGER,MPI_MAX,MPI_COMM_FLEXI,iError)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,AL_ToRotProc, nGlobalSlidingMeshInterfaces*MAXVAL(nAzimuthalSides)*MAXVAL(nLayers),MPI_INTEGER,MPI_MAX,MPI_COMM_FLEXI,iError)
+#else
+AL_ToStatProc=0
+AL_ToRotProc= 0
+#endif
+END SUBROUTINE SlidingMeshConnect
+
+
 
 !============================================================================================================================
 !> Deallocate mesh data.
@@ -417,6 +656,8 @@ IMPLICIT NONE
 SDEALLOCATE(ElemToSide)
 SDEALLOCATE(SideToElem)
 SDEALLOCATE(BC)
+SDEALLOCATE(dXCL_N)
+SDEALLOCATE(Ja_Face)
 SDEALLOCATE(AnalyzeSide)
 
 SDEALLOCATE(MortarType)
@@ -431,6 +672,7 @@ SDEALLOCATE(BoundaryType)
 
 ! Volume
 SDEALLOCATE(Elem_xGP)
+SDEALLOCATE(Elem_xGP_ref)
 SDEALLOCATE(Metrics_fTilde)
 SDEALLOCATE(Metrics_gTilde)
 SDEALLOCATE(Metrics_hTilde)
@@ -440,6 +682,7 @@ SDEALLOCATE(DetJac_Ref)
 
 ! surface
 SDEALLOCATE(Face_xGP)
+SDEALLOCATE(Face_xGP_ref)
 SDEALLOCATE(NormVec)
 SDEALLOCATE(TangVec1)
 SDEALLOCATE(TangVec2)
@@ -453,6 +696,19 @@ SDEALLOCATE(SideToGlobalSide)
 
 ! mappings
 CALL FinalizeMappings()
+
+!> sliding mesh
+SDEALLOCATE(IntToPart)
+SDEALLOCATE(nAzimuthalSides)
+SDEALLOCATE(nLayers)
+SDEALLOCATE(LocToGlobInterface)
+SDEALLOCATE(GlobToLocInterface)
+SDEALLOCATE(SlidingMeshInfo)
+SDEALLOCATE(RotatingElem)
+SDEALLOCATE(AL_ToStatProc)
+SDEALLOCATE(AL_ToRotProc )
+SDEALLOCATE(nRotElems)
+SDEALLOCATE(nRotProcs)
 
 #if FV_ENABLED
 SDEALLOCATE(FV_Elems_master) ! moved here from fv.f90

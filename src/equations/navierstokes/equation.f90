@@ -32,6 +32,10 @@ INTERFACE GetPrimitiveStateSurface
   MODULE PROCEDURE GetPrimitiveStateSurface
 END INTERFACE
 
+INTERFACE GetPrimitiveStateSurfaceSM
+  MODULE PROCEDURE GetPrimitiveStateSurfaceSM
+END INTERFACE
+
 INTERFACE GetConservativeStateSurface
   MODULE PROCEDURE GetConservativeStateSurface
 END INTERFACE
@@ -41,7 +45,7 @@ INTERFACE FinalizeEquation
 END INTERFACE
 
 PUBLIC:: DefineParametersEquation,InitEquation,FinalizeEquation
-PUBLIC:: GetPrimitiveStateSurface,GetConservativeStateSurface
+PUBLIC:: GetPrimitiveStateSurface,GetPrimitiveStateSurfaceSM,GetConservativeStateSurface
 !==================================================================================================================================
 
 CONTAINS
@@ -180,6 +184,35 @@ CALL InitTestcase()
 
 END SUBROUTINE InitEquation
 
+!==================================================================================================================================
+!> 
+!==================================================================================================================================
+SUBROUTINE GetPrimitiveStateSurfaceSM(U_MorStat,U_MorRot,UPrim_MorStat,UPrim_MorRot)
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_EOS,      ONLY: ConsToPrim
+USE MOD_Mesh_Vars,ONLY: nSMSides,IAmAStatProc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)  :: U_MorStat(        PP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !< conservative solution on Stat sides
+REAL,INTENT(IN)  :: U_MorRot(         PP_nVar,0:PP_N,0:PP_NZ,1:2*nSMSides) !< conservative solution on Rot  sides
+REAL,INTENT(OUT) :: UPrim_MorStat(PP_nVarPrim,0:PP_N,0:PP_NZ,1:2*nSMSides) !< primitive solution on Stat sides
+REAL,INTENT(OUT) :: UPrim_MorRot( PP_nVarPrim,0:PP_N,0:PP_NZ,1:2*nSMSides) !< primitive solution on Rot  sides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER          :: i,j,iiMortar
+!==================================================================================================================================
+IF(IAmAStatProc) THEN
+  DO iiMortar=1,2*nSMSides
+    DO j=0,PP_NZ; DO i=0,PP_N
+      CALL ConsToPrim(UPrim_MorStat(:,i,j,iiMortar),U_MorStat(:,i,j,iiMortar))
+      CALL ConsToPrim(UPrim_MorRot( :,i,j,iiMortar),U_MorRot( :,i,j,iiMortar))
+    END DO; END DO
+  END DO
+END IF
+END SUBROUTINE GetPrimitiveStateSurfaceSM
 
 !==================================================================================================================================
 !> Converts conservative solution vector to primitive variables
@@ -200,7 +233,7 @@ SUBROUTINE GetPrimitiveStateSurface(U_master,U_slave,UPrim_master,UPrim_slave)
 ! MODULES
 USE MOD_Preproc
 USE MOD_EOS,      ONLY: ConsToPrim
-USE MOD_Mesh_Vars,ONLY: firstInnerSide,firstMPISide_YOUR,lastMPISide_YOUR,nSides
+USE MOD_Mesh_Vars,ONLY: firstInnerSide,firstMPISide_YOUR,lastMPISide_YOUR,nSides,firstSMSide,lastSMSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -214,11 +247,13 @@ INTEGER          :: i,j,iSide
 !==================================================================================================================================
 DO iSide=1,nSides
   IF(iSide.GE.firstMPISide_YOUR.AND.iSide.LE.lastMPISide_YOUR) CYCLE
+  IF(iSide.GE.firstSMSide      .AND.iSide.LE.lastSMSide      ) CYCLE
   DO j=0,PP_NZ; DO i=0,PP_N
     CALL ConsToPrim(UPrim_master(:,i,j,iSide),U_master(:,i,j,iSide))
   END DO; END DO
 END DO
 DO iSide=firstInnerSide,lastMPISide_YOUR
+  IF(iSide.GE.firstSMSide      .AND.iSide.LE.lastSMSide      ) CYCLE
   DO j=0,PP_NZ; DO i=0,PP_N
     CALL ConsToPrim(UPrim_slave(:,i,j,iSide),U_slave(:,i,j,iSide))
   END DO; END DO

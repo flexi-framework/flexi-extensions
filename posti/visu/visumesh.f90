@@ -57,7 +57,7 @@ USE MOD_Visu_Vars          ,ONLY: Elem_IJK_glob,mapElemIJToDGElemAvg2D
 #if FV_ENABLED
 USE MOD_Visu_Vars          ,ONLY: FVAmountAvg2D,mapElemIJToFVElemAvg2D,nElemsAvg2D_FV
 USE MOD_Visu_Vars          ,ONLY: NVisu_FV,nElems_FV,mapFVElemsToAllElems,hasFV_Elems
-USE MOD_Visu_Vars          ,ONLY: CoordsVisu_FV,changedMeshFile,changedFV_Elems,changedAvg2D
+USE MOD_Visu_Vars          ,ONLY: CoordsVisu_FV,changedMeshFile,changedFV_Elems,changedAvg2D,MovingMesh
 #endif
 USE MOD_Interpolation_Vars ,ONLY: NodeTypeVisu,NodeTypeVISUFVEqui,NodeType
 USE MOD_Interpolation      ,ONLY: GetVandermonde
@@ -158,7 +158,7 @@ ELSE
   IF (hasFV_Elems) THEN
     SWRITE (*,*) "[MESH] Convert coordinates to visu grid (FV)"
     ! only NVisu changed, but NVisu_FV is independent of NVisu
-    IF ((.NOT.changedMeshFile).AND.(.NOT.changedFV_Elems).AND.(.NOT.changedAvg2D)) RETURN
+    IF ((.NOT.changedMeshFile).AND.(.NOT.changedFV_Elems).AND.(.NOT.changedAvg2D).AND.(.NOT.MovingMesh)) RETURN
     !ALLOCATE(Vdm_N_NVisu_FV(0:NVisu_FV,0:PP_N))
     !CALL GetVandermonde(PP_N,NodeType,NVisu_FV,NodeTypeVISUFVEqui,Vdm_N_NVisu_FV,modal=.FALSE.)
     ! convert coords of FV elements
@@ -270,6 +270,8 @@ USE MOD_MPI           ,ONLY: FinalizeMPI
 USE MOD_Interpolation ,ONLY: DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 USE MOD_Mesh_Vars     ,ONLY: nElems,Ngeo,scaledJac
 USE MOD_Mesh          ,ONLY: DefineParametersMesh,InitMesh,FinalizeMesh
+USE MOD_SM            ,ONLY: FinalizeSM
+USE MOD_MoveMesh      ,ONLY: FinalizeMoveMesh
 USE MOD_VTK           ,ONLY: WriteCoordsToVTK_array
 USE MOD_HDF5_Input    ,ONLY: ReadAttribute,File_ID,OpenDataFile,CloseDataFile
 USE MOD_Posti_ConvertToVisu ,ONLY: ConvertToVisu_DG
@@ -284,6 +286,8 @@ CHARACTER(LEN=255)  :: VarName
 #if USE_MPI
 CALL FinalizeMPI()
 #endif
+CALL FinalizeSM()
+CALL FinalizeMoveMesh()
 CALL FinalizeMesh()
 CALL FinalizeInterpolation()
 

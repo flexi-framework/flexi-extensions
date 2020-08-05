@@ -23,9 +23,11 @@ PPURE SUBROUTINE ProlongToFace(&
 #endif
     Nloc,Uvol,Uface_master,Uface_slave,L_Minus,L_Plus,doMPISides)
 ! MODULES
-USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_Mesh_Vars,          ONLY: nElems,nSides
 USE MOD_Mesh_Vars,          ONLY: SideToElem
-USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR, lastMPISide_MINE, nSides
+USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR
+USE MOD_Mesh_Vars,          ONLY:  lastMPISide_MINE
+USE MOD_Mesh_Vars,          ONLY: lastSMSide,firstSMSide
 USE MOD_Mesh_Vars,          ONLY: S2V2
 #if FV_ENABLED
 USE MOD_FV_Vars,            ONLY: FV_Elems
@@ -44,19 +46,28 @@ REAL,INTENT(INOUT)              :: Uface_master(TP_nVar,0:Nloc,0:ZDIM(Nloc),1:nS
 REAL,INTENT(INOUT)              :: Uface_slave( TP_nVar,0:Nloc,0:ZDIM(Nloc),1:nSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                         :: p,q,firstSideID,lastSideID
+INTEGER                         :: p,q,firstSideID,lastSideID,firstCycleID,lastCycleID
 INTEGER                         :: ElemID,nbElemID,locSide,nblocSide,SideID,flip
 REAL                            :: Uface(TP_nVar,0:Nloc,0:ZDIM(Nloc))
 !==================================================================================================================================
-IF(doMPISides)THEN
-  firstSideID = firstMPISide_YOUR
-   lastSideID = nSides
+IF(doMPISides)THEN       ! Only start with SM sides if there are any.
+     firstSideID = MERGE(firstSMSide,firstMPISide_YOUR,lastSMSide.GE.firstSMSide)
+      lastSideID = nSides
+    firstCycleID = lastSMSide+1
+     lastCycleID = firstMPISide_YOUR -1
 ELSE
-  firstSideID = 1
-   lastSideID =  lastMPISide_MINE
+     firstSideID = 1
+      lastSideID = lastMPISide_MINE
+#if USE_MPI
+    firstCycleID = firstSMSide
+     lastCycleID = lastSMSide
+#endif
 END IF
 
 DO SideID=firstSideID,lastSideID
+#if USE_MPI
+  IF((SideID.GE.firstCycleID).AND.(SideID.LE.lastCycleID)) CYCLE
+#endif
   ElemID    = SideToElem(S2E_ELEM_ID,SideID)
   nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID)
 
@@ -65,7 +76,7 @@ DO SideID=firstSideID,lastSideID
     locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
     flip    = 0
 
-    IF(PP_NodeType.EQ.1.AND.FV_Elems(ElemID).EQ.0)THEN
+    IF(PP_NodeType.EQ.1.AND. FV_Elems(ElemID) .EQ.0)THEN
       CALL EvalElemFaceG(&
 #if WITHnVar
           TP_nVar,&
@@ -89,7 +100,7 @@ DO SideID=firstSideID,lastSideID
     nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
     flip      = SideToElem(S2E_FLIP,SideID)
 
-    IF(PP_NodeType.EQ.1.AND.FV_Elems(nbElemID).EQ.0)THEN
+    IF(PP_NodeType.EQ.1.AND. FV_Elems(nbElemID) .EQ.0)THEN
       CALL EvalElemFaceG(&
 #if WITHnVar
           TP_nVar,&

@@ -285,6 +285,7 @@ SUBROUTINE FV_SurfCalcGradients_BC(UPrim_master,FV_surf_gradU,t)
 USE MOD_PreProc
 USE MOD_Mesh_Vars       ,ONLY: firstBCSide,lastBCSide,nSides
 USE MOD_Mesh_Vars       ,ONLY: NormVec,TangVec1,TangVec2,Face_xGP
+USE MOD_MoveMesh_Vars   ,ONLY: Face_vGP
 USE MOD_FV_Vars         ,ONLY: FV_Elems_master,FV_sdx_Face
 USE MOD_GetBoundaryFlux ,ONLY: GetBoundaryFVgradient
 ! IMPLICIT VARIABLE HANDLING
@@ -306,6 +307,7 @@ DO SideID=firstBCSide,lastBCSide
                                          TangVec1(:,:,:,1,SideID),&
                                          TangVec2(:,:,:,1,SideID),&
                                          Face_xGP(:,:,:,1,SideID),&
+                                         Face_vGP(:,:,:,  SideID),&
                                         FV_sdx_Face(:,:,:,SideID))
 END DO
 END SUBROUTINE FV_SurfCalcGradients_BC
@@ -416,7 +418,9 @@ END SUBROUTINE FV_CalcGradients
 !==================================================================================================================================
 PPURE SUBROUTINE CopySurfaceToVolume(surface,volume,iElem,dir,l)
 ! MODULES
+#if PP_N == N
 USE MOD_PreProc        ,ONLY: PP_N
+#endif
 USE MOD_Mesh_Vars      ,ONLY: S2V2,nSides,ElemToSide
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES

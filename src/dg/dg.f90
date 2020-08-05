@@ -94,9 +94,11 @@ CALL InitDGBasis(PP_N, xGP,wGP,L_minus,L_plus,D ,D_T ,D_Hat ,D_Hat_T ,L_HatMinus
 
 ! Allocate the local DG solution (JU or U): element-based
 ALLOCATE(U(        PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
+ALLOCATE(JU(       PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 ! Allocate the time derivative / solution update /residual vector dU/dt: element-based
 ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 U=0.
+JU=0.
 Ut=0.
 
 ! Allocate the 2D solution vectors on the sides, one array for the data belonging to the proc (the master)
@@ -226,7 +228,7 @@ USE MOD_DG_Vars,             ONLY: nTotalU
 USE MOD_VolInt
 USE MOD_SurfIntCons         ,ONLY: SurfIntCons
 USE MOD_ProlongToFaceCons   ,ONLY: ProlongToFaceCons
-USE MOD_FillFlux            ,ONLY: FillFlux
+USE MOD_FillFlux            ,ONLY: FillFlux,FillFluxSM
 USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
 USE MOD_Interpolation_Vars  ,ONLY: L_Minus,L_Plus
 USE MOD_Overintegration_Vars,ONLY: OverintegrationType
@@ -234,7 +236,7 @@ USE MOD_Overintegration,     ONLY: Overintegration
 USE MOD_ChangeBasisByDim    ,ONLY: ChangeBasisVolume
 USE MOD_Testcase            ,ONLY: TestcaseSource
 USE MOD_Testcase_Vars       ,ONLY: doTCSource
-USE MOD_Equation            ,ONLY: GetPrimitiveStateSurface,GetConservativeStateSurface
+USE MOD_Equation            ,ONLY: GetPrimitiveStateSurface,GetPrimitiveStateSurfaceSM,GetConservativeStateSurface
 USE MOD_EOS                 ,ONLY: ConsToPrim
 USE MOD_Exactfunc           ,ONLY: CalcSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
@@ -243,7 +245,11 @@ USE MOD_Sponge_Vars         ,ONLY: doSponge
 USE MOD_Filter              ,ONLY: Filter_Pointer
 USE MOD_Filter_Vars         ,ONLY: FilterType,FilterMat
 USE MOD_FillMortarCons      ,ONLY: U_MortarCons,Flux_MortarCons
+USE MOD_FillMortarCons      ,ONLY: U_MortarConsSM,Flux_MortarConsSM
+USE MOD_SM                  ,ONLY: PrepareSM
+USE MOD_SM_Vars             ,ONLY: Flux_MorStat,Flux_MorRot,U_MorStat,U_MorRot
 USE MOD_FillMortarPrim      ,ONLY: U_MortarPrim
+USE MOD_SM_Vars             ,ONLY: UPrim_MorStat,UPrim_MorRot
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 USE MOD_Lifting_Vars
@@ -251,6 +257,7 @@ USE MOD_Lifting_Vars
 #if USE_MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
+USE MOD_MPI                 ,ONLY: StartReceiveSM_MPIData,StartSendSM_MPIData
 USE MOD_Mesh_Vars,           ONLY: nSides
 #endif /*USE_MPI*/
 #if FV_ENABLED
@@ -276,7 +283,11 @@ USE MOD_FV_Reconstruction   ,ONLY: FV_PrepareSurfGradient,FV_SurfCalcGradients,F
 USE MOD_EddyVisc_Vars       ,ONLY: ComputeEddyViscosity, muSGS, muSGS_master, muSGS_slave
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 USE MOD_TimeDisc_Vars       ,ONLY: CurrentStage
+USE MOD_SM_Vars             ,ONLY: muSGS_MorStat,muSGS_MorRot
+USE MOD_FillMortar1         ,ONLY: U_MortarSM1
 #endif
+USE MOD_MoveMesh_Vars       ,ONLY: v_NGeo,v_NGeo_Face
+USE MOD_MoveMesh            ,ONLY: InterpolateMeshVel
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -314,6 +325,9 @@ IF(FilterType.GT.0) CALL Filter_Pointer(U,FilterMat)
 ! 2. Convert Volume solution to primitive
 CALL ConsToPrim(PP_N,UPrim,U)
 
+! X. Update mortar operators and neighbour connectivity for the sliding mesh interface.
+CALL PrepareSM(t)
+
 ! 3. Prolong the solution to the face integration points for flux computation (and do overlapping communication)
 ! -----------------------------------------------------------------------------------------------------------
 ! General idea: The slave sends its surface data to the master, where the flux is computed and sent back to the slaves.
@@ -336,9 +350,12 @@ CALL ConsToPrim(PP_N,UPrim,U)
 ! Step 3 for all slave MPI sides
 ! 3.1)
 CALL StartReceiveMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE / U_slave: slave -> master
+CALL StartReceiveSM_MPIData(PP_nVar,U_MorRot,MPIRequestSM_U,SendID=2) ! Receive MINE / U_slave: slave -> master
 CALL ProlongToFaceCons(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.TRUE.)
 CALL U_MortarCons(U_master,U_slave,doMPISides=.TRUE.)
+CALL U_MortarConsSM(U_master,U_slave,U_MorStat,U_MorRot,doMPISides=.TRUE.)
 CALL StartSendMPIData(   U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR / U_slave: slave -> master
+CALL StartSendSM_MPIData(   PP_nVar,U_MorRot,MPIRequestSM_U,SendID=2) ! SEND YOUR / U_slave: slave -> master
 #if FV_ENABLED
 ! 3.2)
 CALL FV_Elems_Mortar(FV_Elems_master,FV_Elems_slave,doMPISides=.TRUE.)
@@ -360,6 +377,7 @@ CALL StartSendMPIData(   FV_multi_slave,DataSizeSidePrim,1,nSides,MPIRequest_FV_
 ! 3.1)
 CALL ProlongToFaceCons(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.FALSE.)
 CALL U_MortarCons(U_master,U_slave,doMPISides=.FALSE.)
+CALL U_MortarConsSM(U_master,U_slave,U_MorStat,U_MorRot,doMPISides=.FALSE.)
 #if FV_ENABLED
 ! 3.2)
 CALL FV_Elems_Mortar(FV_Elems_master,FV_Elems_slave,doMPISides=.FALSE.)
@@ -372,7 +390,7 @@ CALL U_MortarPrim(FV_multi_master,FV_multi_slave,doMPiSides=.FALSE.)
 
 #if USE_MPI
 ! 3.4) complete send / receive of side data from step 3.
-CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)        ! U_slave: slave -> master
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U,MPIRequestSM=MPIRequestSM_U)        ! U_slave: slave -> master 
 #if FV_ENABLED
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_FV_Elems) ! FV_Elems_slave: slave -> master
 #if FV_RECONSTRUCT
@@ -385,6 +403,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_FV_gradU) ! FV_multi_slave: sla
 !    Attention: For FV with 2nd order reconstruction U_master/slave and therewith UPrim_master/slave are still only 1st order
 ! TODO: Linadv?
 CALL GetPrimitiveStateSurface(U_master,U_slave,UPrim_master,UPrim_slave)
+CALL GetPrimitiveStateSurfaceSM(U_MorStat,U_MorRot,UPrim_MorStat,UPrim_MorRot)
 #if FV_ENABLED
 ! Build four-states-array for the 4 different combinations DG/DG(0), FV/DG(1), DG/FV(2) and FV/FV(3) a face can be.
 FV_Elems_Sum = FV_Elems_master + 2*FV_Elems_slave
@@ -441,11 +460,14 @@ CALL FV_CalcGradients(UPrim,FV_surf_gradU,gradUxi,gradUeta,gradUzeta &
     )
 #endif /* FV_ENABLED && FV_RECONSTRUCT */
 
+! Interpolate the mesh velocites to volume and surface gauss points (used in fluxes)
+CALL InterpolateMeshVel(v_NGeo,v_NGeo_Face)
+
 #if PARABOLIC
 ! 6. Lifting
 ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
 ! The communication of the gradients is initialized within the lifting routines
-CALL Lifting(UPrim,UPrim_master,UPrim_slave,t)
+CALL Lifting(UPrim,UPrim_master,UPrim_slave,UPrim_MorStat,UPrim_MorRot,t)
 
 #if EDDYVISCOSITY
 ! 7. [ After the lifting we can now compute the eddy viscosity, which then has to be evaluated at the boundary. ]
@@ -456,13 +478,20 @@ CALL Lifting(UPrim,UPrim_master,UPrim_slave,t)
 IF(CurrentStage.EQ.1) THEN
 #if USE_MPI
   CALL StartReceiveMPIData(muSGS_slave,DataSizeSideSGS,1,nSides,MPIRequest_SGS(:,RECV),SendID=2)
+  CALL StartReceiveSM_MPIData(1,muSGS_MorRot,MPIRequestSM_SGS,SendID=2)
 #endif
   CALL ComputeEddyViscosity()
 #if USE_MPI
   CALL ProlongToFace(1,PP_N,muSGS,muSGS_master,muSGS_slave,L_Minus,L_Plus,.TRUE.)
+  CALL U_MortarSM1(muSGS_master,muSGS_slave,muSGS_MorStat,muSGS_MorRot,.TRUE.)
   CALL StartSendMPIData   (muSGS_slave,DataSizeSideSGS,1,nSides,MPIRequest_SGS(:,SEND),SendID=2)
+  CALL StartSendSM_MPIData(1,muSGS_MorRot,MPIRequestSM_SGS,SendID=2)
 #endif
   CALL ProlongToFace(1,PP_N,muSGS,muSGS_master,muSGS_slave,L_Minus,L_Plus,.FALSE.)
+  CALL U_MortarSM1(muSGS_master,muSGS_slave,muSGS_MorStat,muSGS_MorRot,.FALSE.)
+#if USE_MPI  
+  CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_SGS)  ! muSGS_slave: slave -> master 
+#endif
 END IF
 #endif /* EDDYVISCOSITY */
 
@@ -483,7 +512,11 @@ IF(CurrentStage.EQ.1) THEN
 END IF
 #endif /* EDDYVISCOSITY */
 ! Complete send / receive for gradUx, gradUy, gradUz, started in the lifting routines
-CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_gradU) ! gradUx,y,z: slave -> master
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_gradU(:,1,:),MPIRequestSM=MPIRequestSM_gradU(:,1)) ! gradUx: slave -> master
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_gradU(:,2,:),MPIRequestSM=MPIRequestSM_gradU(:,2)) ! gradUy: slave -> master
+#if (PP_dim == 3)
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_gradU(:,3,:),MPIRequestSM=MPIRequestSM_gradU(:,3)) ! gradUz: slave -> master
+#endif
 #endif /*PARABOLIC && USE_MPI*/
 
 
@@ -519,22 +552,28 @@ CALL GetConservativeStateSurface(UPrim_master, UPrim_slave, U_master, U_slave, F
 ! 10.3)
 CALL StartReceiveMPIData(Flux_slave, DataSizeSide, 1,nSides,MPIRequest_Flux( :,SEND),SendID=1)
                                                                               ! Receive YOUR / Flux_slave: master -> slave
-CALL FillFlux(t,Flux_master,Flux_slave,U_master,U_slave,UPrim_master,UPrim_slave,doMPISides=.TRUE.)
+CALL StartReceiveSM_MPIData(PP_nVar,Flux_MorRot,MPIRequestSM_Flux,SendID=1) ! Receive MINE / U_slave: slave -> master
+CALL FillFlux(t,Flux_master ,Flux_slave ,U_master ,U_slave ,UPrim_master ,UPrim_slave ,doMPISides=.TRUE.)
+CALL FillFluxSM(Flux_MorStat,Flux_MorRot,U_MorStat,U_MorRot,UPrim_MorStat,UPrim_MorRot,doMPISides=.TRUE.)
 CALL StartSendMPIData(   Flux_slave, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),SendID=1)
+CALL StartSendSM_MPIData(   PP_nVar,Flux_MorRot,MPIRequestSM_Flux,SendID=1) ! SEND YOUR / U_slave: slave -> master
                                                                               ! Send MINE  /   Flux_slave: master -> slave
 #endif /*USE_MPI*/
 
 ! 10.3)
-CALL FillFlux(t,Flux_master,Flux_slave,U_master,U_slave,UPrim_master,UPrim_slave,doMPISides=.FALSE.)
+CALL FillFlux(t,Flux_master ,Flux_slave ,U_master ,U_slave ,UPrim_master ,UPrim_slave ,doMPISides=.FALSE.)
+CALL FillFluxSM(Flux_MorStat,Flux_MorRot,U_MorStat,U_MorRot,UPrim_MorStat,UPrim_MorRot,doMPISides=.FALSE.)
 ! 10.4)
 CALL Flux_MortarCons(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
+CALL Flux_MortarConsSM(Flux_master,Flux_slave,Flux_MorStat,Flux_MorRot,doMPISides=.FALSE.)
 ! 10.5)
 CALL SurfIntCons(PP_N,Flux_master,Flux_slave,Ut,.FALSE.,L_HatMinus,L_hatPlus)
 
 #if USE_MPI
 ! 10.4)
-CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )                       ! Flux_slave: master -> slave
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux,MPIRequestSM=MPIRequestSM_Flux)  ! Flux_slave: master -> slave 
 CALL Flux_MortarCons(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.)
+CALL Flux_MortarConsSM(Flux_master,Flux_slave,Flux_MorStat,Flux_MorRot,doMPISides=.TRUE.)
 ! 10.5)
 CALL SurfIntCons(PP_N,Flux_master,Flux_slave,Ut,.TRUE.,L_HatMinus,L_HatPlus)
 #endif /*USE_MPI*/
@@ -551,14 +590,6 @@ IF(doTCSource)   CALL TestcaseSource(Ut)
 ! Perform overintegration (projection filtering type overintegration)
 IF(OverintegrationType.GT.0) THEN
   CALL Overintegration(Ut)
-END IF
-! Apply Jacobian (for OverintegrationType==CUTOFFCONS this is already done within the Overintegration, but for DG only)
-IF (OverintegrationType.EQ.CUTOFFCONS) THEN
-#if FV_ENABLED
-  CALL ApplyJacobianCons(Ut,toPhysical=.TRUE.,FVE=1)
-#endif
-ELSE
-  CALL ApplyJacobianCons(Ut,toPhysical=.TRUE.)
 END IF
 
 END SUBROUTINE DGTimeDerivative_weakForm
@@ -620,6 +651,7 @@ SDEALLOCATE(DVolSurf)
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(U)
+SDEALLOCATE(JU)
 SDEALLOCATE(Ut)
 SDEALLOCATE(U_master)
 SDEALLOCATE(U_slave)
