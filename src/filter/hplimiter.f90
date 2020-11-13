@@ -91,6 +91,9 @@ HPeps = GETREAL('HPLimiterThreashold','1.E-8')
 HPfac = GETREAL('HPLimiterFactor','1.5')
 HPepsReset = HPeps*Hpfac
 
+! Sanity check
+IF (HPfac.LT.1.0) CALL Abort(__STAMP__,'HPLimiterFactor has to be greater than 1.0!')
+
 ! Prepare HP Limiter
 ALLOCATE(HP_Elems(nElems))
 HP_Elems=0
