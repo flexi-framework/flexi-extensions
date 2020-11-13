@@ -89,7 +89,7 @@ INTEGER                      :: iElem,iVar,i,j,k
 ! Read in variables
 HPeps = GETREAL('HPLimiterThreashold','1.E-8')
 HPfac = GETREAL('HPLimiterFactor','1.5')
-HPepsReset = HPeps*Hpfac
+HPfac = 1./HPfac
 
 ! Prepare HP Limiter
 ALLOCATE(HP_Elems(nElems))
@@ -149,7 +149,7 @@ SUBROUTINE HyperbolicityPreservingLimiter()
 USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
-USE MOD_Filter_Vars         ,ONLY: HPeps
+USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
 USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight
 USE MOD_Interpolation_Vars  ,ONLY: wGP
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
@@ -215,6 +215,7 @@ DO iElem=1,nElems
     t=MIN(t,t_loc)
   END DO;END DO;END DO
   IF(t.LT.1.) THEN
+    t = t*HPfac
     DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
       U(:,i,j,k,iElem) = t*(U(:,i,j,k,iElem)-UMean) + UMean 
       !CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
@@ -271,7 +272,7 @@ SUBROUTINE GetTheta(ULoc,UMean,rhoMin,t_out)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Vars      ,ONLY: KappaM1
-USE MOD_Filter_Vars   ,ONLY: HPepsReset
+USE MOD_Filter_Vars   ,ONLY: HPeps
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -286,26 +287,26 @@ REAL                    :: UDiff(PP_nVar)
 REAL                    :: p!,p_sGammaM1
 !==================================================================================================================================
 !p_sGammaM1=ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS)
-!IF(ULoc(DENS).GT.HPepsReset.AND.p_sGammaM1.GT.HPepsReset) THEN  !TODO: Is HPepsReset relative or absolute?
-!!IF(ULoc(DENS).GT.HPepsReset) THEN  !TODO: Is HPepsReset relative or absolute?
+!IF(ULoc(DENS).GT.HPeps.AND.p_sGammaM1.GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
+!!IF(ULoc(DENS).GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
   !t_out=1.
   !RETURN  
 !END IF
 
 
-t1 = min((UMean(DENS)-HPepsReset) / (Umean(DENS)-rhoMin),1.0)
+t1 = min((UMean(DENS)-HPeps) / (Umean(DENS)-rhoMin),1.0)
 ULoc(DENS)=t1*(ULoc(DENS)-UMean(1))+UMean(1)
 
 p=KappaM1*(ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS))
-IF (p .GE. HPepsReset) THEN
+IF (p .GE. HPeps) THEN
   t_out=1.
   RETURN
 END IF
 UDiff=ULoc-UMean
 
 a  =                  UDiff(ENER)*UDiff(DENS)  - 0.5*DOT_PRODUCT(UDiff(MMV2),UDiff(MMV2))
-b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPepsReset/KappaM1)*UDiff(DENS)
-c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPepsReset/KappaM1)*UMean(DENS)
+b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPeps/KappaM1)*UDiff(DENS)
+c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPeps/KappaM1)*UMean(DENS)
 t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
 IF(ISNAN(t_out).OR.(t_out.GT.1.).OR.(t_out.LT.0.)) t_out=0.
 END SUBROUTINE GetTheta

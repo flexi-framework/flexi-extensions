@@ -47,7 +47,6 @@ REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #if HPLimiter
 REAL                   :: HPeps                  !< limiter threashold
 REAL                   :: HPfac                  !< limiter factor
-REAL                   :: HPepsReset             !< reset value 
 INTEGER,ALLOCATABLE    :: HP_Elems(:)            !< List of Elements that got limited 
 #endif
 !==================================================================================================================================
