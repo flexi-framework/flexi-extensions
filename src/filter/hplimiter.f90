@@ -1,4 +1,5 @@
 #if HPLimiter
+#if EQNSYSNR == 2
 !=================================================================================================================================
 ! Copyright (c) 2016  Prof. Claus-Dieter Munz
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
@@ -13,9 +14,7 @@
 ! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
 !=================================================================================================================================
 #include "flexi.h"
-#if EQNSYSNR == 2
 #include "eos.h"
-#endif
 !==================================================================================================================================
 !==================================================================================================================================
 MODULE MOD_HPLimiter
@@ -44,18 +43,19 @@ CONTAINS
 !> Define parameters needed for filtering
 !==================================================================================================================================
 SUBROUTINE DefineParametersHPLimiter()
-  ! MODULES
-  USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
-  IMPLICIT NONE
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! INPUT / OUTPUT VARIABLES
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! LOCAL VARIABLES
-  !==================================================================================================================================
-  CALL prms%SetSection("HP Limiter")
-  CALL prms%CreateRealOption(            'HPLimiterThreashold',    "Threashold for HP Limiter to modify solution. HPLimiterVar \n"//& 
-                                                                   "has to be smaller than this threashold")
-  END SUBROUTINE DefineParametersHPLimiter
+! MODULES
+USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+CALL prms%SetSection("HP Limiter")
+CALL prms%CreateRealOption(            'HPLimiterThreashold',    "Threashold for HP Limiter to modify solution. HPLimiterVar \n"//& 
+                                                                 "has to be smaller than this threashold")
+CALL prms%CreateRealOption(            'HPLimiterFactor',        "Factor for correction. Is applied to avoid permanent limiting.")                                                           
+END SUBROUTINE DefineParametersHPLimiter
 
 !==================================================================================================================================
 !> Initialize  information and  operators
@@ -82,6 +82,8 @@ INTEGER                      :: iElem,iVar,i,j,k
 
 ! Read in variables
 HPeps = GETREAL('HPLimiterThreashold','1.E-8')
+HPfac = GETREAL('HPLimiterFactor','1.5')
+HPepsReset = HPeps*Hpfac
 
 ! Prepare HP Limiter
 ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
@@ -261,7 +263,7 @@ SUBROUTINE GetTheta(ULoc,UMean,rhoMin,t_out)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Vars      ,ONLY: KappaM1
-USE MOD_Filter_Vars   ,ONLY: HPeps
+USE MOD_Filter_Vars   ,ONLY: HPepsReset
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -276,29 +278,30 @@ REAL                    :: UDiff(PP_nVar)
 REAL                    :: p!,p_sGammaM1
 !==================================================================================================================================
 !p_sGammaM1=ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS)
-!IF(ULoc(DENS).GT.HPeps.AND.p_sGammaM1.GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
-!!IF(ULoc(DENS).GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
+!IF(ULoc(DENS).GT.HPepsReset.AND.p_sGammaM1.GT.HPepsReset) THEN  !TODO: Is HPepsReset relative or absolute?
+!!IF(ULoc(DENS).GT.HPepsReset) THEN  !TODO: Is HPepsReset relative or absolute?
   !t_out=1.
   !RETURN  
 !END IF
 
 
-t1 = min((UMean(DENS)-HPeps) / (Umean(DENS)-rhoMin),1.0)
+t1 = min((UMean(DENS)-HPepsReset) / (Umean(DENS)-rhoMin),1.0)
 ULoc(DENS)=t1*(ULoc(DENS)-UMean(1))+UMean(1)
 
 p=KappaM1*(ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS))
-IF (p .GE. HPeps) THEN
+IF (p .GE. HPepsReset) THEN
   t_out=1.
   RETURN
 END IF
 UDiff=ULoc-UMean
 
 a  =                  UDiff(ENER)*UDiff(DENS)  - 0.5*DOT_PRODUCT(UDiff(MMV2),UDiff(MMV2))
-b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPeps/KappaM1)*UDiff(DENS)
-c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPeps/KappaM1)*UMean(DENS)
+b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPepsReset/KappaM1)*UDiff(DENS)
+c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPepsReset/KappaM1)*UMean(DENS)
 t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
 IF(ISNAN(t_out).OR.(t_out.GT.1.).OR.(t_out.LT.0.)) t_out=0.
 END SUBROUTINE GetTheta
 
 END MODULE MOD_HPLimiter
+#endif
 #endif

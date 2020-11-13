@@ -46,6 +46,8 @@ REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #endif
 #if HPLimiter
 REAL                   :: HPeps                  !< limiter threashold
+REAL                   :: HPfac                  !< limiter factor
+REAL                   :: HPepsReset             !< reset value 
 REAL,ALLOCATABLE       :: t_HPLimiter(:,:,:,:,:) !< limiter strength
 #endif
 !==================================================================================================================================
