@@ -93,8 +93,10 @@ INTEGER                      :: iElem,iVar,i,j,k
 
 ! Read in variables
 HPeps = GETREAL('HPLimiterThreashold','1.E-8')
-HPfac = GETREAL('HPLimiterFactor','1.5')
-HPfac = 1./HPfac
+HPfac = GETREAL('HPLimiterFactor','0.75')
+
+! Sanity check
+IF (HPfac.GT.1.0) CALL Abort(__STAMP__,'HPLimiterFactor has to be smaller than 1.0!')
 
 ! Prepare HP Limiter
 ALLOCATE(HP_Elems(nElems))
