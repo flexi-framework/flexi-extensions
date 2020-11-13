@@ -538,7 +538,7 @@ SDEALLOCATE(Vol)
 #endif /*EQNSYSNR==2*/
 FilterInitIsDone = .FALSE.
 #if HPLimiter
-SDEALLOCATE(t_HPLimiter)
+SDEALLOCATE(HP_Elems)
 #endif
 #if FV_ENABLED
 SDEALLOCATE(IntegrationweightFV)

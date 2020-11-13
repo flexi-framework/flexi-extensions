@@ -45,7 +45,7 @@ REAL,ALLOCATABLE       :: J_N(:,:,:)            !< Jacobi for volume integral (L
 REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #endif
 #if HPLimiter
-REAL,ALLOCATABLE       :: t_HPLimiter(:,:,:,:,:) !< limiter strength
+INTEGER,ALLOCATABLE    :: HP_Elems(:)           !< List of Elements that got limited 
 #endif
 !==================================================================================================================================
 END MODULE MOD_Filter_Vars
