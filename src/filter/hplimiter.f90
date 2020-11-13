@@ -32,11 +32,11 @@ INTERFACE HyperbolicityPreservingLimiter
   MODULE PROCEDURE HyperbolicityPreservingLimiter
 END INTERFACE
 
-PUBLIC:: DefineParametersHPLimiter
 INTERFACE HP_Info
   MODULE PROCEDURE HP_Info
 END INTERFACE
 
+PUBLIC:: DefineParametersHPLimiter
 PUBLIC:: InitHPLimiter
 PUBLIC:: HyperbolicityPreservingLimiter
 PUBLIC:: HP_Info
@@ -92,10 +92,6 @@ HPfac = GETREAL('HPLimiterFactor','1.5')
 HPepsReset = HPeps*Hpfac
 
 ! Prepare HP Limiter
-ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
-t_HPLimiter=0.
-CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'HypPresLim',(/'t_HPLimiter'/),RealArray=t_HPLimiter)
-!ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
 ALLOCATE(HP_Elems(nElems))
 HP_Elems=0
 CALL AddToElemData(ElementOut,'HypPresLim',IntArray=HP_Elems)
@@ -153,7 +149,6 @@ SUBROUTINE HyperbolicityPreservingLimiter()
 USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
-USE MOD_Filter_Vars         ,ONLY: t_HPLimiter,Vol,IntegrationWeight
 USE MOD_Filter_Vars         ,ONLY: HPeps
 USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight
 USE MOD_Interpolation_Vars  ,ONLY: wGP
