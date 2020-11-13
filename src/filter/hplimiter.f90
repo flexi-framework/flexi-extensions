@@ -32,6 +32,10 @@ INTERFACE HyperbolicityPreservingLimiter
   MODULE PROCEDURE HyperbolicityPreservingLimiter
 END INTERFACE
 
+INTERFACE HyperbolicityPreservingLimiterSide
+  MODULE PROCEDURE HyperbolicityPreservingLimiterSide
+END INTERFACE
+
 INTERFACE HP_Info
   MODULE PROCEDURE HP_Info
 END INTERFACE
@@ -39,6 +43,7 @@ END INTERFACE
 PUBLIC:: DefineParametersHPLimiter
 PUBLIC:: InitHPLimiter
 PUBLIC:: HyperbolicityPreservingLimiter
+PUBLIC:: HyperbolicityPreservingLimiterSide
 PUBLIC:: HP_Info
 !==================================================================================================================================
 
@@ -94,7 +99,10 @@ HPfac = 1./HPfac
 ! Prepare HP Limiter
 ALLOCATE(HP_Elems(nElems))
 HP_Elems=0
+ALLOCATE(HP_Sides(nElems))
+HP_Sides=0
 CALL AddToElemData(ElementOut,'HypPresLim',IntArray=HP_Elems)
+CALL AddToElemData(ElementOut,'HypPresLimSide',IntArray=HP_Sides)
 IF( .NOT. ALLOCATED(Vol)) THEN 
    ALLOCATE(J_N(0:PP_N,0:PP_N,0:PP_NZ))
    ALLOCATE(Vol(nElems))
@@ -264,6 +272,71 @@ END DO !iElem
 END SUBROUTINE HyperbolicityPreservingLimiter
 
 
+SUBROUTINE HyperbolicityPreservingLimiterSide(SideID,ULoc)
+! MODULES
+USE MOD_PreProc
+USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
+USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight,HP_Sides
+USE MOD_Interpolation_Vars  ,ONLY: wGP
+USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
+USE MOD_Mesh_Vars           ,ONLY: SurfElem,SideToElem
+#if FV_ENABLED
+USE MOD_Filter_Vars         ,ONLY: VolFV,IntegrationWeightFV
+USE MOD_FV_Vars             ,ONLY: FV_Elems
+USE MOD_FV_Vars             ,ONLY: FV_w
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)           :: SideID
+REAL,INTENT(INOUT)           :: ULoc(PP_nVar,0:PP_N,0:PP_NZ)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                      :: iElem,i,j,k,iVar
+REAL                         :: UMean(PP_nVar),rhoMin,pMin
+REAL                         :: t,t_loc
+!#if FV_RECONSTRUCT
+REAL                         :: UPrim(PP_nVarPrim)
+INTEGER                      :: ii,jj,kk
+REAL                         :: UPrim_FV(PP_nVarPrim,0:1,0:1,0:ZDIM(1)),Surf,tmp
+!#endif /*FV_RECONSTRUCT*/
+!==================================================================================================================================
+! mean value
+iElem = SideToElem(S2E_ELEM_ID,SideID)
+UMean = 0.
+Surf  = 0.
+rhoMin = HPeps
+pMin = HPeps
+DO j=0,PP_NZ;DO i=0,PP_N
+  CALL ConsToPrim(UPrim,Uloc(:,i,j))
+  rhoMin=MIN(UPrim(1),rhoMin)
+  pMin=MIN(UPrim(5),pMin)
+END DO;END DO
+
+IF (rhoMin .GE. HPeps .AND. pMin .GE. HPeps) RETURN
+DO j=0,PP_NZ;DO i=0,PP_N
+#if PP_dim == 3
+  tmp = FV_W*FV_W*SurfElem(i,j,1,SideID)
+#else
+  tmp = FV_W*SurfElem(i,j,1,SideID)
+#endif
+  UMean = UMean + Uloc(:,i,j)*tmp
+  Surf  = Surf + tmp 
+END DO; END DO
+UMean = UMean / Surf
+t=1.
+DO j=0,PP_NZ;DO i=0,PP_N
+  CALL GetTheta(Uloc(:,i,j),UMean,rhoMin,t_loc)
+  t=MIN(t,t_loc)
+END DO;END DO
+IF(t.LT.1.) THEN
+  t = t*HPfac
+  DO j=0,PP_NZ;DO i=0,PP_N
+    Uloc(:,i,j) = t*(Uloc(:,i,j)-UMean) + UMean 
+  END DO;END DO
+END IF
+HP_Sides(iElem)=1
+END SUBROUTINE HyperbolicityPreservingLimiterSide
 
 !==================================================================================================================================
 !> Computes thetha, such that theta*U+(1-theta)*cellmean is admissible
@@ -318,7 +391,7 @@ SUBROUTINE HP_Info(iter)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars    ,ONLY: nGlobalElems
-USE MOD_Analyze_Vars ,ONLY: totalHP_nElems
+USE MOD_Analyze_Vars ,ONLY: totalHP_nElems,totalHP_nSides
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -337,6 +410,16 @@ END IF
 #endif
 SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP amount %: ', totalHP_nElems / REAL(nGlobalElems) / iter*100
 totalHP_nElems = 0
+#if USE_MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,totalHP_nSides,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  ! totalHP_nElems is counted in PrintStatusLine
+ELSE
+  CALL MPI_REDUCE(totalHP_nSides,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+END IF
+#endif
+SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP Sides amount %: ', totalHP_nSides / REAL(nGlobalElems) / iter*100
+totalHP_nSides = 0
 END SUBROUTINE HP_Info
 
 END MODULE MOD_HPLimiter

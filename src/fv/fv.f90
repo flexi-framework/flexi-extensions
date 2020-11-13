@@ -583,9 +583,10 @@ SUBROUTINE FV_DGtoFVHP(nVar,U_master,U_slave)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_ChangeBasisByDim ,ONLY: ChangeBasisSurf
 USE MOD_FV_Vars
 USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
+USE MOD_HPLimiter   ,ONLY: HyperbolicityPreservingLimiterSide
+USE MOD_Filter_Vars ,ONLY: HP_Sides
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -602,19 +603,16 @@ REAL        :: UTmp_slave(nVar,0:PP_N,0:PP_NZ)               !<
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
+HP_Sides = 0
 DO SideID=firstSideID,lastSideID
   UTmp_slave =U_slave(:,:,:,SideID)
   UTmp_master=U_master(:,:,:,SideID)
   IF (FV_Elems_Sum(SideID).EQ.2) THEN
-    CALL ChangeBasisSurf(nVar,PP_N,PP_N,FV_Vdm,U_master(:,:,:,SideID))
+    ! Master
+    CALL HyperbolicityPreservingLimiterSide(SideID,UTmp_master)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
-    CALL ChangeBasisSurf(nVar,PP_N,PP_N,FV_Vdm,U_slave (:,:,:,SideID))
-  END IF
-  IF (ANY(U_master(1,:,:,SideID) .LT. 0.) .OR. ANY(U_master(5,:,:,SideID) .LT. 0.)) THEN
-    U_master(:,:,:,SideID) = UTmp_master
-  END IF
-  IF (ANY(U_slave(1,:,:,SideID) .LT. 0.) .OR. ANY(U_slave(5,:,:,SideID) .LT. 0.)) THEN
-    U_slave(:,:,:,SideID) = UTmp_slave
+    ! Slave
+    CALL HyperbolicityPreservingLimiterSide(SideID,UTmp_Slave)
   END IF
 END DO
 

@@ -48,6 +48,7 @@ REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 REAL                   :: HPeps                  !< limiter threashold
 REAL                   :: HPfac                  !< limiter factor
 INTEGER,ALLOCATABLE    :: HP_Elems(:)            !< List of Elements that got limited 
+INTEGER,ALLOCATABLE    :: HP_Sides(:)            !< List of Elements that got limited at the Sides
 #endif
 !==================================================================================================================================
 END MODULE MOD_Filter_Vars

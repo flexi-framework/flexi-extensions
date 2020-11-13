@@ -33,6 +33,7 @@ INTEGER              :: totalFV_nElems=0
 #endif
 #if HPLimiter
 INTEGER              :: totalHP_nElems=0
+INTEGER              :: totalHP_nSides=0
 #endif
 REAL,ALLOCATABLE     :: wGPSurf(:,:)                      !< wGPSurf(i,j)=wGP(i)*wGP(j)
 REAL,ALLOCATABLE     :: wGPVol(:,:,:)                     !< wGPVol(i,j,k)=wGP(i)*wGP(j)*wGP(k)
