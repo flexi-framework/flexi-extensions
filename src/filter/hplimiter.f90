@@ -13,7 +13,9 @@
 ! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
 !=================================================================================================================================
 #include "flexi.h"
+#if EQNSYSNR == 2
 #include "eos.h"
+#endif
 !==================================================================================================================================
 !==================================================================================================================================
 MODULE MOD_HPLimiter
@@ -31,12 +33,29 @@ INTERFACE HyperbolicityPreservingLimiter
   MODULE PROCEDURE HyperbolicityPreservingLimiter
 END INTERFACE
 
-
+PUBLIC:: DefineParametersHPLimiter
 PUBLIC:: InitHPLimiter
 PUBLIC:: HyperbolicityPreservingLimiter
 !==================================================================================================================================
 
 CONTAINS
+
+!==================================================================================================================================
+!> Define parameters needed for filtering
+!==================================================================================================================================
+SUBROUTINE DefineParametersHPLimiter()
+  ! MODULES
+  USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT / OUTPUT VARIABLES
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
+  !==================================================================================================================================
+  CALL prms%SetSection("HP Limiter")
+  CALL prms%CreateRealOption(            'HPLimiterThreashold',    "Threashold for HP Limiter to modify solution. HPLimiterVar \n"//& 
+                                                                   "has to be smaller than this threashold")
+  END SUBROUTINE DefineParametersHPLimiter
 
 !==================================================================================================================================
 !> Initialize  information and  operators
@@ -46,6 +65,7 @@ SUBROUTINE InitHPLimiter()
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Filter_Vars
+USE MOD_ReadInTools        ,ONLY: GETREAL
 USE MOD_IO_HDF5            ,ONLY: AddToFieldData,FieldOut
 USE MOD_Mesh_Vars          ,ONLY: nElems,sJ
 USE MOD_Interpolation_Vars ,ONLY: wGP
@@ -57,8 +77,13 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: iElem,i,j,k
+INTEGER                      :: iElem,iVar,i,j,k
 !==================================================================================================================================
+
+! Read in variables
+HPeps = GETREAL('HPLimiterThreashold','1.E-8')
+
+! Prepare HP Limiter
 ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
 t_HPLimiter=0.
 CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'HypPresLim',(/'t_HPLimiter'/),RealArray=t_HPLimiter)
@@ -117,6 +142,7 @@ USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Filter_Vars         ,ONLY: t_HPLimiter,Vol,IntegrationWeight
+USE MOD_Filter_Vars         ,ONLY: HPeps
 USE MOD_Interpolation_Vars  ,ONLY: wGP
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 #if FV_ENABLED
@@ -146,20 +172,19 @@ REAL                         :: ULoc(PP_nVar)
 REAL                         :: UPrim(PP_nVarPrim)
 INTEGER                      :: ii,jj,kk
 REAL                         :: UPrim_FV(PP_nVarPrim,0:1,0:1,0:ZDIM(1))
-REAL                         :: eps=1.E-8
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
 ! mean value
 DO iElem=1,nElems
   UMean = 0.
-  rhoMin = eps
-  pMin = eps
+  rhoMin = HPeps
+  pMin = HPeps
   DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
     CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
     rhoMin=MIN(UPrim(1),rhoMin)
     pMin=MIN(UPrim(5),pMin)
   END DO;END DO;END DO
-  IF (rhoMin .GE. eps .AND. pMin .GE. eps) CYCLE
+  IF (rhoMin .GE. HPeps .AND. pMin .GE. HPeps) CYCLE
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.0) THEN
 #endif
@@ -235,7 +260,8 @@ END SUBROUTINE HyperbolicityPreservingLimiter
 SUBROUTINE GetTheta(ULoc,UMean,rhoMin,t_out)
 ! MODULES
 USE MOD_PreProc
-USE MOD_EOS_Vars ,ONLY:KappaM1
+USE MOD_EOS_Vars      ,ONLY: KappaM1
+USE MOD_Filter_Vars   ,ONLY: HPeps
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -246,31 +272,30 @@ REAL,INTENT(OUT)        :: t_out
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                    :: t1,a,b,c
-REAL                    :: eps=1.E-8
 REAL                    :: UDiff(PP_nVar)
 REAL                    :: p!,p_sGammaM1
 !==================================================================================================================================
 !p_sGammaM1=ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS)
-!IF(ULoc(DENS).GT.eps.AND.p_sGammaM1.GT.eps) THEN  !TODO: Is eps relative or absolute?
-!!IF(ULoc(DENS).GT.eps) THEN  !TODO: Is eps relative or absolute?
+!IF(ULoc(DENS).GT.HPeps.AND.p_sGammaM1.GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
+!!IF(ULoc(DENS).GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
   !t_out=1.
   !RETURN  
 !END IF
 
 
-t1 = min((UMean(DENS)-eps) / (Umean(DENS)-rhoMin),1.0)
+t1 = min((UMean(DENS)-HPeps) / (Umean(DENS)-rhoMin),1.0)
 ULoc(DENS)=t1*(ULoc(DENS)-UMean(1))+UMean(1)
 
 p=KappaM1*(ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS))
-IF (p .GE. eps) THEN
+IF (p .GE. HPeps) THEN
   t_out=1.
   RETURN
 END IF
 UDiff=ULoc-UMean
 
 a  =                  UDiff(ENER)*UDiff(DENS)  - 0.5*DOT_PRODUCT(UDiff(MMV2),UDiff(MMV2))
-b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (eps/KappaM1)*UDiff(DENS)
-c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (eps/KappaM1)*UMean(DENS)
+b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPeps/KappaM1)*UDiff(DENS)
+c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPeps/KappaM1)*UMean(DENS)
 t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
 IF(ISNAN(t_out).OR.(t_out.GT.1.).OR.(t_out.LT.0.)) t_out=0.
 END SUBROUTINE GetTheta

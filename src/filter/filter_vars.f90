@@ -45,6 +45,7 @@ REAL,ALLOCATABLE       :: J_N(:,:,:)            !< Jacobi for volume integral (L
 REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #endif
 #if HPLimiter
+REAL                   :: HPeps                  !< limiter threashold
 REAL,ALLOCATABLE       :: t_HPLimiter(:,:,:,:,:) !< limiter strength
 #endif
 !==================================================================================================================================

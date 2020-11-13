@@ -66,6 +66,9 @@ CONTAINS
 SUBROUTINE DefineParametersFilter()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
+#if HPLimiter
+USE MOD_HPLimiter   ,ONLY: DefineParametersHPLimiter
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -82,6 +85,9 @@ CALL addStrListEntry('FilterType','laf',   FILTERTYPE_LAF)
 CALL prms%CreateIntOption(             'NFilter',           "Cut-off mode (FilterType==CutOff or LAF)")
 CALL prms%CreateRealOption(            'LAF_alpha',         "Relaxation factor for LAF, see Flad et al. JCP 2016")
 CALL prms%CreateRealArrayOption(       'HestFilterParam',   "Parameters for Hesthaven filter (FilterType==Modal)")
+#if HPLimiter
+CALL DefineParametersHPLimiter()
+#endif
 END SUBROUTINE DefineParametersFilter
 
 
