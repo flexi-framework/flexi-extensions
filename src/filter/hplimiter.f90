@@ -33,8 +33,13 @@ INTERFACE HyperbolicityPreservingLimiter
 END INTERFACE
 
 PUBLIC:: DefineParametersHPLimiter
+INTERFACE HP_Info
+  MODULE PROCEDURE HP_Info
+END INTERFACE
+
 PUBLIC:: InitHPLimiter
 PUBLIC:: HyperbolicityPreservingLimiter
+PUBLIC:: HP_Info
 !==================================================================================================================================
 
 CONTAINS
@@ -67,6 +72,7 @@ USE MOD_PreProc
 USE MOD_Filter_Vars
 USE MOD_ReadInTools        ,ONLY: GETREAL
 USE MOD_IO_HDF5            ,ONLY: AddToFieldData,FieldOut
+USE MOD_IO_HDF5            ,ONLY: AddToElemData,ElementOut
 USE MOD_Mesh_Vars          ,ONLY: nElems,sJ
 USE MOD_Interpolation_Vars ,ONLY: wGP
 #if FV_ENABLED
@@ -89,6 +95,10 @@ HPepsReset = HPeps*Hpfac
 ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
 t_HPLimiter=0.
 CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'HypPresLim',(/'t_HPLimiter'/),RealArray=t_HPLimiter)
+!ALLOCATE(t_HPLimiter(1,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
+ALLOCATE(HP_Elems(nElems))
+HP_Elems=0
+CALL AddToElemData(ElementOut,'HypPresLim',IntArray=HP_Elems)
 IF( .NOT. ALLOCATED(Vol)) THEN 
    ALLOCATE(J_N(0:PP_N,0:PP_N,0:PP_NZ))
    ALLOCATE(Vol(nElems))
@@ -145,6 +155,7 @@ USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Filter_Vars         ,ONLY: t_HPLimiter,Vol,IntegrationWeight
 USE MOD_Filter_Vars         ,ONLY: HPeps
+USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight
 USE MOD_Interpolation_Vars  ,ONLY: wGP
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 #if FV_ENABLED
@@ -177,6 +188,7 @@ REAL                         :: UPrim_FV(PP_nVarPrim,0:1,0:1,0:ZDIM(1))
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
 ! mean value
+HP_Elems=0.
 DO iElem=1,nElems
   UMean = 0.
   rhoMin = HPeps
@@ -213,7 +225,8 @@ DO iElem=1,nElems
       !CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
     END DO;END DO;END DO
   END IF
-  t_HPLimiter(:,:,:,:,iElem)=t
+  !t_HPLimiter(:,:,:,:,iElem)=t
+  HP_Elems(iElem)=1
 END DO !iElem
 
 
@@ -301,6 +314,34 @@ c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (H
 t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
 IF(ISNAN(t_out).OR.(t_out.GT.1.).OR.(t_out.LT.0.)) t_out=0.
 END SUBROUTINE GetTheta
+
+!==================================================================================================================================
+!> Print information on the amount of HP subcells
+!==================================================================================================================================
+SUBROUTINE HP_Info(iter)
+! MODULES
+USE MOD_Globals
+USE MOD_Mesh_Vars    ,ONLY: nGlobalElems
+USE MOD_Analyze_Vars ,ONLY: totalHP_nElems
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+INTEGER(KIND=8),INTENT(IN) :: iter !< number of iterations
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+#if USE_MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,totalHP_nElems,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  ! totalHP_nElems is counted in PrintStatusLine
+ELSE
+  CALL MPI_REDUCE(totalHP_nElems,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+END IF
+#endif
+SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP amount %: ', totalHP_nElems / REAL(nGlobalElems) / iter*100
+totalHP_nElems = 0
+END SUBROUTINE HP_Info
 
 END MODULE MOD_HPLimiter
 #endif

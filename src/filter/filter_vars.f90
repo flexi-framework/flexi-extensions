@@ -49,6 +49,7 @@ REAL                   :: HPeps                  !< limiter threashold
 REAL                   :: HPfac                  !< limiter factor
 REAL                   :: HPepsReset             !< reset value 
 REAL,ALLOCATABLE       :: t_HPLimiter(:,:,:,:,:) !< limiter strength
+INTEGER,ALLOCATABLE    :: HP_Elems(:)           !< List of Elements that got limited 
 #endif
 !==================================================================================================================================
 END MODULE MOD_Filter_Vars

@@ -211,10 +211,14 @@ SUBROUTINE PrintStatusLine(t,dt,tStart,tEnd)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Output_Vars , ONLY: doPrintStatusLine
-#if FV_ENABLED
 USE MOD_Mesh_Vars   , ONLY: nGlobalElems
+#if FV_ENABLED
 USE MOD_FV_Vars     , ONLY: FV_Elems
 USE MOD_Analyze_Vars, ONLY: totalFV_nElems
+#endif
+#if HPLimiter
+USE MOD_Filter_Vars , ONLY: HP_Elems
+USE MOD_Analyze_Vars, ONLY: totalHP_nElems
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! insert modules here
@@ -231,17 +235,29 @@ REAL,INTENT(IN) :: tEnd   !< end time of simulation
 INTEGER :: FVcounter
 REAL    :: FV_percent
 #endif
+#if HPLimiter
+INTEGER :: HPcounter
+REAL    :: HP_percent
+#endif
 REAL    :: percent,time_remaining,mins,secs,hours
 !==================================================================================================================================
 #if FV_ENABLED
 FVcounter = SUM(FV_Elems)
 totalFV_nElems = totalFV_nElems + FVcounter ! counter for output of FV amount during analyze
 #endif
+#if HPLimiter
+HPcounter = SUM(HP_Elems)
+totalHP_nElems = totalHP_nElems + HPcounter ! counter for output of FV amount during analyze
+#endif
 
 IF(.NOT.doPrintStatusLine) RETURN
 
 #if FV_ENABLED && USE_MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,FVcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
+#endif
+
+#if HPLimiter && USE_MPI
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,HPcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
 
 IF(MPIroot)THEN
@@ -260,6 +276,10 @@ IF(MPIroot)THEN
 #if FV_ENABLED
   FV_percent = REAL(FVcounter) / nGlobalElems * 100.
   WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') FV_percent, '% FV '
+#endif
+#if HPLimiter
+  HP_percent = REAL(HPcounter) / nGlobalElems * 100.
+  WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') HP_percent, '% HP '
 #endif
   WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') 'Time = ', t, &
       ' dt = ', dt, '  ', percent, '% complete, est. Time Remaining = ',INT(hours),':',INT(mins),':',INT(secs), ACHAR(13)

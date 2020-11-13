@@ -165,7 +165,7 @@ USE MOD_FV
 #endif
 use MOD_IO_HDF5
 #if HPLimiter
-USE MOD_HPLimiter           ,ONLY: HyperbolicityPreservingLimiter
+USE MOD_HPLimiter           ,ONLY: HyperbolicityPreservingLimiter,HP_Info
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -275,6 +275,9 @@ END IF
 #if FV_ENABLED
 CALL FV_Info(1_8)
 #endif
+#if HPLimiter
+CALL HP_Info(1_8)
+#endif
 SWRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 
 
@@ -364,6 +367,10 @@ DO
     END IF !MPIroot
 #if FV_ENABLED
     CALL FV_Info(iter_loc)
+#endif
+
+#if HPLimiter
+    CALL HP_Info(iter_loc)
 #endif
 
     ! Visualize data and write solution
