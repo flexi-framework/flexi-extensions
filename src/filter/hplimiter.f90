@@ -76,7 +76,7 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Filter_Vars
 USE MOD_ReadInTools        ,ONLY: GETREAL
-USE MOD_IO_HDF5            ,ONLY: AddToFieldData,FieldOut
+USE MOD_IO_HDF5            ,ONLY: AddToFieldData
 USE MOD_IO_HDF5            ,ONLY: AddToElemData,ElementOut
 USE MOD_Mesh_Vars          ,ONLY: nElems,sJ
 USE MOD_Interpolation_Vars ,ONLY: wGP
@@ -88,7 +88,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: iElem,iVar,i,j,k
+INTEGER                      :: iElem,i,j,k
 !==================================================================================================================================
 
 ! Read in variables
@@ -161,35 +161,21 @@ USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
 USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight
-USE MOD_Interpolation_Vars  ,ONLY: wGP
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 #if FV_ENABLED
 USE MOD_Filter_Vars         ,ONLY: VolFV,IntegrationWeightFV
 USE MOD_FV_Vars             ,ONLY: FV_Elems
-!#if FV_RECONSTRUCT
-!USE MOD_FV_Vars             ,ONLY: FV_dx_XI_L,FV_dx_ETA_L
-!USE MOD_FV_Vars             ,ONLY: FV_dx_XI_R,FV_dx_ETA_R
-!USE MOD_FV_Vars             ,ONLY: gradUxi,gradUeta,FV_Elems
-#if PP_dim == 3
-!USE MOD_FV_Vars             ,ONLY: gradUzeta
-!USE MOD_FV_Vars             ,ONLY: FV_dx_ZETA_L
-!USE MOD_FV_Vars             ,ONLY: FV_dx_ZETA_R
-!#endif
-#endif
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: iElem,i,j,k,iVar
+INTEGER                      :: iElem,i,j,k
 REAL                         :: UMean(PP_nVar),rhoMin,pMin
 REAL                         :: t,t_loc
-REAL                         :: ULoc(PP_nVar)
 !#if FV_RECONSTRUCT
 REAL                         :: UPrim(PP_nVarPrim)
-INTEGER                      :: ii,jj,kk
-REAL                         :: UPrim_FV(PP_nVarPrim,0:1,0:1,0:ZDIM(1))
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
 ! mean value
@@ -228,63 +214,23 @@ DO iElem=1,nElems
     t = t*HPfac
     DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
       U(:,i,j,k,iElem) = t*(U(:,i,j,k,iElem)-UMean) + UMean 
-      !CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
     END DO;END DO;END DO
   END IF
-  !t_HPLimiter(:,:,:,:,iElem)=t
   HP_Elems(iElem)=1
 END DO !iElem
-
-
-!TODO: FV reconstruction limiter
-!#if FV_RECONSTRUCT
-!DO iElem=1,nElems
-  !IF(FV_Elems(iElem).EQ.0) CYCLE
-  !DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
-    !t=0.
-    !UMean = U(:,i,j,k,iElem)
-    !CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
-    !DO iVar=1,PP_nVarPrim
-      !UPrim_FV(iVar,:,:,:) = UPrim(iVar)
-      !UPrim_FV(iVar,0,:,:) = UPrim_FV(iVar,0,:,:) -   gradUxi(iVar,i,k,j,iElem) *   FV_dx_XI_L(j,k,i,iElem)
-      !UPrim_FV(iVar,1,:,:) = UPrim_FV(iVar,1,:,:) +   gradUxi(iVar,i,k,j,iElem) *   FV_dx_XI_R(j,k,i,iElem)
-      !UPrim_FV(iVar,:,0,:) = UPrim_FV(iVar,:,0,:) -  gradUeta(iVar,i,k,j,iElem) *  FV_dx_ETA_L(j,k,i,iElem)
-      !UPrim_FV(iVar,:,1,:) = UPrim_FV(iVar,:,1,:) +  gradUeta(iVar,i,k,j,iElem) *  FV_dx_ETA_R(j,k,i,iElem)
-!#if PP_dim == 3                                                  
-      !UPrim_FV(iVar,:,:,0) = UPrim_FV(iVar,:,:,0) - gradUzeta(iVar,i,k,j,iElem) * FV_dx_ZETA_L(j,k,i,iElem)
-      !UPrim_FV(iVar,:,:,1) = UPrim_FV(iVar,:,:,1) + gradUzeta(iVar,i,k,j,iElem) * FV_dx_ZETA_R(j,k,i,iElem)
-!#endif                                                            
-    !END DO
-    !DO kk=0,ZDIM(1);DO jj=0,1;DO ii=0,1
-      !CALL PrimtoCons(UPrim_FV(:,ii,jj,kk),ULoc)
-      !CALL GetTheta(ULoc,UMean,t_loc)
-      !t=MAX(t,t_loc)
-    !END DO;END DO;END DO
-    !IF(t.GT.TINY(1.)) THEN
-      !gradUxi  (:,i,k,j,iElem) = (1.-t) *   gradUxi(:,i,k,j,iElem)
-      !gradUeta (:,i,k,j,iElem) = (1.-t) *  gradUeta(:,i,k,j,iElem)
-!#if PP_dim == 3                                                  
-      !gradUzeta(:,i,k,j,iElem) = (1.-t) * gradUzeta(:,i,k,j,iElem)
-!#endif                                                            
-    !END IF
-    !t_HPLimiter(1,i,j,k,iElem)=t
-  !END DO;END DO;END DO
-!END DO
-!#endif /*FV_RECONSTRUCT*/
 END SUBROUTINE HyperbolicityPreservingLimiter
 
 
+!==================================================================================================================================
+!> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
+!==================================================================================================================================
 SUBROUTINE HyperbolicityPreservingLimiterSide(SideID,ULoc)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
-USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight,HP_Sides
-USE MOD_Interpolation_Vars  ,ONLY: wGP
+USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac,HP_Sides
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_Mesh_Vars           ,ONLY: SurfElem,SideToElem
 #if FV_ENABLED
-USE MOD_Filter_Vars         ,ONLY: VolFV,IntegrationWeightFV
-USE MOD_FV_Vars             ,ONLY: FV_Elems
 USE MOD_FV_Vars             ,ONLY: FV_w
 #endif
 IMPLICIT NONE
@@ -294,17 +240,17 @@ INTEGER,INTENT(IN)           :: SideID
 REAL,INTENT(INOUT)           :: ULoc(PP_nVar,0:PP_N,0:PP_NZ)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: iElem,i,j,k,iVar
+INTEGER                      :: iElem,i,j
 REAL                         :: UMean(PP_nVar),rhoMin,pMin
 REAL                         :: t,t_loc
 !#if FV_RECONSTRUCT
 REAL                         :: UPrim(PP_nVarPrim)
-INTEGER                      :: ii,jj,kk
-REAL                         :: UPrim_FV(PP_nVarPrim,0:1,0:1,0:ZDIM(1)),Surf,tmp
+REAL                         :: Surf,tmp
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
 ! mean value
 iElem = SideToElem(S2E_ELEM_ID,SideID)
+IF (iElem .EQ. -1) RETURN
 UMean = 0.
 Surf  = 0.
 rhoMin = HPeps
@@ -382,7 +328,11 @@ UDiff=ULoc-UMean
 a  =                  UDiff(ENER)*UDiff(DENS)  - 0.5*DOT_PRODUCT(UDiff(MMV2),UDiff(MMV2))
 b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPeps/KappaM1)*UDiff(DENS)
 c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPeps/KappaM1)*UMean(DENS)
-t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
+IF (a .EQ. 0. .OR. b*b-4.*a*c .LT. 0) THEN 
+  t_out = 0.
+ELSE
+  t_out = -0.5*(b + SQRT(b*b-4.*a*c))/a
+END IF
 IF(ISNAN(t_out).OR.(t_out.GT.1.).OR.(t_out.LT.0.)) t_out=0.
 END SUBROUTINE GetTheta
 

@@ -545,6 +545,7 @@ SDEALLOCATE(Vol)
 FilterInitIsDone = .FALSE.
 #if HPLimiter
 SDEALLOCATE(HP_Elems)
+SDEALLOCATE(HP_Sides)
 #endif
 #if FV_ENABLED
 SDEALLOCATE(IntegrationweightFV)
