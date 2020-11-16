@@ -55,8 +55,8 @@ INTERFACE FV_DGtoFV
   MODULE PROCEDURE FV_DGtoFV
 END INTERFACE
 
-INTERFACE FV_DGtoFVHP
-  MODULE PROCEDURE FV_DGtoFVHP
+INTERFACE FV_DGtoFVPP
+  MODULE PROCEDURE FV_DGtoFVPP
 END INTERFACE
 
 INTERFACE FinalizeFV
@@ -70,7 +70,7 @@ PUBLIC::FV_ProlongFVElemsToFace
 PUBLIC::FV_Info
 PUBLIC::FV_FillIni
 PUBLIC::FV_DGtoFV
-PUBLIC::FV_DGtoFVHP
+PUBLIC::FV_DGtoFVPP
 PUBLIC::FinalizeFV
 !==================================================================================================================================
 
@@ -579,18 +579,18 @@ END DO
 
 END SUBROUTINE FV_DGtoFV
 
-#if HPLimiter
+#if PPLimiter
 !==================================================================================================================================
 !> Limit if necessary the switched DG solution at faces between a DG element and a FV sub-cells element to Finite Volume.
 !==================================================================================================================================
-SUBROUTINE FV_DGtoFVHP(nVar,U_master,U_slave)
+SUBROUTINE FV_DGtoFVPP(nVar,U_master,U_slave)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_FV_Vars
 USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
-USE MOD_HPLimiter   ,ONLY: HyperbolicityPreservingLimiterSide
-USE MOD_Filter_Vars ,ONLY: HP_Sides
+USE MOD_PPLimiter   ,ONLY: PositivityPreservingLimiterSide
+USE MOD_Filter_Vars ,ONLY: PP_Sides
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -607,20 +607,20 @@ REAL        :: UTmp_slave(nVar,0:PP_N,0:PP_NZ)               !<
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
-HP_Sides = 0
+PP_Sides = 0
 DO SideID=firstSideID,lastSideID
   UTmp_slave =U_slave(:,:,:,SideID)
   UTmp_master=U_master(:,:,:,SideID)
   IF (FV_Elems_Sum(SideID).EQ.2) THEN
     ! Master
-    CALL HyperbolicityPreservingLimiterSide(SideID,UTmp_master)
+    CALL PositivityPreservingLimiterSide(SideID,UTmp_master)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! Slave
-    CALL HyperbolicityPreservingLimiterSide(SideID,UTmp_Slave)
+    CALL PositivityPreservingLimiterSide(SideID,UTmp_Slave)
   END IF
 END DO
-END SUBROUTINE FV_DGtoFVHP
-#endif /*HPLimiter*/
+END SUBROUTINE FV_DGtoFVPP
+#endif /*PPLimiter*/
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.

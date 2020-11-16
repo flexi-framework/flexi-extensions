@@ -34,21 +34,21 @@ REAL,ALLOCATABLE       :: eRatio(:)             !< Analysis data for LAF model
 REAL,ALLOCATABLE       :: r(:)                  !< Analysis data for LAF model
 REAL,ALLOCATABLE       :: ekin_avg_old(:)       !< cell integral value for ekin avg (LAF)
 REAL,ALLOCATABLE       :: ekin_fluc_avg_old(:)  !< cell integral value for ekin fluc avg (LAF))
-REAL,ALLOCATABLE       :: Vol(:)                !< cell volume for averaging (LAF or hpLimiter)
-REAL,ALLOCATABLE       :: Integrationweight(:,:,:,:)  !< integration weights (LAF or hpLimiter)
+REAL,ALLOCATABLE       :: Vol(:)                !< cell volume for averaging (LAF or PPLimiter)
+REAL,ALLOCATABLE       :: Integrationweight(:,:,:,:)  !< integration weights (LAF or PPLimiter)
 #if FV_ENABLED
-REAL,ALLOCATABLE       :: VolFV(:)                !< cell volume for averaging (LAF or hpLimiter) for FV
-REAL,ALLOCATABLE       :: IntegrationweightFV(:,:,:,:)  !< integration weights (LAF or hpLimiter) for FV
+REAL,ALLOCATABLE       :: VolFV(:)                !< cell volume for averaging (LAF or PPLimiter) for FV
+REAL,ALLOCATABLE       :: IntegrationweightFV(:,:,:,:)  !< integration weights (LAF or PPLimiter) for FV
 #endif
 REAL                   :: normMod               !< spectral normalization (LAF)
 REAL,ALLOCATABLE       :: J_N(:,:,:)            !< Jacobi for volume integral (LAF)
 REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #endif
-#if HPLimiter
+#if PPLimiter
 REAL                   :: HPeps                  !< limiter threashold
 REAL                   :: HPfac                  !< limiter factor
-INTEGER,ALLOCATABLE    :: HP_Elems(:)            !< List of Elements that got limited 
-INTEGER,ALLOCATABLE    :: HP_Sides(:)            !< List of Elements that got limited at the Sides
+INTEGER,ALLOCATABLE    :: PP_Elems(:)            !< List of Elements that got limited 
+INTEGER,ALLOCATABLE    :: PP_Sides(:)            !< List of Elements that got limited at the Sides
 #endif
 !==================================================================================================================================
 END MODULE MOD_Filter_Vars

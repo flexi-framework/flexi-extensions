@@ -216,8 +216,8 @@ USE MOD_Mesh_Vars   , ONLY: nGlobalElems
 USE MOD_FV_Vars     , ONLY: FV_Elems
 USE MOD_Analyze_Vars, ONLY: totalFV_nElems
 #endif
-#if HPLimiter
-USE MOD_Filter_Vars , ONLY: HP_Elems,HP_Sides
+#if PPLimiter
+USE MOD_Filter_Vars , ONLY: PP_Elems,PP_Sides
 USE MOD_Analyze_Vars, ONLY: totalHP_nElems,totalHP_nSides
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------!
@@ -235,7 +235,7 @@ REAL,INTENT(IN) :: tEnd   !< end time of simulation
 INTEGER :: FVcounter
 REAL    :: FV_percent
 #endif
-#if HPLimiter
+#if PPLimiter
 INTEGER :: HPcounter
 REAL    :: HP_percent
 INTEGER :: HPSidescounter
@@ -247,10 +247,10 @@ REAL    :: percent,time_remaining,mins,secs,hours
 FVcounter = SUM(FV_Elems)
 totalFV_nElems = totalFV_nElems + FVcounter ! counter for output of FV amount during analyze
 #endif
-#if HPLimiter
-HPcounter = SUM(HP_Elems)
+#if PPLimiter
+HPcounter = SUM(PP_Elems)
 totalHP_nElems = totalHP_nElems + HPcounter ! counter for output of FV amount during analyze
-HPSidescounter = SUM(HP_Sides)
+HPSidescounter = SUM(PP_Sides)
 totalHP_nSides = totalHP_nSides + HPSidescounter ! counter for output of FV amount during analyze
 #endif
 
@@ -260,7 +260,7 @@ IF(.NOT.doPrintStatusLine) RETURN
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,FVcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
 
-#if HPLimiter && USE_MPI
+#if PPLimiter && USE_MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,HPcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,HPSidescounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
@@ -282,7 +282,7 @@ IF(MPIroot)THEN
   FV_percent = REAL(FVcounter) / nGlobalElems * 100.
   WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') FV_percent, '% FV '
 #endif
-#if HPLimiter
+#if PPLimiter
   HP_percent = REAL(HPcounter) / nGlobalElems * 100.
   WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') HP_percent, '% HP '
   HPSides_percent = REAL(HPSidescounter) / nGlobalElems * 100.

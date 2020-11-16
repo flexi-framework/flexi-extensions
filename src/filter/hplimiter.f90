@@ -1,4 +1,4 @@
-#if HPLimiter
+#if PPLimiter
 #if EQNSYSNR == 2
 !=================================================================================================================================
 ! Copyright (c) 2016  Prof. Claus-Dieter Munz
@@ -17,38 +17,38 @@
 #include "eos.h"
 !==================================================================================================================================
 !==================================================================================================================================
-MODULE MOD_HPLimiter
+MODULE MOD_PPLimiter
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 IMPLICIT NONE
 PRIVATE
 SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
-INTERFACE InitHPLimiter
-  MODULE PROCEDURE InitHPLimiter
+INTERFACE InitPPLimiter
+  MODULE PROCEDURE InitPPLimiter
 END INTERFACE
 
-INTERFACE HyperbolicityPreservingLimiter
-  MODULE PROCEDURE HyperbolicityPreservingLimiter
+INTERFACE PositivityPreservingLimiter
+  MODULE PROCEDURE PositivityPreservingLimiter
 END INTERFACE
 
 #if FV_ENABLED
-INTERFACE HyperbolicityPreservingLimiterSide
-  MODULE PROCEDURE HyperbolicityPreservingLimiterSide
+INTERFACE PositivityPreservingLimiterSide
+  MODULE PROCEDURE PositivityPreservingLimiterSide
 END INTERFACE
 #endif
 
-INTERFACE HP_Info
-  MODULE PROCEDURE HP_Info
+INTERFACE PP_Info
+  MODULE PROCEDURE PP_Info
 END INTERFACE
 
-PUBLIC:: DefineParametersHPLimiter
-PUBLIC:: InitHPLimiter
-PUBLIC:: HyperbolicityPreservingLimiter
+PUBLIC:: DefineParametersPPLimiter
+PUBLIC:: InitPPLimiter
+PUBLIC:: PositivityPreservingLimiter
 #if FV_ENABLED
-PUBLIC:: HyperbolicityPreservingLimiterSide
+PUBLIC:: PositivityPreservingLimiterSide
 #endif
-PUBLIC:: HP_Info
+PUBLIC:: PP_Info
 !==================================================================================================================================
 
 CONTAINS
@@ -56,7 +56,7 @@ CONTAINS
 !==================================================================================================================================
 !> Define parameters needed for filtering
 !==================================================================================================================================
-SUBROUTINE DefineParametersHPLimiter()
+SUBROUTINE DefineParametersPPLimiter()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
 IMPLICIT NONE
@@ -66,15 +66,15 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 CALL prms%SetSection("HP Limiter")
-CALL prms%CreateRealOption(            'HPLimiterThreashold',    "Threashold for HP Limiter to modify solution. HPLimiterVar \n"//& 
+CALL prms%CreateRealOption(            'PPLimiterThreashold',    "Threashold for PP Limiter to modify solution. PPLimiterVar \n"//& 
                                                                  "has to be smaller than this threashold")
-CALL prms%CreateRealOption(            'HPLimiterFactor',        "Factor for correction. Is applied to avoid permanent limiting.")                                                           
-END SUBROUTINE DefineParametersHPLimiter
+CALL prms%CreateRealOption(            'PPLimiterFactor',        "Factor for correction. Is applied to avoid permanent limiting.")                                                           
+END SUBROUTINE DefineParametersPPLimiter
 
 !==================================================================================================================================
 !> Initialize  information and  operators
 !==================================================================================================================================
-SUBROUTINE InitHPLimiter()
+SUBROUTINE InitPPLimiter()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -96,19 +96,19 @@ INTEGER                      :: iElem,i,j,k
 !==================================================================================================================================
 
 ! Read in variables
-HPeps = GETREAL('HPLimiterThreashold','1.E-8')
-HPfac = GETREAL('HPLimiterFactor','1.00')
+HPeps = GETREAL('PPLimiterThreashold','1.E-8')
+HPfac = GETREAL('PPLimiterFactor','1.00')
 
 ! Sanity check
-IF (HPfac.GT.1.0) CALL Abort(__STAMP__,'HPLimiterFactor has to be smaller than 1.0!')
+IF (HPfac.GT.1.0) CALL Abort(__STAMP__,'PPLimiterFactor has to be smaller than 1.0!')
 
 ! Prepare HP Limiter
-ALLOCATE(HP_Elems(nElems))
-HP_Elems=0
-ALLOCATE(HP_Sides(nElems))
-HP_Sides=0
-CALL AddToElemData(ElementOut,'HypPresLim',IntArray=HP_Elems)
-CALL AddToElemData(ElementOut,'HypPresLimSide',IntArray=HP_Sides)
+ALLOCATE(PP_Elems(nElems))
+PP_Elems=0
+ALLOCATE(PP_Sides(nElems))
+PP_Sides=0
+CALL AddToElemData(ElementOut,'HypPresLim',IntArray=PP_Elems)
+CALL AddToElemData(ElementOut,'HypPresLimSide',IntArray=PP_Sides)
 IF( .NOT. ALLOCATED(Vol)) THEN 
    ALLOCATE(J_N(0:PP_N,0:PP_N,0:PP_NZ))
    ALLOCATE(Vol(nElems))
@@ -153,18 +153,18 @@ END IF
    END DO !iElem
    DEALLOCATE(J_N)
 #endif
-END SUBROUTINE InitHPLimiter
+END SUBROUTINE InitPPLimiter
 
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
-SUBROUTINE HyperbolicityPreservingLimiter()
+SUBROUTINE PositivityPreservingLimiter()
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
-USE MOD_Filter_Vars         ,ONLY: HP_Elems,Vol,IntegrationWeight
+USE MOD_Filter_Vars         ,ONLY: PP_Elems,Vol,IntegrationWeight
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 #if FV_ENABLED
 USE MOD_Filter_Vars         ,ONLY: VolFV,IntegrationWeightFV
@@ -183,7 +183,7 @@ REAL                         :: UPrim(PP_nVarPrim)
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
 ! mean value
-HP_Elems=0.
+PP_Elems=0.
 DO iElem=1,nElems
   UMean = 0.
   rhoMin = HPeps
@@ -220,19 +220,19 @@ DO iElem=1,nElems
       U(:,i,j,k,iElem) = t*(U(:,i,j,k,iElem)-UMean) + UMean 
     END DO;END DO;END DO
   END IF
-  HP_Elems(iElem)=1
+  PP_Elems(iElem)=1
 END DO !iElem
-END SUBROUTINE HyperbolicityPreservingLimiter
+END SUBROUTINE PositivityPreservingLimiter
 
 
 #if FV_ENABLED
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
-SUBROUTINE HyperbolicityPreservingLimiterSide(SideID,ULoc)
+SUBROUTINE PositivityPreservingLimiterSide(SideID,ULoc)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac,HP_Sides
+USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac,PP_Sides
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_Mesh_Vars           ,ONLY: SurfElem,SideToElem
 #if FV_ENABLED
@@ -288,8 +288,8 @@ IF(t.LT.1.) THEN
     Uloc(:,i,j) = t*(Uloc(:,i,j)-UMean) + UMean 
   END DO;END DO
 END IF
-HP_Sides(iElem)=1
-END SUBROUTINE HyperbolicityPreservingLimiterSide
+PP_Sides(iElem)=1
+END SUBROUTINE PositivityPreservingLimiterSide
 #endif /*FV_ENABLED*/
 
 !==================================================================================================================================
@@ -345,7 +345,7 @@ END SUBROUTINE GetTheta
 !==================================================================================================================================
 !> Print information on the amount of HP subcells
 !==================================================================================================================================
-SUBROUTINE HP_Info(iter)
+SUBROUTINE PP_Info(iter)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars    ,ONLY: nGlobalElems
@@ -378,8 +378,8 @@ END IF
 #endif
 SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP Sides amount %: ', totalHP_nSides / REAL(nGlobalElems) / iter*100
 totalHP_nSides = 0
-END SUBROUTINE HP_Info
+END SUBROUTINE PP_Info
 
-END MODULE MOD_HPLimiter
+END MODULE MOD_PPLimiter
 #endif
 #endif

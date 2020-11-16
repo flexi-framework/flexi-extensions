@@ -66,8 +66,8 @@ CONTAINS
 SUBROUTINE DefineParametersFilter()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
-#if HPLimiter
-USE MOD_HPLimiter   ,ONLY: DefineParametersHPLimiter
+#if PPLimiter
+USE MOD_PPLimiter   ,ONLY: DefineParametersPPLimiter
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -85,8 +85,8 @@ CALL addStrListEntry('FilterType','laf',   FILTERTYPE_LAF)
 CALL prms%CreateIntOption(             'NFilter',           "Cut-off mode (FilterType==CutOff or LAF)")
 CALL prms%CreateRealOption(            'LAF_alpha',         "Relaxation factor for LAF, see Flad et al. JCP 2016")
 CALL prms%CreateRealArrayOption(       'HestFilterParam',   "Parameters for Hesthaven filter (FilterType==Modal)")
-#if HPLimiter
-CALL DefineParametersHPLimiter()
+#if PPLimiter
+CALL DefineParametersPPLimiter()
 #endif
 END SUBROUTINE DefineParametersFilter
 
@@ -109,8 +109,8 @@ USE MOD_IO_HDF5           ,ONLY:AddToElemData,ElementOut
 USE MOD_Interpolation_Vars,ONLY:wGP
 USE MOD_Mesh_Vars         ,ONLY:nElems,sJ
 #endif
-#if HPLimiter
-USE MOD_HPLimiter         ,ONLY: InitHPLimiter
+#if PPLimiter
+USE MOD_PPLimiter         ,ONLY: InitPPLimiter
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -211,8 +211,8 @@ IF(FilterType.GT.0) THEN
   FilterMat=MATMUL(MATMUL(Vdm_Leg,FilterMat),sVdm_Leg)
 END IF !FilterType=0
 
-#if HPLimiter
-CALL InitHPLimiter()
+#if PPLimiter
+CALL InitPPLimiter()
 #endif 
 FilterInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT FILTER DONE!'
@@ -543,9 +543,9 @@ SDEALLOCATE(ekin_fluc_avg_old)
 SDEALLOCATE(Vol)
 #endif /*EQNSYSNR==2*/
 FilterInitIsDone = .FALSE.
-#if HPLimiter
-SDEALLOCATE(HP_Elems)
-SDEALLOCATE(HP_Sides)
+#if PPLimiter
+SDEALLOCATE(PP_Elems)
+SDEALLOCATE(PP_Sides)
 #endif
 #if FV_ENABLED
 SDEALLOCATE(IntegrationweightFV)

@@ -31,7 +31,7 @@ REAL                 :: tWriteData                        !< actual time at whic
 #if FV_ENABLED
 INTEGER              :: totalFV_nElems=0
 #endif
-#if HPLimiter
+#if PPLimiter
 INTEGER              :: totalHP_nElems=0
 INTEGER              :: totalHP_nSides=0
 #endif

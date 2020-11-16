@@ -153,15 +153,15 @@ ENDIF()
 OPTION(FLEXI_UNITTESTS "Enable unit tests after build" ON)
 MARK_AS_ADVANCED(FLEXI_UNITTESTS)
 
-# HPLimiter
-OPTION(FLEXI_HPLimiter "Use split DG formulation" OFF)
-IF(FLEXI_HPLimiter)
-   ADD_DEFINITIONS(-DHPLimiter)
+# PPLimiter
+OPTION(FLEXI_PPLimiter "Use split DG formulation" OFF)
+IF(FLEXI_PPLimiter)
+   ADD_DEFINITIONS(-DPPLimiter)
   IF(FLEXI_NODETYPE STREQUAL "GAUSS")
-     MESSAGE(SEND_ERROR "FLEXI_HPLimiter only works on FLEXI_NODETYPE==GAUSS-LOBATTO points.")
+     MESSAGE(SEND_ERROR "FLEXI_PPLimiter only works on FLEXI_NODETYPE==GAUSS-LOBATTO points.")
   ENDIF()
   IF(NOT FLEXI_EQNSYSNAME STREQUAL "navierstokes")
-     MESSAGE(SEND_ERROR "FLEXI_HPLimiter only works for FLEXI_EQNSYSNAME==navierstokes.")
+     MESSAGE(SEND_ERROR "FLEXI_PPLimiter only works for FLEXI_EQNSYSNAME==navierstokes.")
   ENDIF()
 ENDIF()
 
@@ -754,4 +754,3 @@ ENDIF()
 IF(FLEXI_UNITTESTS)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/unitTests/CMakeLists.txt)
 ENDIF()
-
