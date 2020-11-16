@@ -218,7 +218,7 @@ USE MOD_Analyze_Vars, ONLY: totalFV_nElems
 #endif
 #if PPLimiter
 USE MOD_Filter_Vars , ONLY: PP_Elems,PP_Sides
-USE MOD_Analyze_Vars, ONLY: totalHP_nElems,totalHP_nSides
+USE MOD_Analyze_Vars, ONLY: totalPP_nElems,totalPP_nSides
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! insert modules here
@@ -249,9 +249,9 @@ totalFV_nElems = totalFV_nElems + FVcounter ! counter for output of FV amount du
 #endif
 #if PPLimiter
 HPcounter = SUM(PP_Elems)
-totalHP_nElems = totalHP_nElems + HPcounter ! counter for output of FV amount during analyze
+totalPP_nElems = totalPP_nElems + HPcounter ! counter for output of FV amount during analyze
 HPSidescounter = SUM(PP_Sides)
-totalHP_nSides = totalHP_nSides + HPSidescounter ! counter for output of FV amount during analyze
+totalPP_nSides = totalPP_nSides + HPSidescounter ! counter for output of FV amount during analyze
 #endif
 
 IF(.NOT.doPrintStatusLine) RETURN

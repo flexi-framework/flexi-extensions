@@ -494,7 +494,7 @@ SUBROUTINE PP_Info(iter)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars    ,ONLY: nGlobalElems
-USE MOD_Analyze_Vars ,ONLY: totalHP_nElems,totalHP_nSides
+USE MOD_Analyze_Vars ,ONLY: totalPP_nElems,totalPP_nSides
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -505,24 +505,24 @@ INTEGER(KIND=8),INTENT(IN) :: iter !< number of iterations
 !==================================================================================================================================
 #if USE_MPI
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,totalHP_nElems,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
-  ! totalHP_nElems is counted in PrintStatusLine
+  CALL MPI_REDUCE(MPI_IN_PLACE,totalPP_nElems,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  ! totalPP_nElems is counted in PrintStatusLine
 ELSE
-  CALL MPI_REDUCE(totalHP_nElems,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  CALL MPI_REDUCE(totalPP_nElems,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
 END IF
 #endif
-SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP amount %: ', totalHP_nElems / REAL(nGlobalElems) / iter*100
-totalHP_nElems = 0
+SWRITE(UNIT_stdOut,'(A,F8.3,A)')' PP amount %: ', totalPP_nElems / REAL(nGlobalElems) / iter*100
+totalPP_nElems = 0
 #if USE_MPI
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,totalHP_nSides,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
-  ! totalHP_nElems is counted in PrintStatusLine
+  CALL MPI_REDUCE(MPI_IN_PLACE,totalPP_nSides,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  ! totalPP_nElems is counted in PrintStatusLine
 ELSE
-  CALL MPI_REDUCE(totalHP_nSides,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
+  CALL MPI_REDUCE(totalPP_nSides,0           ,1,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
 END IF
 #endif
-SWRITE(UNIT_stdOut,'(A,F8.3,A)')' HP Sides amount %: ', totalHP_nSides / REAL(nGlobalElems) / iter*100
-totalHP_nSides = 0
+SWRITE(UNIT_stdOut,'(A,F8.3,A)')' PP Sides amount %: ', totalPP_nSides / REAL(nGlobalElems) / iter*100
+totalPP_nSides = 0
 END SUBROUTINE PP_Info
 
 END MODULE MOD_PPLimiter
