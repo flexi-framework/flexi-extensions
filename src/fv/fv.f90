@@ -579,6 +579,10 @@ END DO
 
 END SUBROUTINE FV_DGtoFV
 
+#if HPLimiter
+!==================================================================================================================================
+!> Limit if necessary the switched DG solution at faces between a DG element and a FV sub-cells element to Finite Volume.
+!==================================================================================================================================
 SUBROUTINE FV_DGtoFVHP(nVar,U_master,U_slave)
 ! MODULES
 USE MOD_PreProc
@@ -615,8 +619,8 @@ DO SideID=firstSideID,lastSideID
     CALL HyperbolicityPreservingLimiterSide(SideID,UTmp_Slave)
   END IF
 END DO
-
 END SUBROUTINE FV_DGtoFVHP
+#endif /*HPLimiter*/
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.

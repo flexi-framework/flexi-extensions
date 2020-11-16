@@ -450,6 +450,9 @@ tStage=t
 !CALL DGTimeDerivative_weakForm(tStage)      !allready called in timedisc
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
+#if HPLimiter
+CALL HyperbolicityPreservingLimiter()
+#endif
 
 
 ! Following steps
@@ -459,9 +462,9 @@ DO iStage=2,nRKStages
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
   CALL FV_Switch(U,Ut_temp,AllowToDG=FV_toDGinRK)
-#endif
 #if HPLimiter
   CALL HyperbolicityPreservingLimiter()
+#endif
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
@@ -525,6 +528,9 @@ CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
 CALL VCopy(nTotalU,S2,U)                       !S2=U
 !CALL DGTimeDerivative_weakForm(t)             ! allready called in timedisc
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+#if HPLimiter
+CALL HyperbolicityPreservingLimiter()
+#endif
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
@@ -532,9 +538,9 @@ DO iStage=2,nRKStages
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
   CALL FV_Switch(U,Uprev,S2,AllowToDG=FV_toDGinRK)
-#endif
 #if HPLimiter
   CALL HyperbolicityPreservingLimiter()
+#endif
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)

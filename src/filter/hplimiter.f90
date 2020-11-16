@@ -32,9 +32,11 @@ INTERFACE HyperbolicityPreservingLimiter
   MODULE PROCEDURE HyperbolicityPreservingLimiter
 END INTERFACE
 
+#if FV_ENABLED
 INTERFACE HyperbolicityPreservingLimiterSide
   MODULE PROCEDURE HyperbolicityPreservingLimiterSide
 END INTERFACE
+#endif
 
 INTERFACE HP_Info
   MODULE PROCEDURE HP_Info
@@ -43,7 +45,9 @@ END INTERFACE
 PUBLIC:: DefineParametersHPLimiter
 PUBLIC:: InitHPLimiter
 PUBLIC:: HyperbolicityPreservingLimiter
+#if FV_ENABLED
 PUBLIC:: HyperbolicityPreservingLimiterSide
+#endif
 PUBLIC:: HP_Info
 !==================================================================================================================================
 
@@ -93,7 +97,7 @@ INTEGER                      :: iElem,i,j,k
 
 ! Read in variables
 HPeps = GETREAL('HPLimiterThreashold','1.E-8')
-HPfac = GETREAL('HPLimiterFactor','0.75')
+HPfac = GETREAL('HPLimiterFactor','1.00')
 
 ! Sanity check
 IF (HPfac.GT.1.0) CALL Abort(__STAMP__,'HPLimiterFactor has to be smaller than 1.0!')
@@ -221,6 +225,7 @@ END DO !iElem
 END SUBROUTINE HyperbolicityPreservingLimiter
 
 
+#if FV_ENABLED
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
@@ -285,6 +290,7 @@ IF(t.LT.1.) THEN
 END IF
 HP_Sides(iElem)=1
 END SUBROUTINE HyperbolicityPreservingLimiterSide
+#endif /*FV_ENABLED*/
 
 !==================================================================================================================================
 !> Computes thetha, such that theta*U+(1-theta)*cellmean is admissible

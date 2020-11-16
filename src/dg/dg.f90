@@ -256,7 +256,10 @@ USE MOD_Mesh_Vars,           ONLY: nSides
 #if FV_ENABLED
 USE MOD_FV_Vars             ,ONLY: FV_Elems_master,FV_Elems_slave,FV_Elems_Sum
 USE MOD_FV_Mortar           ,ONLY: FV_Elems_Mortar
-USE MOD_FV                  ,ONLY: FV_DGtoFV,FV_DGtoFVHP
+USE MOD_FV                  ,ONLY: FV_DGtoFV
+#if HPLimiter
+USE MOD_FV                  ,ONLY: FV_DGtoFVHP
+#endif /*HPLimiter*/
 USE MOD_FV_VolInt           ,ONLY: FV_VolInt
 #if USE_MPI
 USE MOD_MPI                 ,ONLY: StartExchange_FV_Elems
@@ -407,8 +410,7 @@ FV_Elems_Sum = FV_Elems_master + 2*FV_Elems_slave
 ! 5.1)
 CALL FV_DGtoFV(PP_nVarPrim,FV_multi_master,FV_multi_slave)
 #if HPLimiter
-CALL FV_DGtoFVHP(PP_nVar    ,U_master     ,U_slave     )
-CALL FV_DGtoFVHP(PP_nVarPrim,UPrim_master ,UPrim_slave )
+CALL FV_DGtoFVHP(PP_nVar    ,FV_multi_master,FV_multi_slave)
 #endif
 
 #if USE_MPI
@@ -514,10 +516,8 @@ CALL FV_DGtoFV(PP_nVarPrim,gradUy_master,gradUy_slave)
 CALL FV_DGtoFV(PP_nVarPrim,gradUz_master,gradUz_slave)
 #endif
 
-!#if HPLimiter
-!CALL FV_DGtoFVHP(PP_nVar    ,U_master     ,U_slave     )
-!CALL FV_DGtoFVHP(PP_nVarPrim,UPrim_master ,UPrim_slave )
-!#endif
+CALL FV_DGtoFV(PP_nVar    ,U_master     ,U_slave     ) 
+CALL FV_DGtoFV(PP_nVarPrim,UPrim_master ,UPrim_slave )
 
 ! 10.2)
 CALL GetConservativeStateSurface(UPrim_master, UPrim_slave, U_master, U_slave, FV_Elems_master, FV_Elems_slave, 1)
