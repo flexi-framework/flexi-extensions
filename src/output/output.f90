@@ -280,15 +280,15 @@ IF(MPIroot)THEN
   hours = MOD(time_remaining,24.)
 #if FV_ENABLED
   FV_percent = REAL(FVcounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') FV_percent, '% FV '
+  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') FV_percent, '% FV,'
 #endif
 #if PPLimiter
   HP_percent = REAL(HPcounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') HP_percent, '% HP '
+  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') HP_percent, '% HP,'
   HPSides_percent = REAL(HPSidescounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') HPSides_percent, '% HPS'
+  WRITE(UNIT_stdOut,'(F5.2,A6)',ADVANCE='NO') HPSides_percent, '% HPS  '
 #endif
-  WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') 'Time = ', t, &
+  WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') ' Time = ', t, &
       ' dt = ', dt, '  ', percent, '% complete, est. Time Remaining = ',INT(hours),':',INT(mins),':',INT(secs), ACHAR(13)
 #ifdef INTEL
   CLOSE(UNIT_stdOut)

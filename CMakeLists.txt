@@ -154,7 +154,7 @@ OPTION(FLEXI_UNITTESTS "Enable unit tests after build" ON)
 MARK_AS_ADVANCED(FLEXI_UNITTESTS)
 
 # PPLimiter
-OPTION(FLEXI_PPLimiter "Use split DG formulation" OFF)
+OPTION(FLEXI_PPLimiter "Enable Positivity Preserving Limiter" OFF)
 IF(FLEXI_PPLimiter)
    ADD_DEFINITIONS(-DPPLimiter)
   IF(NOT FLEXI_EQNSYSNAME STREQUAL "navierstokes")
