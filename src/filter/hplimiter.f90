@@ -29,14 +29,14 @@ INTERFACE InitPPLimiter
 END INTERFACE
 
 INTERFACE PositivityPreservingLimiter
-  MODULE PROCEDURE PositivityPreservingLimiter
+  MODULE PROCEDURE PositivityPreservingLimiter_Volume
+  MODULE PROCEDURE PositivityPreservingLimiter_SidesCons
+  MODULE PROCEDURE PositivityPreservingLimiter_SidesPrim
 END INTERFACE
 
-#if FV_ENABLED
-INTERFACE PositivityPreservingLimiterSide
-  MODULE PROCEDURE PositivityPreservingLimiterSide
+INTERFACE PositivityPreservingLimiteriSide
+  MODULE PROCEDURE PositivityPreservingLimiteriSide
 END INTERFACE
-#endif
 
 INTERFACE PP_Info
   MODULE PROCEDURE PP_Info
@@ -45,9 +45,7 @@ END INTERFACE
 PUBLIC:: DefineParametersPPLimiter
 PUBLIC:: InitPPLimiter
 PUBLIC:: PositivityPreservingLimiter
-#if FV_ENABLED
-PUBLIC:: PositivityPreservingLimiterSide
-#endif
+PUBLIC:: PositivityPreservingLimiteriSide
 PUBLIC:: PP_Info
 !==================================================================================================================================
 
@@ -158,7 +156,7 @@ END SUBROUTINE InitPPLimiter
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
-SUBROUTINE PositivityPreservingLimiter()
+SUBROUTINE PositivityPreservingLimiter_Volume()
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
@@ -222,19 +220,140 @@ DO iElem=1,nElems
   END IF
   PP_Elems(iElem)=1
 END DO !iElem
-END SUBROUTINE PositivityPreservingLimiter
+END SUBROUTINE PositivityPreservingLimiter_Volume
 
-
+!==================================================================================================================================
+!> Limit if necessary the DG solution at faces between a elements.
+!==================================================================================================================================
+SUBROUTINE PositivityPreservingLimiter_SidesPrim(UCons_master,UCons_slave,UPrim_master,UPrim_slave)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
 #if FV_ENABLED
+USE MOD_FV_Vars     ,ONLY: FV_Elems_Sum
+#endif
+USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
+USE MOD_Filter_Vars ,ONLY: PP_Sides
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,INTENT(INOUT)          :: UCons_master(PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on master side
+REAL,INTENT(INOUT)          :: UCons_slave (PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on slave side
+REAL,INTENT(INOUT)          :: UPrim_master(PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Primitive Solution on master side
+REAL,INTENT(INOUT)          :: UPrim_slave (PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides) !< Primitive Solution on slave side
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER     :: firstSideID,lastSideID,SideID
+REAL        :: UConsTmp_master(PP_nVar,    0:PP_N,0:PP_NZ)              !< 
+REAL        :: UConsTmp_slave (PP_nVar,    0:PP_N,0:PP_NZ)              !< 
+REAL        :: UPrimTmp_master(PP_nVarPrim,0:PP_N,0:PP_NZ)              !< 
+REAL        :: UPrimTmp_slave (PP_nVarPrim,0:PP_N,0:PP_NZ)              !< 
+!==================================================================================================================================
+firstSideID = firstInnerSide
+lastSideID  = lastMPISide_MINE
+
+PP_Sides = 0
+DO SideID=firstSideID,lastSideID
+  UConsTmp_slave  = UCons_slave (:,:,:,SideID)
+  UConsTmp_master = UCons_master(:,:,:,SideID)
+  UPrimTmp_slave  = UPrim_slave (:,:,:,SideID)
+  UPrimTmp_master = UPrim_master(:,:,:,SideID)
+#if FV_ENABLED
+  IF      (FV_Elems_Sum(SideID).EQ.0) THEN
+    ! dg
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.FALSE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
+    ! slave
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.FALSE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.2) THEN
+    ! master
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.TRUE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
+    ! fv
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,UPrimTmp_slave, FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.TRUE.)
+  END IF
+#else
+  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,UPrimTmp_slave )
+  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master)
+#endif
+END DO
+END SUBROUTINE PositivityPreservingLimiter_SidesPrim
+
+!==================================================================================================================================
+!> Limit if necessary the DG solution at faces between a elements.
+!==================================================================================================================================
+SUBROUTINE PositivityPreservingLimiter_SidesCons(UCons_master,UCons_slave)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+#if FV_ENABLED
+USE MOD_FV_Vars     ,ONLY: FV_Elems_Sum
+#endif
+USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
+USE MOD_Filter_Vars ,ONLY: PP_Sides
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL,INTENT(INOUT)          :: UCons_master(PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on master side
+REAL,INTENT(INOUT)          :: UCons_slave (PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on slave side
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER     :: firstSideID,lastSideID,SideID
+REAL        :: UConsTmp_master(PP_nVar,0:PP_N,0:PP_NZ)              !< 
+REAL        :: UConsTmp_slave (PP_nVar,0:PP_N,0:PP_NZ)              !< 
+!==================================================================================================================================
+firstSideID = firstInnerSide
+lastSideID  = lastMPISide_MINE
+
+PP_Sides = 0
+DO SideID=firstSideID,lastSideID
+  UConsTmp_slave  = UCons_slave (:,:,:,SideID)
+  UConsTmp_master = UCons_master(:,:,:,SideID)
+#if FV_ENABLED
+  IF      (FV_Elems_Sum(SideID).EQ.0) THEN
+    ! dg
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.FALSE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
+    ! slave
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.FALSE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.2) THEN
+    ! master
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.TRUE.)
+  ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
+    ! fv
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.TRUE.)
+  END IF
+#else
+  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave )
+  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master)
+#endif
+END DO
+END SUBROUTINE PositivityPreservingLimiter_SidesCons
+
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
-SUBROUTINE PositivityPreservingLimiterSide(SideID,ULoc)
+SUBROUTINE PositivityPreservingLimiteriSide(SideID,UConsSide,UPrimSide & 
+#if FV_ENABLED
+  ,FVElem &
+#endif
+)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac,PP_Sides
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_Mesh_Vars           ,ONLY: SurfElem,SideToElem
+USE MOD_Interpolation_Vars  ,ONLY: wGP
 #if FV_ENABLED
 USE MOD_FV_Vars             ,ONLY: FV_w
 #endif
@@ -242,55 +361,81 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)           :: SideID
-REAL,INTENT(INOUT)           :: ULoc(PP_nVar,0:PP_N,0:PP_NZ)
+REAL,INTENT(INOUT)           :: UConsSide(PP_nVar    ,0:PP_N,0:PP_NZ)
+REAL,INTENT(INOUT),OPTIONAL  :: UPrimSide(PP_nVarPrim,0:PP_N,0:PP_NZ)
+#if FV_ENABLED
+LOGICAL,INTENT(IN),OPTIONAL  :: FVElem
+#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: iElem,i,j
+INTEGER                      :: ElemID,i,j
 REAL                         :: UMean(PP_nVar),rhoMin,pMin
 REAL                         :: t,t_loc
+REAL                         :: wloc(0:PP_N)
+#if FV_ENABLED
+LOGICAL                      :: FVElemloc
+#endif
 !#if FV_RECONSTRUCT
-REAL                         :: UPrim(PP_nVarPrim)
+REAL                         :: UPrimloc(PP_nVarPrim)
 REAL                         :: Surf,tmp
 !#endif /*FV_RECONSTRUCT*/
 !==================================================================================================================================
+
+#if FV_ENABLED
+IF (PRESENT(FVElem)) THEN 
+  IF (FVElem) wloc(:) = FV_w
+ELSE
+  wloc(:) = wGP
+END IF
+#else
+  wloc(:) = wGP
+#endif
+  
 ! mean value
-iElem = SideToElem(S2E_ELEM_ID,SideID)
-IF (iElem .EQ. -1) RETURN
-UMean = 0.
-Surf  = 0.
+ElemID = SideToElem(S2E_ELEM_ID,SideID)
+IF (ElemID .EQ. -1) RETURN
+UMean  = 0.
+Surf   = 0.
 rhoMin = HPeps
-pMin = HPeps
-DO j=0,PP_NZ;DO i=0,PP_N
-  CALL ConsToPrim(UPrim,Uloc(:,i,j))
-  rhoMin=MIN(UPrim(1),rhoMin)
-  pMin=MIN(UPrim(5),pMin)
-END DO;END DO
+pMin   = HPeps
+
+IF (PRESENT(UPrimSide)) THEN
+  rhoMin = MIN(MINVAL(UPrimSide(1,:,:)),rhoMin)
+  pMin   = MIN(MINVAL(UPrimSide(5,:,:)),pMin)
+ELSE
+  DO j=0,PP_NZ;DO i=0,PP_N
+    CALL ConsToPrim(UPrimloc,UConsSide(:,i,j))
+    rhoMin = MIN(UPrimloc(1),rhoMin)
+    pMin   = MIN(UPrimloc(5),pMin)
+  END DO;END DO
+END IF
 
 IF (rhoMin .GE. HPeps .AND. pMin .GE. HPeps) RETURN
 DO j=0,PP_NZ;DO i=0,PP_N
 #if PP_dim == 3
-  tmp = FV_W*FV_W*SurfElem(i,j,1,SideID)
+  tmp = wloc(i)*wloc(j)*SurfElem(i,j,1,SideID)
 #else
-  tmp = FV_W*SurfElem(i,j,1,SideID)
+  tmp = wloc(i)*SurfElem(i,j,1,SideID)
 #endif
-  UMean = UMean + Uloc(:,i,j)*tmp
+  UMean = UMean + UConsSide(:,i,j)*tmp
   Surf  = Surf + tmp 
 END DO; END DO
 UMean = UMean / Surf
 t=1.
 DO j=0,PP_NZ;DO i=0,PP_N
-  CALL GetTheta(Uloc(:,i,j),UMean,rhoMin,t_loc)
+  CALL GetTheta(UConsSide(:,i,j),UMean,rhoMin,t_loc)
   t=MIN(t,t_loc)
 END DO;END DO
 IF(t.LT.1.) THEN
   t = t*HPfac
   DO j=0,PP_NZ;DO i=0,PP_N
-    Uloc(:,i,j) = t*(Uloc(:,i,j)-UMean) + UMean 
+    UConsSide(:,i,j) = t*(UConsSide(:,i,j)-UMean) + UMean 
   END DO;END DO
 END IF
-PP_Sides(iElem)=1
-END SUBROUTINE PositivityPreservingLimiterSide
-#endif /*FV_ENABLED*/
+
+IF (PRESENT(UPrimSide)) CALL ConsToPrim(PP_N,UPrimSide,UConsSide)
+PP_Sides(ElemID)=1
+END SUBROUTINE PositivityPreservingLimiteriSide
 
 !==================================================================================================================================
 !> Computes thetha, such that theta*U+(1-theta)*cellmean is admissible

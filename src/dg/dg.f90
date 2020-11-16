@@ -244,6 +244,9 @@ USE MOD_Filter              ,ONLY: Filter_Pointer
 USE MOD_Filter_Vars         ,ONLY: FilterType,FilterMat
 USE MOD_FillMortarCons      ,ONLY: U_MortarCons,Flux_MortarCons
 USE MOD_FillMortarPrim      ,ONLY: U_MortarPrim
+#if PPLimiter
+USE MOD_PPLimiter           ,ONLY: PositivityPreservingLimiter
+#endif
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 USE MOD_Lifting_Vars
@@ -410,6 +413,7 @@ FV_Elems_Sum = FV_Elems_master + 2*FV_Elems_slave
 ! 5.1)
 CALL FV_DGtoFV(PP_nVarPrim,FV_multi_master,FV_multi_slave)
 #if PPLimiter
+! Do PP limiting for calculating the gradients.
 CALL FV_DGtoFVPP(PP_nVar    ,FV_multi_master,FV_multi_slave)
 #endif
 
@@ -521,6 +525,10 @@ CALL FV_DGtoFV(PP_nVarPrim,UPrim_master ,UPrim_slave )
 
 ! 10.2)
 CALL GetConservativeStateSurface(UPrim_master, UPrim_slave, U_master, U_slave, FV_Elems_master, FV_Elems_slave, 1)
+#endif
+
+#if PPLimiter
+CALL PositivityPreservingLimiter(U_master,U_slave,UPrim_master,UPrim_slave)
 #endif
 
 #if USE_MPI

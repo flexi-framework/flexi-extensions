@@ -55,9 +55,11 @@ INTERFACE FV_DGtoFV
   MODULE PROCEDURE FV_DGtoFV
 END INTERFACE
 
+#if PPLimiter
 INTERFACE FV_DGtoFVPP
   MODULE PROCEDURE FV_DGtoFVPP
 END INTERFACE
+#endif
 
 INTERFACE FinalizeFV
   MODULE PROCEDURE FinalizeFV
@@ -70,7 +72,9 @@ PUBLIC::FV_ProlongFVElemsToFace
 PUBLIC::FV_Info
 PUBLIC::FV_FillIni
 PUBLIC::FV_DGtoFV
+#if PPLimiter
 PUBLIC::FV_DGtoFVPP
+#endif
 PUBLIC::FinalizeFV
 !==================================================================================================================================
 
@@ -588,8 +592,8 @@ SUBROUTINE FV_DGtoFVPP(nVar,U_master,U_slave)
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_FV_Vars
-USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
-USE MOD_PPLimiter   ,ONLY: PositivityPreservingLimiterSide
+USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides,SideToElem
+USE MOD_PPLimiter   ,ONLY: PositivityPreservingLimiteriSide
 USE MOD_Filter_Vars ,ONLY: PP_Sides
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -613,10 +617,10 @@ DO SideID=firstSideID,lastSideID
   UTmp_master=U_master(:,:,:,SideID)
   IF (FV_Elems_Sum(SideID).EQ.2) THEN
     ! Master
-    CALL PositivityPreservingLimiterSide(SideID,UTmp_master)
+    CALL PositivityPreservingLimiteriSide(SideID,UTmp_master,FVElem=.TRUE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! Slave
-    CALL PositivityPreservingLimiterSide(SideID,UTmp_Slave)
+    CALL PositivityPreservingLimiteriSide(SideID,UTmp_Slave,FVElem=.TRUE.)
   END IF
 END DO
 END SUBROUTINE FV_DGtoFVPP
