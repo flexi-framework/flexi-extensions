@@ -1,5 +1,3 @@
-#if PPLimiter
-#if EQNSYSNR == 2
 !=================================================================================================================================
 ! Copyright (c) 2016  Prof. Claus-Dieter Munz
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
@@ -14,11 +12,14 @@
 ! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
 !=================================================================================================================================
 #include "flexi.h"
+#if EQNSYSNR == 2
 #include "eos.h"
+#endif
 !==================================================================================================================================
 !==================================================================================================================================
 MODULE MOD_PPLimiter
-!----------------------------------------------------------------------------------------------------------------------------------
+#if PPLimiter
+  !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 IMPLICIT NONE
 PRIVATE
@@ -544,6 +545,5 @@ SWRITE(UNIT_stdOut,'(A,F8.3,A)')' PP Sides amount %: ', totalPP_nSides / REAL(nG
 totalPP_nSides = 0
 END SUBROUTINE PP_Info
 
+#endif
 END MODULE MOD_PPLimiter
-#endif
-#endif
