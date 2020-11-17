@@ -388,7 +388,7 @@ LOGICAL,INTENT(IN),OPTIONAL  :: FVElem
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                      :: ElemID,i,j
+INTEGER                      :: ElemID,i,j,ind
 REAL                         :: UMean(PP_nVar),rhoMin,pMin
 REAL                         :: t,t_loc
 REAL                         :: wloc(0:PP_N)
@@ -403,12 +403,17 @@ REAL                         :: Surf,tmp
 
 #if FV_ENABLED
 IF (PRESENT(FVElem)) THEN 
-  IF (FVElem) wloc(:) = FV_w
+  IF (FVElem) THEN
+    wloc(:) = FV_w
+    ind = 1
+  END IF
 ELSE
   wloc(:) = wGP
+  ind = 0
 END IF
 #else
   wloc(:) = wGP
+  ind = 0
 #endif
   
 ! mean value
@@ -433,9 +438,9 @@ END IF
 IF (rhoMin .GE. PPeps .AND. pMin .GE. PPeps) RETURN
 DO j=0,PP_NZ;DO i=0,PP_N
 #if PP_dim == 3
-  tmp = wloc(i)*wloc(j)*SurfElem(i,j,1,SideID)
+  tmp = wloc(i)*wloc(j)*SurfElem(i,j,ind,SideID)
 #else
-  tmp = wloc(i)*SurfElem(i,j,1,SideID)
+  tmp = wloc(i)*SurfElem(i,j,ind,SideID)
 #endif
   UMean = UMean + UConsSide(:,i,j)*tmp
   Surf  = Surf + tmp 
