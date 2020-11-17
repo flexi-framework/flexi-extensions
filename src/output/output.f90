@@ -237,9 +237,9 @@ REAL    :: FV_percent
 #endif
 #if PPLimiter
 INTEGER :: HPcounter
-REAL    :: HP_percent
+REAL    :: PP_percent
 INTEGER :: HPSidescounter
-REAL    :: HPSides_percent
+REAL    :: PPSides_percent
 #endif
 REAL    :: percent,time_remaining,mins,secs,hours
 !==================================================================================================================================
@@ -283,10 +283,10 @@ IF(MPIroot)THEN
   WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') FV_percent, '% FV,'
 #endif
 #if PPLimiter
-  HP_percent = REAL(HPcounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') HP_percent, '% HP,'
-  HPSides_percent = REAL(HPSidescounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F5.2,A6)',ADVANCE='NO') HPSides_percent, '% HPS  '
+  PP_percent = REAL(HPcounter) / nGlobalElems * 100.
+  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') PP_percent, '% PP,'
+  PPSides_percent = REAL(HPSidescounter) / nGlobalElems * 100.
+  WRITE(UNIT_stdOut,'(F5.2,A6)',ADVANCE='NO') PPSides_percent, '% PPS  '
 #endif
   WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') ' Time = ', t, &
       ' dt = ', dt, '  ', percent, '% complete, est. Time Remaining = ',INT(hours),':',INT(mins),':',INT(secs), ACHAR(13)
