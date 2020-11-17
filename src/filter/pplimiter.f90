@@ -94,11 +94,11 @@ INTEGER                      :: iElem,i,j,k
 !==================================================================================================================================
 
 ! Read in variables
-HPeps = GETREAL('PPLimiterThreshold','1.E-8')
-HPfac = GETREAL('PPLimiterFactor','1.00')
+PPeps = GETREAL('PPLimiterThreshold','1.E-8')
+PPfac = GETREAL('PPLimiterFactor','1.00')
 
 ! Sanity check
-IF (HPfac.GT.1.0) CALL Abort(__STAMP__,'PPLimiterFactor has to be smaller than 1.0!')
+IF (PPfac.GT.1.0) CALL Abort(__STAMP__,'PPLimiterFactor has to be smaller than 1.0!')
 
 ! Prepare HP Limiter
 ALLOCATE(PP_Elems(nElems))
@@ -161,7 +161,7 @@ SUBROUTINE PositivityPreservingLimiter_Volume()
 USE MOD_PreProc
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Mesh_Vars           ,ONLY: nElems
-USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac
+USE MOD_Filter_Vars         ,ONLY: PPeps,PPfac
 USE MOD_Filter_Vars         ,ONLY: PP_Elems,Vol,IntegrationWeight
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 #if FV_ENABLED
@@ -184,14 +184,14 @@ REAL                         :: UPrim(PP_nVarPrim)
 PP_Elems=0.
 DO iElem=1,nElems
   UMean = 0.
-  rhoMin = HPeps
-  pMin = HPeps
+  rhoMin = PPeps
+  pMin = PPeps
   DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
     CALL ConsToPrim(UPrim,U(:,i,j,k,iElem))
     rhoMin=MIN(UPrim(1),rhoMin)
     pMin=MIN(UPrim(5),pMin)
   END DO;END DO;END DO
-  IF (rhoMin .GE. HPeps .AND. pMin .GE. HPeps) CYCLE
+  IF (rhoMin .GE. PPeps .AND. pMin .GE. PPeps) CYCLE
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.0) THEN
 #endif
@@ -213,7 +213,7 @@ DO iElem=1,nElems
     t=MIN(t,t_loc)
   END DO;END DO;END DO
   IF(t.LT.1.) THEN
-    t = t*HPfac
+    t = t*PPfac
     DO k=0,PP_NZ;DO j=0,PP_N;DO i=0,PP_N
       U(:,i,j,k,iElem) = t*(U(:,i,j,k,iElem)-UMean) + UMean 
     END DO;END DO;END DO
@@ -350,7 +350,7 @@ SUBROUTINE PositivityPreservingLimiteriSide(SideID,UConsSide,UPrimSide &
 )
 ! MODULES
 USE MOD_PreProc
-USE MOD_Filter_Vars         ,ONLY: HPeps,HPfac,PP_Sides
+USE MOD_Filter_Vars         ,ONLY: PPeps,PPfac,PP_Sides
 USE MOD_EOS                 ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_Mesh_Vars           ,ONLY: SurfElem,SideToElem
 USE MOD_Interpolation_Vars  ,ONLY: wGP
@@ -396,8 +396,8 @@ ElemID = SideToElem(S2E_ELEM_ID,SideID)
 IF (ElemID .EQ. -1) RETURN
 UMean  = 0.
 Surf   = 0.
-rhoMin = HPeps
-pMin   = HPeps
+rhoMin = PPeps
+pMin   = PPeps
 
 IF (PRESENT(UPrimSide)) THEN
   rhoMin = MIN(MINVAL(UPrimSide(1,:,:)),rhoMin)
@@ -410,7 +410,7 @@ ELSE
   END DO;END DO
 END IF
 
-IF (rhoMin .GE. HPeps .AND. pMin .GE. HPeps) RETURN
+IF (rhoMin .GE. PPeps .AND. pMin .GE. PPeps) RETURN
 DO j=0,PP_NZ;DO i=0,PP_N
 #if PP_dim == 3
   tmp = wloc(i)*wloc(j)*SurfElem(i,j,1,SideID)
@@ -427,7 +427,7 @@ DO j=0,PP_NZ;DO i=0,PP_N
   t=MIN(t,t_loc)
 END DO;END DO
 IF(t.LT.1.) THEN
-  t = t*HPfac
+  t = t*PPfac
   DO j=0,PP_NZ;DO i=0,PP_N
     UConsSide(:,i,j) = t*(UConsSide(:,i,j)-UMean) + UMean 
   END DO;END DO
@@ -444,7 +444,7 @@ SUBROUTINE GetTheta(ULoc,UMean,rhoMin,t_out)
 ! MODULES
 USE MOD_PreProc
 USE MOD_EOS_Vars      ,ONLY: KappaM1
-USE MOD_Filter_Vars   ,ONLY: HPeps
+USE MOD_Filter_Vars   ,ONLY: PPeps
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -459,26 +459,26 @@ REAL                    :: UDiff(PP_nVar)
 REAL                    :: p!,p_sGammaM1
 !==================================================================================================================================
 !p_sGammaM1=ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS)
-!IF(ULoc(DENS).GT.HPeps.AND.p_sGammaM1.GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
-!!IF(ULoc(DENS).GT.HPeps) THEN  !TODO: Is HPeps relative or absolute?
+!IF(ULoc(DENS).GT.PPeps.AND.p_sGammaM1.GT.PPeps) THEN  !TODO: Is PPeps relative or absolute?
+!!IF(ULoc(DENS).GT.PPeps) THEN  !TODO: Is PPeps relative or absolute?
   !t_out=1.
   !RETURN  
 !END IF
 
 
-t1 = min((UMean(DENS)-HPeps) / (Umean(DENS)-rhoMin),1.0)
+t1 = min((UMean(DENS)-PPeps) / (Umean(DENS)-rhoMin),1.0)
 ULoc(DENS)=t1*(ULoc(DENS)-UMean(1))+UMean(1)
 
 p=KappaM1*(ULoc(ENER)-0.5*DOT_PRODUCT(ULoc(MMV2),ULoc(MMV2))/ULoc(DENS))
-IF (p .GE. HPeps) THEN
+IF (p .GE. PPeps) THEN
   t_out=1.
   RETURN
 END IF
 UDiff=ULoc-UMean
 
 a  =                  UDiff(ENER)*UDiff(DENS)  - 0.5*DOT_PRODUCT(UDiff(MMV2),UDiff(MMV2))
-b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (HPeps/KappaM1)*UDiff(DENS)
-c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (HPeps/KappaM1)*UMean(DENS)
+b  =      - DOT_PRODUCT(UMean( MMV2),UDiff(MMV2)) + UMean(ENER)*UDiff(DENS) + UMean(DENS)*UDiff(ENER) - (PPeps/KappaM1)*UDiff(DENS)
+c  = -0.5*DOT_PRODUCT(UMean( MMV2),UMean( MMV2)) + UMean(ENER)*UMean( DENS) - (PPeps/KappaM1)*UMean(DENS)
 IF (a .EQ. 0. .OR. b*b-4.*a*c .LT. 0) THEN 
   t_out = 0.
 ELSE

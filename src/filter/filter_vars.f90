@@ -45,8 +45,8 @@ REAL,ALLOCATABLE       :: J_N(:,:,:)            !< Jacobi for volume integral (L
 REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #endif
 #if PPLimiter
-REAL                   :: HPeps                  !< limiter threashold
-REAL                   :: HPfac                  !< limiter factor
+REAL                   :: PPeps                  !< limiter threashold
+REAL                   :: PPfac                  !< limiter factor
 INTEGER,ALLOCATABLE    :: PP_Elems(:)            !< List of Elements that got limited 
 INTEGER,ALLOCATABLE    :: PP_Sides(:)            !< List of Elements that got limited at the Sides
 #endif
