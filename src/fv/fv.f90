@@ -605,21 +605,17 @@ REAL,INTENT(INOUT) :: U_slave (nVar,0:PP_N,0:PP_NZ,1:nSides) !< Solution on slav
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER     :: firstSideID,lastSideID,SideID
-REAL        :: UTmp_master(nVar,0:PP_N,0:PP_NZ)              !< 
-REAL        :: UTmp_slave(nVar,0:PP_N,0:PP_NZ)               !< 
 !==================================================================================================================================
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
 DO SideID=firstSideID,lastSideID
-  UTmp_slave =U_slave(:,:,:,SideID)
-  UTmp_master=U_master(:,:,:,SideID)
   IF (FV_Elems_Sum(SideID).EQ.2) THEN
     ! Master
-    CALL PositivityPreservingLimiteriSide(SideID,UTmp_master,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,U_master(:,:,:,SideID),FVElem=.TRUE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! Slave
-    CALL PositivityPreservingLimiteriSide(SideID,UTmp_Slave,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,U_slave(:,:,:,SideID),FVElem=.TRUE.)
   END IF
 END DO
 END SUBROUTINE FV_DGtoFVPP

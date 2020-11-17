@@ -267,40 +267,32 @@ REAL,INTENT(INOUT)          :: UPrim_slave (PP_nVarPrim,0:PP_N,0:PP_NZ,1:nSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER     :: firstSideID,lastSideID,SideID
-REAL        :: UConsTmp_master(PP_nVar,    0:PP_N,0:PP_NZ)              !< 
-REAL        :: UConsTmp_slave (PP_nVar,    0:PP_N,0:PP_NZ)              !< 
-REAL        :: UPrimTmp_master(PP_nVarPrim,0:PP_N,0:PP_NZ)              !< 
-REAL        :: UPrimTmp_slave (PP_nVarPrim,0:PP_N,0:PP_NZ)              !< 
 !==================================================================================================================================
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
 DO SideID=firstSideID,lastSideID
-  UConsTmp_slave  = UCons_slave (:,:,:,SideID)
-  UConsTmp_master = UCons_master(:,:,:,SideID)
-  UPrimTmp_slave  = UPrim_slave (:,:,:,SideID)
-  UPrimTmp_master = UPrim_master(:,:,:,SideID)
 #if FV_ENABLED
   IF      (FV_Elems_Sum(SideID).EQ.0) THEN
     ! dg
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.FALSE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! slave
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.FALSE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.2) THEN
     ! master
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, UPrimTmp_slave, FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.TRUE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
     ! fv
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,UPrimTmp_slave, FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,UPrim_slave (:,:,:,SideID), FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.TRUE.)
   END IF
 #else
-  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,UPrimTmp_slave )
-  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,UPrimTmp_master)
+  CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,UPrim_slave (:,:,:,SideID) )
+  CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID))
 #endif
 END DO
 END SUBROUTINE PositivityPreservingLimiter_SidesPrim
@@ -326,36 +318,32 @@ REAL,INTENT(INOUT)          :: UCons_slave (PP_nVar,    0:PP_N,0:PP_NZ,1:nSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER     :: firstSideID,lastSideID,SideID
-REAL        :: UConsTmp_master(PP_nVar,0:PP_N,0:PP_NZ)              !< 
-REAL        :: UConsTmp_slave (PP_nVar,0:PP_N,0:PP_NZ)              !< 
 !==================================================================================================================================
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
 DO SideID=firstSideID,lastSideID
-  UConsTmp_slave  = UCons_slave (:,:,:,SideID)
-  UConsTmp_master = UCons_master(:,:,:,SideID)
 #if FV_ENABLED
   IF      (FV_Elems_Sum(SideID).EQ.0) THEN
     ! dg
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.FALSE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! slave
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.FALSE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.2) THEN
     ! master
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave, FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.FALSE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.TRUE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
     ! fv
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave ,FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,FVElem=.TRUE.)
+    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.TRUE.)
   END IF
 #else
-  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_slave )
-  CALL PositivityPreservingLimiteriSide(SideID,UConsTmp_master)
+  CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) )
+  CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID))
 #endif
 END DO
 END SUBROUTINE PositivityPreservingLimiter_SidesCons
