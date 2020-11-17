@@ -245,7 +245,7 @@ USE MOD_Filter_Vars         ,ONLY: FilterType,FilterMat
 USE MOD_FillMortarCons      ,ONLY: U_MortarCons,Flux_MortarCons
 USE MOD_FillMortarPrim      ,ONLY: U_MortarPrim
 #if PPLimiter
-USE MOD_PPLimiter           ,ONLY: PositivityPreservingLimiter
+USE MOD_PPLimiter           ,ONLY: PositivityPreservingLimiter,ResetPPLimiter
 #endif
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
@@ -313,6 +313,9 @@ REAL,INTENT(IN)                 :: t                      !< Current time
 ! NOTE: UT and U are nullified in DGInit, and Ut is set directly in the volume integral, so in this implementation,
 !       ARRAYS DO NOT NEED TO BE NULLIFIED, OTHERWISE THEY HAVE TO!
 ! CALL VNullify(nTotalU,Ut)
+#if PPLimiter
+CALL ResetPPLimiter()
+#endif
 
 ! 1. Filter the solution vector if applicable, filter_pointer points to cut-off filter or LAF filter (see filter.f90)
 IF(FilterType.GT.0) CALL Filter_Pointer(U,FilterMat)

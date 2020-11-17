@@ -28,6 +28,10 @@ INTERFACE InitPPLimiter
   MODULE PROCEDURE InitPPLimiter
 END INTERFACE
 
+INTERFACE ResetPPLimiter
+  MODULE PROCEDURE ResetPPLimiter
+END INTERFACE
+
 INTERFACE PositivityPreservingLimiter
   MODULE PROCEDURE PositivityPreservingLimiter_Volume
   MODULE PROCEDURE PositivityPreservingLimiter_SidesCons
@@ -44,6 +48,7 @@ END INTERFACE
 
 PUBLIC:: DefineParametersPPLimiter
 PUBLIC:: InitPPLimiter
+PUBLIC:: ResetPPLimiter
 PUBLIC:: PositivityPreservingLimiter
 PUBLIC:: PositivityPreservingLimiteriSide
 PUBLIC:: PP_Info
@@ -153,6 +158,22 @@ END IF
 #endif
 END SUBROUTINE InitPPLimiter
 
+
+SUBROUTINE ResetPPLimiter()
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_Filter_Vars ,ONLY: PP_Sides
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+PP_Sides = 0
+END SUBROUTINE ResetPPLimiter
+
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
 !==================================================================================================================================
@@ -253,7 +274,6 @@ REAL        :: UPrimTmp_slave (PP_nVarPrim,0:PP_N,0:PP_NZ)              !<
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
-PP_Sides = 0
 DO SideID=firstSideID,lastSideID
   UConsTmp_slave  = UCons_slave (:,:,:,SideID)
   UConsTmp_master = UCons_master(:,:,:,SideID)
@@ -311,7 +331,6 @@ REAL        :: UConsTmp_slave (PP_nVar,0:PP_N,0:PP_NZ)              !<
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
-PP_Sides = 0
 DO SideID=firstSideID,lastSideID
   UConsTmp_slave  = UCons_slave (:,:,:,SideID)
   UConsTmp_master = UCons_master(:,:,:,SideID)

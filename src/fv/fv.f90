@@ -611,7 +611,6 @@ REAL        :: UTmp_slave(nVar,0:PP_N,0:PP_NZ)               !<
 firstSideID = firstInnerSide
 lastSideID  = lastMPISide_MINE
 
-PP_Sides = 0
 DO SideID=firstSideID,lastSideID
   UTmp_slave =U_slave(:,:,:,SideID)
   UTmp_master=U_master(:,:,:,SideID)
