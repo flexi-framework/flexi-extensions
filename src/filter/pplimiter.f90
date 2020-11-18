@@ -35,7 +35,6 @@ END INTERFACE
 
 INTERFACE PositivityPreservingLimiter
   MODULE PROCEDURE PositivityPreservingLimiter_Volume
-  MODULE PROCEDURE PositivityPreservingLimiter_SidesCons
   MODULE PROCEDURE PositivityPreservingLimiter_SidesPrim
 END INTERFACE
 
@@ -274,9 +273,11 @@ lastSideID  = lastMPISide_MINE
 DO SideID=firstSideID,lastSideID
 #if FV_ENABLED
   IF      (FV_Elems_Sum(SideID).EQ.0) THEN
+#if (PP_NodeType==1) /* Gauss Nodes */
     ! dg
     CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.FALSE.)
     CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.FALSE.)
+#endif
   ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
     ! slave
     CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.TRUE.)
@@ -286,9 +287,11 @@ DO SideID=firstSideID,lastSideID
     CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), UPrim_slave (:,:,:,SideID), FVElem=.FALSE.)
     CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.TRUE.)
   ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
+#if (PP_NodeType==1) /* Gauss Nodes */
     ! fv
     CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,UPrim_slave (:,:,:,SideID), FVElem=.TRUE.)
     CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID),FVElem=.TRUE.)
+#endif
   END IF
 #else
   CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,UPrim_slave (:,:,:,SideID) )
@@ -296,57 +299,6 @@ DO SideID=firstSideID,lastSideID
 #endif
 END DO
 END SUBROUTINE PositivityPreservingLimiter_SidesPrim
-
-!==================================================================================================================================
-!> Limit if necessary the DG solution at faces between a elements.
-!==================================================================================================================================
-SUBROUTINE PositivityPreservingLimiter_SidesCons(UCons_master,UCons_slave)
-! MODULES
-USE MOD_PreProc
-USE MOD_Globals
-#if FV_ENABLED
-USE MOD_FV_Vars     ,ONLY: FV_Elems_Sum
-#endif
-USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
-USE MOD_Filter_Vars ,ONLY: PP_Sides
-! IMPLICIT VARIABLE HANDLING
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT / OUTPUT VARIABLES
-REAL,INTENT(INOUT)          :: UCons_master(PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on master side
-REAL,INTENT(INOUT)          :: UCons_slave (PP_nVar,    0:PP_N,0:PP_NZ,1:nSides) !< Conservative Solution on slave side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER     :: firstSideID,lastSideID,SideID
-!==================================================================================================================================
-firstSideID = firstInnerSide
-lastSideID  = lastMPISide_MINE
-
-DO SideID=firstSideID,lastSideID
-#if FV_ENABLED
-  IF      (FV_Elems_Sum(SideID).EQ.0) THEN
-    ! dg
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.FALSE.)
-  ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
-    ! slave
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.FALSE.)
-  ELSE IF (FV_Elems_Sum(SideID).EQ.2) THEN
-    ! master
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID), FVElem=.FALSE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.TRUE.)
-  ELSE IF (FV_Elems_Sum(SideID).EQ.3) THEN
-    ! fv
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,FVElem=.TRUE.)
-    CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),FVElem=.TRUE.)
-  END IF
-#else
-  CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) )
-  CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID))
-#endif
-END DO
-END SUBROUTINE PositivityPreservingLimiter_SidesCons
 
 !==================================================================================================================================
 !> Hyperbolicity Preserving Limiter, limits polynomial towards admissible cellmean
