@@ -294,8 +294,10 @@ DO SideID=firstSideID,lastSideID
 #endif
   END IF
 #else
+#if (PP_NodeType==1) /* Gauss Nodes */
   CALL PositivityPreservingLimiteriSide(SideID,UCons_slave (:,:,:,SideID) ,UPrim_slave (:,:,:,SideID) )
   CALL PositivityPreservingLimiteriSide(SideID,UCons_master(:,:,:,SideID),UPrim_master(:,:,:,SideID))
+#endif
 #endif
 END DO
 END SUBROUTINE PositivityPreservingLimiter_SidesPrim
@@ -342,18 +344,22 @@ REAL                         :: Surf,tmp
 !==================================================================================================================================
 
 #if FV_ENABLED
-IF (PRESENT(FVElem)) THEN 
-  IF (FVElem) THEN
-    wloc(:) = FV_w
-    ind = 1
-  END IF
+IF (PRESENT(FVElem)) THEN
+  FVElemloc = FVElem
+ELSE
+  FVElemloc = .FALSE.
+END IF
+
+IF (FVElemloc) THEN
+  wloc(:) = FV_w
+  ind = 1
 ELSE
   wloc(:) = wGP
   ind = 0
 END IF
 #else
-  wloc(:) = wGP
-  ind = 0
+wloc(:) = wGP
+ind = 0
 #endif
   
 ! mean value
