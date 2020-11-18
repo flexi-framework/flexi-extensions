@@ -260,9 +260,6 @@ USE MOD_Mesh_Vars,           ONLY: nSides
 USE MOD_FV_Vars             ,ONLY: FV_Elems_master,FV_Elems_slave,FV_Elems_Sum
 USE MOD_FV_Mortar           ,ONLY: FV_Elems_Mortar
 USE MOD_FV                  ,ONLY: FV_DGtoFV
-#if PPLimiter
-USE MOD_FV                  ,ONLY: FV_DGtoFVPP
-#endif /*PPLimiter*/
 USE MOD_FV_VolInt           ,ONLY: FV_VolInt
 #if USE_MPI
 USE MOD_MPI                 ,ONLY: StartExchange_FV_Elems
@@ -415,10 +412,6 @@ FV_Elems_Sum = FV_Elems_master + 2*FV_Elems_slave
 
 ! 5.1)
 CALL FV_DGtoFV(PP_nVarPrim,FV_multi_master,FV_multi_slave)
-#if PPLimiter
-! Do PP limiting for calculating the gradients.
-CALL FV_DGtoFVPP(PP_nVar    ,FV_multi_master,FV_multi_slave)
-#endif
 
 #if USE_MPI
 ! 5.2)

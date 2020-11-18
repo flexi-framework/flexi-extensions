@@ -55,12 +55,6 @@ INTERFACE FV_DGtoFV
   MODULE PROCEDURE FV_DGtoFV
 END INTERFACE
 
-#if PPLimiter
-INTERFACE FV_DGtoFVPP
-  MODULE PROCEDURE FV_DGtoFVPP
-END INTERFACE
-#endif
-
 INTERFACE FinalizeFV
   MODULE PROCEDURE FinalizeFV
 END INTERFACE
@@ -72,9 +66,6 @@ PUBLIC::FV_ProlongFVElemsToFace
 PUBLIC::FV_Info
 PUBLIC::FV_FillIni
 PUBLIC::FV_DGtoFV
-#if PPLimiter
-PUBLIC::FV_DGtoFVPP
-#endif
 PUBLIC::FinalizeFV
 !==================================================================================================================================
 
@@ -582,44 +573,6 @@ DO SideID=firstSideID,lastSideID
 END DO
 
 END SUBROUTINE FV_DGtoFV
-
-#if PPLimiter
-!==================================================================================================================================
-!> Limit if necessary the switched DG solution at faces between a DG element and a FV sub-cells element to Finite Volume.
-!==================================================================================================================================
-SUBROUTINE FV_DGtoFVPP(nVar,U_master,U_slave)
-! MODULES
-USE MOD_PreProc
-USE MOD_Globals
-USE MOD_FV_Vars
-USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides,SideToElem
-USE MOD_PPLimiter   ,ONLY: PositivityPreservingLimiteriSide
-USE MOD_Filter_Vars ,ONLY: PP_Sides
-! IMPLICIT VARIABLE HANDLING
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT / OUTPUT VARIABLES
-INTEGER,INTENT(IN) :: nVar                                   !< number of solution variables
-REAL,INTENT(INOUT) :: U_master(nVar,0:PP_N,0:PP_NZ,1:nSides) !< Solution on master side
-REAL,INTENT(INOUT) :: U_slave (nVar,0:PP_N,0:PP_NZ,1:nSides) !< Solution on slave side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER     :: firstSideID,lastSideID,SideID
-!==================================================================================================================================
-firstSideID = firstInnerSide
-lastSideID  = lastMPISide_MINE
-
-DO SideID=firstSideID,lastSideID
-  IF (FV_Elems_Sum(SideID).EQ.2) THEN
-    ! Master
-    CALL PositivityPreservingLimiteriSide(SideID,U_master(:,:,:,SideID),FVElem=.TRUE.)
-  ELSE IF (FV_Elems_Sum(SideID).EQ.1) THEN
-    ! Slave
-    CALL PositivityPreservingLimiteriSide(SideID,U_slave(:,:,:,SideID),FVElem=.TRUE.)
-  END IF
-END DO
-END SUBROUTINE FV_DGtoFVPP
-#endif /*PPLimiter*/
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.
