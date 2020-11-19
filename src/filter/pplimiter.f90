@@ -69,9 +69,10 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 CALL prms%SetSection("HP Limiter")
-CALL prms%CreateRealOption(            'PPLimiterThreshold',    "Threashold for PP Limiter to modify solution. PPLimiterVar \n"//& 
-                                                                 "has to be smaller than this threashold")
-CALL prms%CreateRealOption(            'PPLimiterFactor',        "Factor for correction. Is applied to avoid permanent limiting.")                                                           
+CALL prms%CreateRealOption(            'PPLimiterThreshold',     "Threshold for PP Limiter to modify solution. PPLimiterVar \n"//& 
+                                                                 "has to be smaller than this threshold")
+CALL prms%CreateRealOption(            'PPLimiterFactor',        "Factor for correction. Is applied to avoid permanent limiting.") 
+CALL prms%CreateLogicalOption(         'PPDoSurface',            "Flags whether surface flux limiting should be applied.")                                                           
 END SUBROUTINE DefineParametersPPLimiter
 
 !==================================================================================================================================
@@ -82,7 +83,7 @@ SUBROUTINE InitPPLimiter()
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Filter_Vars
-USE MOD_ReadInTools        ,ONLY: GETREAL
+USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_IO_HDF5            ,ONLY: AddToFieldData
 USE MOD_IO_HDF5            ,ONLY: AddToElemData,ElementOut
 USE MOD_Mesh_Vars          ,ONLY: nElems,sJ
@@ -99,8 +100,9 @@ INTEGER                      :: iElem,i,j,k
 !==================================================================================================================================
 
 ! Read in variables
-PPeps = GETREAL('PPLimiterThreshold','1.E-8')
-PPfac = GETREAL('PPLimiterFactor','1.00')
+PPeps    = GETREAL('PPLimiterThreshold','1.E-8')
+PPfac    = GETREAL('PPLimiterFactor','1.00')
+PPDoSurf = GETLOGICAL('PPDoSurface','True')
 
 ! Sanity check
 IF (PPfac.GT.1.0) CALL Abort(__STAMP__,'PPLimiterFactor has to be smaller than 1.0!')
@@ -254,7 +256,7 @@ USE MOD_Globals
 USE MOD_FV_Vars     ,ONLY: FV_Elems_Sum
 #endif
 USE MOD_Mesh_Vars   ,ONLY: firstInnerSide,lastMPISide_MINE,nSides
-USE MOD_Filter_Vars ,ONLY: PP_Sides
+USE MOD_Filter_Vars ,ONLY: PP_Sides,PPDoSurf
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

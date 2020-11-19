@@ -246,6 +246,7 @@ USE MOD_FillMortarCons      ,ONLY: U_MortarCons,Flux_MortarCons
 USE MOD_FillMortarPrim      ,ONLY: U_MortarPrim
 #if PPLimiter
 USE MOD_PPLimiter           ,ONLY: PositivityPreservingLimiter,ResetPPLimiter
+USE MOD_Filter_Vars         ,ONLY: PPDoSurf
 #endif
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
@@ -524,7 +525,7 @@ CALL GetConservativeStateSurface(UPrim_master, UPrim_slave, U_master, U_slave, F
 #endif
 
 #if PPLimiter
-CALL PositivityPreservingLimiter(U_master,U_slave,UPrim_master,UPrim_slave)
+IF(PPDoSurf) CALL PositivityPreservingLimiter(U_master,U_slave,UPrim_master,UPrim_slave)
 #endif
 
 #if USE_MPI

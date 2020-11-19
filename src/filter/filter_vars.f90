@@ -47,6 +47,7 @@ REAL                   :: LAF_alpha             !< Relaxation factor (LAF)
 #if PPLimiter
 REAL                   :: PPeps                  !< limiter threashold
 REAL                   :: PPfac                  !< limiter factor
+LOGICAL                :: PPDoSurf               !< Surface flag
 INTEGER,ALLOCATABLE    :: PP_Elems(:)            !< List of Elements that got limited 
 INTEGER,ALLOCATABLE    :: PP_Sides(:)            !< List of Elements that got limited at the Sides
 #endif
