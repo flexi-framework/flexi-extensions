@@ -99,6 +99,7 @@ USE MOD_Equation_Vars     ,ONLY: StrVarNames
 #if PP_dim == 2
 USE MOD_2D                ,ONLY: ExpandArrayTo3D
 #endif
+USE MOD_IceSurf_Vars      ,ONLY: doCalcIceSurfData,nWallSidesGlob,nWallSides,offsetWallSides,IceSurfData,NOutSurf
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -206,6 +207,14 @@ IF(iSequentialRun .EQ. 1) THEN
   CALL WriteAdditionalFieldData(FileName,FieldOut)
 ENDIF
 
+IF(doCalcIceSurfData)THEN 
+  CALL GatheredWriteArray(FileName,create=.FALSE.,&
+                          DataSetName='IceSurfData', rank=5,&
+                          nValGlobal=(/ICS_NVAR,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
+                          nVal      =(/ICS_NVAR,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
+                          offset=    (/0,      0,     0 ,      offsetWallSides, iGlobalRun-1/),&
+                          collective=.TRUE.,RealArray=IceSurfData)
+END IF 
 
 
 IF(MPIGlobalRoot)THEN

@@ -305,7 +305,7 @@ IF (BUILD_TYPE_LC MATCHES "debug")
 ELSE()
   IF (HASIPO)
     # enable IPO globally (IPO branding: Intel => IPO, GNU => LTO, PGI => IPA)
-    SET(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)  # enable IPO globally
+    #SET(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)  # enable IPO globally
   ENDIF()
 ENDIF()
 
@@ -581,6 +581,7 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/filter/*.f90
                            ./src/io_hdf5/*.f90
                            ./src/timedisc/*.f90
+                           ./src/icesurf/*.f90
                            ./src/testcase/${FLEXI_TESTCASE}/*.f90
                            ./src/flexilib.f90
                            ./unitTests/unittest.f90

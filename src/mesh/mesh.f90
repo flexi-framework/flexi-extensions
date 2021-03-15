@@ -87,7 +87,7 @@ END SUBROUTINE DefineParametersMesh
 !> - compute the mesh metrics
 !> - provide mesh metrics for overintegration
 !==================================================================================================================================
-SUBROUTINE InitMesh(meshMode,MeshFile_IN)
+SUBROUTINE InitMesh(meshMode,MeshFile_IN,doDeallocateNodeCoords)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -118,6 +118,7 @@ IMPLICIT NONE
 INTEGER,INTENT(IN) :: meshMode !< 0: only read and build Elem_xGP,
                                !< 1: as 0 + build connectivity, 2: as 1 + calc metrics
 CHARACTER(LEN=255),INTENT(IN),OPTIONAL :: MeshFile_IN !< file name of mesh to be read
+LOGICAL,INTENT(IN),OPTIONAL :: doDeallocateNodeCoords !< true (deallocate) by default
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL              :: x(3),meshScale
@@ -385,13 +386,19 @@ IF (meshMode.GT.0) THEN
   END DO ! iElem
 END IF
 
-SDEALLOCATE(NodeCoords)
+IF(PRESENT(doDeallocateNodeCoords))THEN
+  IF(doDeallocateNodeCoords)THEN
+    SDEALLOCATE(NodeCoords)
+  END IF
+ELSE
+  SDEALLOCATE(NodeCoords)
+END IF 
 SDEALLOCATE(dXCL_N)
 SDEALLOCATE(Ja_Face)
 SDEALLOCATE(TreeCoords)
 SDEALLOCATE(xiMinMax)
 SDEALLOCATE(ElemToTree)
-IF (.NOT.postiMode) DEALLOCATE(scaledJac)
+IF ((.NOT.postiMode).AND.(ALLOCATED(scaledJac))) DEALLOCATE(scaledJac)
 
 CALL AddToElemData(ElementOut,'myRank',IntScalar=myRank)
 

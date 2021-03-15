@@ -68,6 +68,7 @@ USE MOD_FV,                ONLY:DefineParametersFV,InitFV
 USE MOD_FV_Basis,          ONLY:InitFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
+USE MOD_IceSurf,           ONLY:DefineParametersIceSurf,InitIceSurf
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
 USE MOD_Restart_Vars      ,ONLY:RestartFile
 USE MOD_StringTools       ,ONLY:STRICMP, GetFileExtension
@@ -134,6 +135,7 @@ CALL DefineParametersSponge()
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 CALL DefineParametersRecordPoints()
+CALL DefineParametersIceSurf()
 
 ! check for command line argument --help or --markdown
 IF (doPrintHelp.GT.0) THEN
@@ -203,6 +205,7 @@ CALL InitSponge()
 CALL InitTimeDisc()
 CALL InitAnalyze()
 CALL InitRecordpoints()
+CALL InitIceSurf()
 CALL IgnoredParameters()
 CALL Restart()
 
@@ -244,6 +247,7 @@ USE MOD_FV,                ONLY:FinalizeFV
 USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:FinalizeIndicator
+USE MOD_IceSurf,           ONLY:FinalizeIceSurf
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
 USE MOD_HDF5_Input,        ONLY:FinalizeBatchInput
 IMPLICIT NONE
@@ -253,6 +257,7 @@ REAL                    :: Time                              !< Used to measure 
 !==================================================================================================================================
 !Finalize
 CALL FinalizeOutput()
+CALL FinalizeIceSurf()
 CALL FinalizeRecordPoints()
 CALL FinalizeAnalyze()
 #if PARABOLIC

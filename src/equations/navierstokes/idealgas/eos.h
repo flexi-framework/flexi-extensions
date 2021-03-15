@@ -81,3 +81,5 @@
 #elif PP_VISC == 2
 #define VISCOSITY_TEMPERATURE(T)       mu0*T**ExpoSuth
 #endif
+
+#define WALLBCTYPES() (/3,4,9,31,91/)

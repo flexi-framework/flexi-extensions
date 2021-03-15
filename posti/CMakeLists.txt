@@ -4,6 +4,8 @@
 
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISU                  "Build the visu tool"                                ON  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_MERGETIMEAVERAGES     "Build the time-averaging tool"                      ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_SORTICINGSIDES        "Build the sort icing sides tool"                    ON  "FLEXI_BUILDPOSTI" OFF)
+CMAKE_DEPENDENT_OPTION(POSTI_BUILD_SWIM                  "Build the swim tool"                                ON  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_DMD                   "Build the DMD tool"                                 OFF "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_PREPARERECORDPOINTS   "Build the Record point preprocessing tool"          ON  "FLEXI_BUILDPOSTI" OFF)
 CMAKE_DEPENDENT_OPTION(POSTI_BUILD_VISUALIZERECORDPOINTS "Build the Record Point visualization tool"          OFF "FLEXI_BUILDPOSTI" OFF)
@@ -85,6 +87,14 @@ ENDIF()
 
 IF(POSTI_BUILD_MERGETIMEAVERAGES)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/mergetimeaverages/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_SORTICINGSIDES)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/sorticingsides/CMakeLists.txt)
+ENDIF()
+
+IF(POSTI_BUILD_SWIM)
+  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/swim/CMakeLists.txt)
 ENDIF()
 
 IF(POSTI_BUILD_DMD)
