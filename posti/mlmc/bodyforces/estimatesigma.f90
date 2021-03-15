@@ -55,15 +55,16 @@ INTEGER             :: i,j,k,iElem
 REAL,ALLOCATABLE    :: UPrim(:,:,:,:,:)
 LOGICAL             :: validInput,hasCoarse
 INTEGER             :: nPrevious
+!REAL                :: RefState(5)
 !===================================================================================================================================
 CALL SetStackSizeUnlimited()
 CALL InitMPI()
 CALL InitMPIInfo()
 
 SWRITE(UNIT_stdOut,'(132("="))')
-SWRITE(UNIT_stdOut,'(1("**********************************"))')
-SWRITE(UNIT_stdOut,'(1("**     START SIGMA ESTIMATE FOR BODYFORCES    **"))')
-SWRITE(UNIT_stdOut,'(1("**********************************"))')
+SWRITE(UNIT_stdOut,'(1("*****************************************"))')
+SWRITE(UNIT_stdOut,'(1("** START SIGMA ESTIMATE FOR BODYFORCES **"))')
+SWRITE(UNIT_stdOut,'(1("*****************************************"))')
 SWRITE(UNIT_stdOut,'(132("="))')
 
 IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
@@ -78,6 +79,7 @@ CALL DefineParametersIO_HDF5()
 CALL DefineParametersEOS()
 CALL DefineParametersEstSig()
 CALL DefineParametersMesh()
+CALL prms%CreateRealArrayOption("RefState"           , " RefState, for derived quantities")
 
 ! Parse parameters
 ! check for command line argument --help or --markdown
@@ -159,6 +161,7 @@ CALL InitMesh(2,MeshFile_IN=MeshFileNew)
 ! CALL InitAnalyzeBasis(NNew,nAna,xGP,wBary)
 CALL InitEos()
 
+RefState = GETREALARRAY('RefState',nVar_State)
 
 !-----------------------------------------------------------------------------------------------------------------------------------
 CALL OpenDataFile(StateFileFine,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
@@ -211,20 +214,19 @@ ALLOCATE(BiasBodyForces        (1:9))
 
 IF (.NOT.hasCoarse) UCoarse = 0.
 
-IF (nStart.EQ.1) THEN
-  UFineSum     =0.
-  UCoarseSum   =0.
-  UFineSqSum   =0.
-  UCoarseSqSum =0.
-  DUSqSum      =0.
-  BodyForcesFineSum = 0.
-  BodyForcesCoarseSum = 0.
-  BodyForcesFineSqSum = 0.
-  BodyForcesCoarseSqSum = 0.
-  DBodyForcesSqSum = 0.
-ELSE
-  nVal=(/nVarTotal,NNew,NNew,NNew,nElemsNew/)
-  nValBodyForces=(/9/)
+UFineSum     =0.
+UCoarseSum   =0.
+UFineSqSum   =0.
+UCoarseSqSum =0.
+DUSqSum      =0.
+BodyForcesFineSum = 0.
+BodyForcesCoarseSum = 0.
+BodyForcesFineSqSum = 0.
+BodyForcesCoarseSqSum = 0.
+DBodyForcesSqSum = 0.
+nValBodyForces=(/9/)
+IF (nStart.NE.1) THEN
+  nVal=(/nVarTotal,NNew+1,NNew+1,NNew+1,nElemsNew/)
   CALL ReadSums(FileNameSums)
   CALL ReadSumsBF(FileNameSumsBF)
 END IF
@@ -250,6 +252,7 @@ DO iSample=nStart,nEnd
     END DO
     UFine(1:nVar_State,:,:,:,:)=U
     UFine(nVar_State+1:,:,:,:,:)=UPrim(2:,:,:,:,:)
+    UFine(nVar_State*2+1,:,:,:,:)=(UPrim(5,:,:,:,:)-RefState(5))/(0.5*RefState(1)*NORM2(RefState(2:4))*NORM2(RefState(2:4)))
   ELSE
     UFine=U
   END IF
@@ -268,6 +271,7 @@ DO iSample=nStart,nEnd
       END DO
       UCoarse(1:nVar_State,:,:,:,:)=U
       UCoarse(nVar_State+1:,:,:,:,:)=UPrim(2:,:,:,:,:)
+      UCoarse(nVar_State*2+1,:,:,:,:)=(UPrim(5,:,:,:,:)-RefState(5))/(0.5*RefState(1)*NORM2(RefState(2:4))*NORM2(RefState(2:4)))
     ELSE
       UCoarse=U
     END IF

@@ -17,14 +17,14 @@
 !===================================================================================================================================
 
 
-PROGRAM NISP
+PROGRAM MC
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_Commandline_Arguments
-USE MOD_Nisp_Vars
-USE MOD_Nisp                    ,ONLY: DefineParametersNisp, InitNisp,  ComputeModes, FinalizeNisp
-USE MOD_Nisp_Output             ,ONLY: WriteMeanAndVarianceToHDF5
+USE MOD_MC_Vars
+USE MOD_MC                    ,ONLY: DefineParametersMC, InitMC,  ComputeMCEstimator, FinalizeMC
+USE MOD_MC_Output             ,ONLY: WriteMeanAndVarianceMCToHDF5
 USE MOD_ReadInTools
 USE MOD_StringTools             ,ONLY: STRICMP,GetFileExtension
 USE MOD_MPI                     ,ONLY: DefineParametersMPI,InitMPI
@@ -47,15 +47,14 @@ IF (nProcessors.GT.1) CALL CollectiveStop(__STAMP__, &
 CALL ParseCommandlineArguments()
 
 WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
-WRITE(UNIT_stdOut,'(A)') " || Compute NISP modes                                                                                      ! ||"
-WRITE(UNIT_stdOut,'(A)') " || For uncertain viscosity, derived quantities like pressure are wrong! Needs to be fixed.                 ! ||"
+WRITE(UNIT_stdOut,'(A)') " || Compute MC estimate                                                                                     ! ||"
 WRITE(UNIT_stdOut,'(A)') " ||===========================================================================================================||"
 WRITE(UNIT_stdOut,'(A)')
 
 ! Define parameters needed
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
-CALL DefineParametersNisp()
+CALL DefineParametersMC()
 CALL DefineParametersEos()
 !CALL DefineParametersEquation()
 CALL prms%read_options(Args(1))
@@ -66,20 +65,21 @@ IF (doPrintHelp.GT.0) THEN
 END IF
 ! check if parameter file is given
 IF ((nArgs.LT.1).OR.(.NOT.(STRICMP(GetFileExtension(Args(1)),'ini')))) THEN
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: postiNisp prm-file StochInput.h5 statefile')
+  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: postiMC prm-file statefiles')
 END IF
 CALL InitIOHDF5()
 CALL InitEOS()
 !CALL InitEquation()
-CALL InitNisp()
+CALL InitMC()
+nStateFiles=nArgs-1
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! Compute Modes, Mean and Variance
 !----------------------------------------------------------------------------------------------------------------------------------!
-CALL ComputeModes()
+CALL ComputeMCEstimator()
 
 SWRITE(UNIT_stdOut,'(A)') ' WRITING  MEAN and VARIANCE...'
-CALL WriteMeanAndVarianceToHDF5()
-CALL FinalizeNisp()
+CALL WriteMeanAndVarianceMCToHDF5()
+CALL FinalizeMC()
 #if USE_MPI
 CALL MPI_FINALIZE(iError)
 IF(iError .NE. 0) &
@@ -90,4 +90,4 @@ WRITE(UNIT_stdOut,'(132("="))')
 WRITE(UNIT_stdOut,'(A)') ' NISP TOOL FINISHED! '
 WRITE(UNIT_stdOut,'(132("="))')
 
-END PROGRAM NISP
+END PROGRAM MC

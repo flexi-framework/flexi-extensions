@@ -62,7 +62,9 @@ DO iArg=1,nArgs
   !Old version
   !StdDev = StdDev + snSamplesM1*(DUSqSum   - snSamples*(UFineSum-UCoarseSum)*(UFineSum-UCoarseSum))
   !Chernov 
-  StdDev = StdDev + snSamplesM1*(UFineSqSum- UCoarseSqSum) - snSamples*snSamplesM1*(UFineSum**2 - UCoarseSum**2)
+  WRITE (*,*) nSamples_Sums
+  StdDev           = StdDev           + snSamplesM1   *(UFineSqSum- UCoarseSqSum) - snSamples*snSamplesM1*(UFineSum**2 - UCoarseSum**2)
+  
 END DO
 StdDev = SQRT(ABS(StdDev))
 

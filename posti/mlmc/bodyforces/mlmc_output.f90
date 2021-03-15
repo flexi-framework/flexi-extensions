@@ -56,7 +56,7 @@ INTEGER              :: i
 TYPE tArrayPtr
   REAL,POINTER       :: ptr(:,:,:,:,:)
 END TYPE
-TYPE(tArrayPtr)                       :: DataSetPtrs(5)
+TYPE(tArrayPtr)      :: DataSetPtrs(5)
 !===================================================================================================================================
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE Sums TO HDF5 FILE "',TRIM(FileNameSums),'" ...'
 
@@ -70,6 +70,7 @@ VarNames( 7)='Velocityy'
 VarNames( 8)='VelocityZ'
 VarNames( 9)='Pressure'
 VarNames(10)='Temperature'
+VarNames(11)='cp'
 
 CALL GenerateFileSkeleton(TRIM(FileNameSums),'EstSigSum',nVarTotal,NNew,(/'DUMMY_DO_NOT_VISUALIZE'/),&
                           MeshFileNew,Time_State,Time_State,withUserblock=.FALSE.,batchMode=.FALSE.,create=.TRUE.)
@@ -103,7 +104,6 @@ DO i=1,5
 END DO
 
 CALL WriteAttribute(File_ID,'nSamples',1,IntScalar=NEnd)
-
 CALL WriteAttribute(File_ID,'SigmaSq',1,RealScalar=SigmaSq)
 CALL WriteAttribute(File_ID,'SigmaSqFine',1,RealScalar=SigmaSqFine)
 CALL WriteAttribute(File_ID,'Bias',1,RealScalar=Bias)
@@ -133,10 +133,10 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)   :: DataSetNames(5)
 INTEGER              :: i
-TYPE tArrayPtr
-  REAL,POINTER       :: ptr(:)
-END TYPE
-TYPE(tArrayPtr)      :: DataSetPtrs(5)
+REAL      :: DataSetPtrs(9,5)
+INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
+INTEGER(HSIZE_T)               :: Dimsf(1)
+INTEGER*4 ::dims
 !===================================================================================================================================
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE BODYFORCES Sums TO HDF5 FILE "',TRIM(FileNameSumsBF),'" ...'
 DataSetNames(1)='BodyForcesFineSum'
@@ -144,29 +144,31 @@ DataSetNames(2)='BodyForcesCoarseSum'
 DataSetNames(3)='BodyForcesFineSqSum'
 DataSetNames(4)='BodyForcesCoarseSqSum'
 DataSetNames(5)='DBodyForcesSqSum'
-DataSetPtrs(1)%ptr=>BodyForcesFineSum
-DataSetPtrs(2)%ptr=>BodyForcesCoarseSum
-DataSetPtrs(3)%ptr=>BodyForcesFineSqSum
-DataSetPtrs(4)%ptr=>BodyForcesCoarseSqSum
-DataSetPtrs(5)%ptr=>DBodyForcesSqSum
+DataSetPtrs(:,1)=BodyForcesFineSum
+DataSetPtrs(:,2)=BodyForcesCoarseSum
+DataSetPtrs(:,3)=BodyForcesFineSqSum
+DataSetPtrs(:,4)=BodyForcesCoarseSqSum
+DataSetPtrs(:,5)=DBodyForcesSqSum
 
 CALL OpenDataFile(FileNameSumsBF,create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
-
-DO i=1,5
-  CALL WriteArray(DataSetName=DataSetNames(i),&
-                  rank=1,&
-                  nValGlobal=(/1/),&
-                  nVal=(/1/),&
-                  offset=(/0/),&
-                  collective=.FALSE.,&
-                  RealArray=DataSetPtrs(i)%ptr)
-END DO
-
 CALL WriteAttribute(File_ID,'nSamples',1,IntScalar=NEnd)
-
 CALL WriteAttribute(File_ID,'SigmaSq',1,RealScalar=SigmaSq)
 CALL WriteAttribute(File_ID,'SigmaSqFine',1,RealScalar=SigmaSqFine)
 CALL WriteAttribute(File_ID,'Bias',1,RealScalar=Bias)
+
+
+DO i=1,5
+  WRITE (*,*) DataSetPtrs(:,i)
+  CALL WriteArray(DataSetName=DataSetNames(i),&
+                  rank=1,&
+                  nValGlobal=(/nValBodyForces,1/),&
+                  nVal=(/nValBodyForces,1/),&
+                  offset=(/0/),&
+                  collective=.FALSE.,&
+                  !resizeDim= (/.FALSE./),&
+                  RealArray=DataSetPtrs(:,i))
+END DO
+
 
 CALL CloseDataFile()
 
@@ -204,6 +206,7 @@ VarNames( 7)='Velocityy'
 VarNames( 8)='VelocityZ'
 VarNames( 9)='Pressure'
 VarNames(10)='Temperature'
+VarNames(11)='cp'
 !-----------------------------------------------------------------------------------------------------------------------------------
 FileName = 'SOLUTION_State.h5'
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN AND STDDEV TO HDF5 FILE "',TRIM(FileName),'" ... \n'

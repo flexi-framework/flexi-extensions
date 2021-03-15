@@ -40,6 +40,7 @@ SUBROUTINE CalcBodyForces(BodyForce,Fp,Fv)
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Equation_Vars,   ONLY:AlphaRefState
+USE MOD_Exactfunc_Vars,  ONLY:Angle
 USE MOD_DG_Vars,         ONLY:UPrim_master
 #if PARABOLIC
 USE MOD_Lifting_Vars,    ONLY:gradUx_master,gradUy_master,gradUz_master
@@ -101,8 +102,10 @@ END IF
 BodyForce=Fv+Fp
 #endif
 u_tmp = BodyForce(1:2,:)
-BodyForce(1,:) = COS(AlphaRefState)*u_tmp(1,:) - SIN(AlphaRefState)*u_tmp(2,:)
-BodyForce(2,:) = COS(AlphaRefState)*u_tmp(2,:) + SIN(AlphaRefState)*u_tmp(1,:) 
+!BodyForce(1,:) = COS(AlphaRefState)*u_tmp(1,:) - SIN(AlphaRefState)*u_tmp(2,:)
+!BodyForce(2,:) = COS(AlphaRefState)*u_tmp(2,:) + SIN(AlphaRefState)*u_tmp(1,:) 
+BodyForce(1,:) = COS(Angle)*u_tmp(1,:) - SIN(Angle)*u_tmp(2,:)
+BodyForce(2,:) = COS(Angle)*u_tmp(2,:) + SIN(Angle)*u_tmp(1,:) 
 
 END SUBROUTINE CalcBodyForces
 

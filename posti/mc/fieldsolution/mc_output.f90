@@ -1,6 +1,6 @@
 #include "flexi.h"
 
-MODULE MOD_Nisp_Output
+MODULE MOD_MC_Output
 !===================================================================================================================================
 ! Module for generic data output in HDF5 fromat
 !===================================================================================================================================
@@ -14,15 +14,15 @@ PRIVATE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Private Part ---------------------------------------------------------------------------------------------------------------------
 ! Public Part ----------------------------------------------------------------------------------------------------------------------
-INTERFACE WriteMeanAndVarianceToHDF5
-  MODULE PROCEDURE WriteMeanAndVarianceToHDF5
+INTERFACE WriteMeanAndVarianceMCToHDF5
+  MODULE PROCEDURE WriteMeanAndVarianceMCToHDF5
 END INTERFACE
 
-PUBLIC::WriteMeanAndVarianceToHDF5
+PUBLIC::WriteMeanAndVarianceMCToHDF5
 !===================================================================================================================================
 CONTAINS
 
-SUBROUTINE WriteMeanAndVarianceToHDF5()
+SUBROUTINE WriteMeanAndVarianceMCToHDF5()
 !===================================================================================================================================
 ! Subroutine to write the time averaged solution U to HDF5 format
 !===================================================================================================================================
@@ -31,7 +31,7 @@ USE MOD_Globals
 USE MOD_IO_HDF5
 USE MOD_HDF5_Output         ,ONLY: WriteAttribute,WriteArray,GenerateFileSkeleton
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
-USE MOD_Nisp_Vars
+USE MOD_MC_Vars
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ VarNames(10)='Temperature'
 VarNames(11)='cp'
 !===================================================================================================================================
 !-----------------------------------------------------------------------------------------------------------------------------------
-FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM('NISP'),Time_State))//'.h5'
+FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM('MC'),Time_State))//'.h5'
 SWRITE(UNIT_stdOut,'(a,a,a)',ADVANCE='NO')' WRITE MEAN AND STDDEV TO HDF5 FILE "',TRIM(FileName),'" ... \n'
 nGlobalElems=nElemsNew
 CALL GenerateFileSkeleton(TRIM(FileName),'State',1,NNew,(/'DUMMY_DO_NOT_VISUALIZE'/),&
@@ -72,7 +72,7 @@ CALL WriteArray('StandardDeviation',5,(/2*nVar+addVars,NNew+1,NNew+1,NNew+1,nEle
 CALL CloseDataFile()
 
 SWRITE(UNIT_stdOut,'(a)',ADVANCE='YES')'DONE'
-END SUBROUTINE WriteMeanAndVarianceToHDF5
+END SUBROUTINE WriteMeanAndVarianceMCToHDF5
 
 
-END MODULE MOD_Nisp_Output
+END MODULE MOD_MC_Output

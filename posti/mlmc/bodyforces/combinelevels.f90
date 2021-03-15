@@ -55,13 +55,16 @@ WRITE(UNIT_stdOut,'(132("="))')
 DO iArg=1,nArgs
   SWRITE(UNIT_stdOut,'(A,A,A)') "Processing file ",Args(iArg),"..."
   CALL ReadSums(Args(iArg))
+  WRITE (*,*) nSamples_Sums
   snSamples=1./nSamples_Sums
   snSamplesM1=1./(nSamples_Sums-1)
 
   Mean = Mean + snSamples*(UFineSum-UCoarseSum)
-  StdDev = StdDev + snSamplesM1*(DUSqSum   - snSamples*(UFineSum-UCoarseSum)*(UFineSum-UCoarseSum))
+  !StdDev = StdDev + snSamples*(DUSqSum)
+  StdDev = StdDev + snSamplesM1*(UFineSqSum- UCoarseSqSum) - snSamples*snSamplesM1*(UFineSum**2 - UCoarseSum**2)
 END DO
 StdDev = SQRT(ABS(StdDev))
+!StdDev = SQRT(ABS(StdDev))
 
 CALL WriteMeanAndVarianceToHDF5()
 

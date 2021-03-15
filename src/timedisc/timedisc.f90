@@ -368,7 +368,7 @@ DO
       ! NOTE: this should be last in the series, so we know all previous data
       ! has been written correctly when the state file is present
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
-      CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
+      CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=tAnalyze,&
                             FutureTime=tWriteData,isErrorFile=.FALSE.)
       ! Visualize data
       CALL Visualize(t,U)
@@ -376,7 +376,7 @@ DO
     END IF
 
     ! do analysis
-    CALL Analyze(t,iter)
+    CALL Analyze(tAnalyze,iter)
     iter_loc=0
     CalcTimeStart=FLEXITIME()
     tAnalyze=  MIN(tAnalyze+Analyze_dt,  tEnd)

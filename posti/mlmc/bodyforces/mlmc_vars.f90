@@ -57,8 +57,8 @@ CHARACTER(LEN=255)                 :: MeshFile_Sums
 REAL                               :: Time_Sums
 
 
-INTEGER                            :: nVarTotal=10
-CHARACTER(LEN=255)                 :: VarNames(10)
+INTEGER                            :: nVarTotal=11
+CHARACTER(LEN=255)                 :: VarNames(11)
 
 INTEGER                            :: nStart
 INTEGER                            :: nEnd

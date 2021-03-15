@@ -1,4 +1,4 @@
-MODULE MOD_Nisp_Vars
+MODULE MOD_MC_Vars
 !===================================================================================================================================
 ! Contains global variables provided by the post processing routines
 !===================================================================================================================================
@@ -9,8 +9,10 @@ PUBLIC
 SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! tate File Attribute --------------------------------------------------------------------------------------------------------------
-INTEGER                            :: M
-INTEGER                            :: nStochSamples
+INTEGER                            :: nStateFiles
+INTEGER                            :: nSamples
+INTEGER                            :: iFileSamples
+
 INTEGER                            :: nStochVars
 CHARACTER(LEN=255),ALLOCATABLE     :: StochVarNames(:), Distributions(:)
 REAL, ALLOCATABLE                  :: StochPoints(:,:)
@@ -31,9 +33,8 @@ REAL                               :: Time_State
 REAL                               :: RefState(5)
 REAL, ALLOCATABLE                  :: HermiteCoeff(:,:)
 REAL,ALLOCATABLE                   :: UPrim(:,:,:,:,:)
-REAL,ALLOCATABLE                   :: UMean(:,:,:,:,:), UVar(:,:,:,:,:), UMode(:,:,:,:,:) ,U(:,:,:,:,:)
-REAL,ALLOCATABLE                   :: USamplePrim(:,:,:,:,:,:)
-REAL,ALLOCATABLE                   :: USampleCons(:,:,:,:,:,:)
+REAL,ALLOCATABLE                   :: UAddVars(:,:,:,:,:)
+REAL,ALLOCATABLE                   :: UMean(:,:,:,:,:), UVar(:,:,:,:,:), UMeanSquare(:,:,:,:,:) ,U(:,:,:,:,:)
 REAL,ALLOCATABLE                   :: USampleAdditionalVars(:,:,:,:,:,:)
 REAL,ALLOCATABLE,TARGET            :: ElemData(:,:,:)
 REAL,ALLOCATABLE,TARGET            :: ElemData_loc(:,:)
@@ -42,4 +43,4 @@ CHARACTER(LEN=255),ALLOCATABLE     :: VarNamesAdditional(:)
 
 CHARACTER(LEN=255)                 :: StateFile, StateFileName, ProjectName
 CHARACTER(LEN=255)                 :: FileNameMean = 'Mean.h5' ,FileNameVariance = 'Variance.h5'
-END MODULE MOD_Nisp_Vars
+END MODULE MOD_MC_Vars

@@ -46,10 +46,11 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !===================================================================================================================================
 CALL prms%SetSection('Nisp Parameters')
-CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
-CALL prms%CreateRealOption   (  'mu0'                , "TODO",multiple=.TRUE.)
+!CALL prms%CreateRealOption   (  'kappa'              , "TODO",multiple=.TRUE.)
+!CALL prms%CreateRealOption   (  'Pr'                 , "TODO",multiple=.TRUE.)
+!CALL prms%CreateRealOption   (  'R'                  , "TODO",multiple=.TRUE.)
+!CALL prms%CreateRealOption   (  'mu0'                , "TODO",multiple=.TRUE.)
+CALL prms%CreateRealArrayOption("RefState"           , " RefState, for derived quantities")
 END SUBROUTINE DefineParametersNisp
 
 !===================================================================================================================================
@@ -147,12 +148,14 @@ CALL ReadAttribute(File_ID,'MeshFile',    1,StrScalar=Mesh)
 CALL ReadAttribute(File_ID,'Time',1,RealScalar=Time_State)
 
 CALL CloseDataFile()
-ALLOCATE(UMean(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew), UVar(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
-ALLOCATE(UMode(2*nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
+addVars=1
+ALLOCATE(UMean(2*nVar+addVars,0:NNew,0:NNew,0:NNew,nElemsNew), UVar(2*nVar+addVars,0:NNew,0:NNew,0:NNew,nElemsNew))
+ALLOCATE(UMode(2*nVar+addVars,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(U(nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(UPrim(nVar+1,0:NNew,  0:NNew,  0:NNew,  nElemsNew))
 ALLOCATE(USamplePrim(1:nStochSamples,1:nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
 ALLOCATE(USampleCons(1:nStochSamples,1:nVar,0:NNew,0:NNew,0:NNew,nElemsNew))
+ALLOCATE(USampleAdditionalVars(1:nStochSamples,1:addVars,0:NNew,0:NNew,0:NNew,nElemsNew))
 UMean = 0.
 UVar= 0.
 UMode= 0.
@@ -160,6 +163,8 @@ U = 0.
 UPrim = 0.
 USamplePrim = 0.
 USampleCons = 0.
+USampleAdditionalVars = 0.
+RefState = GETREALARRAY('RefState',nVar)
 END SUBROUTINE InitNisp
 
 !===================================================================================================================================
@@ -207,17 +212,19 @@ DO jStochSample=1,nStochSamples
   CALL ReadStateFile(StateFileName,DataSetName,jStochSample-1)
   USampleCons(jStochSample,:,:,:,:,:) = U
   DO iElem=1,nElemsNew
-    DO k=0,NNew; DO l=0,NNew; DO p=0,NNew
+    DO k=0,NNew; DO l=0,NNew; DO m=0,NNEW
       CALL ConsToPrim(UPrim(:,m,l,k,iElem),U(:,m,l,k,iElem))
     END DO; END DO; END DO
   END DO
-  USamplePrim(jStochSample,:,:,:,:,:) = UPrim(2:nVar,:,:,:,:)
+  USamplePrim(jStochSample,:,:,:,:,:) =UPrim(2:nVar+1,:,:,:,:) 
+  USampleAdditionalVars(jStochSample,1,:,:,:,:)=(UPrim(5,:,:,:,:)-RefState(5))/(0.5*RefState(1)*NORM2(RefState(2:4))*NORM2(RefState(2:4)))
 END DO
 DO iStochCoeff=0,nStochCoeffs
   IF(iStochCoeff==0) THEN
     DO jStochSample=1, nStochSamples
       UMean(1:nVar,:,:,:,:)        = UMean(1:nVar,:,:,:,:)  + USampleCons(jStochSample,:,:,:,:,:)*StochWeights(jStochSample)
-      UMean(nVar+1:2*nVar,:,:,:,:) = UMean(nVar+1:2*nVar,:,:,:,:) + USamplePrim(jStochSample,2:nVar,:,:,:,:)*StochWeights(jStochSample)
+      UMean(nVar+1:2*nVar,:,:,:,:) = UMean(nVar+1:2*nVar,:,:,:,:) + USamplePrim(jStochSample,1:nVar,:,:,:,:)*StochWeights(jStochSample)
+      UMean(2*nVar+1:2*nVar+addVars,:,:,:,:) = UMean(2*nVar+1:2*nVar+addVars,:,:,:,:) + USampleAdditionalVars(jStochSample,1:addVars,:,:,:,:)*StochWeights(jStochSample)
     END DO
   ELSE
     y_out=0.
@@ -236,7 +243,8 @@ DO iStochCoeff=0,nStochCoeffs
         evalPoly = evalPoly*y_out
       END DO
       UMode(1:nVar,:,:,:,:)       = UMode(1:nVar,:,:,:,:) + USampleCons(jStochSample,:,:,:,:,:)*evalPoly*StochWeights(jStochSample)
-      UMode(nVar+1:nVar,:,:,:,:)  = UMode(nVar+1:nVar,:,:,:,:) + USamplePrim(jStochSample,2:nVar,:,:,:,:)*evalPoly*StochWeights(jStochSample)
+      UMode(nVar+1:2*nVar,:,:,:,:)  = UMode(nVar+1:2*nVar,:,:,:,:) + USamplePrim(jStochSample,1:nVar,:,:,:,:)*evalPoly*StochWeights(jStochSample)
+      UMode(2*nVar+1:2*nVar+addVars,:,:,:,:) = UMode(2*nVar+1:2*nVar+addVars,:,:,:,:) + USampleAdditionalVars(jStochSample,1:addVars,:,:,:,:)*evalPoly*StochWeights(jStochSample)
     END DO
    UVar = UVar + UMode*UMode
   END IF

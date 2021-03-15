@@ -32,14 +32,6 @@ INTERFACE InitSwapmesh
   MODULE PROCEDURE InitSwapmesh
 END INTERFACE
 
-INTERFACE ReadMeshCoords
-  MODULE PROCEDURE ReadMeshCoords
-END INTERFACE
-
-INTERFACE PrepareVandermonde
-  MODULE PROCEDURE PrepareVandermonde
-END INTERFACE
-
 INTERFACE ReadOldStateFile
   MODULE PROCEDURE ReadOldStateFile
 END INTERFACE
@@ -52,7 +44,16 @@ INTERFACE FinalizeSwapmesh
   MODULE PROCEDURE FinalizeSwapmesh
 END INTERFACE
 
-PUBLIC:: InitSwapmesh,ReadMeshCoords,PrepareVandermonde,ReadOldStateFile,WriteNewStateFile,FinalizeSwapmesh
+INTERFACE ReadMeshCoords
+  MODULE PROCEDURE ReadMeshCoords
+END INTERFACE
+
+INTERFACE PrepareVandermonde
+  MODULE PROCEDURE PrepareVandermonde
+END INTERFACE
+
+
+PUBLIC:: InitSwapmesh,ReadOldStateFile,WriteNewStateFile,FinalizeSwapmesh,ReadMeshCoords,PrepareVandermonde
 
 CONTAINS
 
