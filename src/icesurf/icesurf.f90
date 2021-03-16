@@ -142,24 +142,16 @@ SUBROUTINE CalcIceSurfData()
 ! MODULES
 USE MOD_PreProc
 USE MOD_IceSurf_Vars
-USE MOD_Viscosity
 USE MOD_DG_Vars,             ONLY:UPrim_master
-USE MOD_Lifting_Vars,        ONLY:gradUx_master,gradUy_master,gradUz_master
-USE MOD_Mesh_Vars,           ONLY:NormVec,TangVec1,TangVec2,SurfElem
-USE MOD_Mesh_Vars,           ONLY:SideToElem
 USE MOD_Mesh_Vars,           ONLY:Face_xGP
-USE MOD_EOS_Vars,            ONLY:cp,Pr
-USE MOD_Viscosity
-USE MOD_Interpolation_Vars,  ONLY: NodeType
-USE MOD_ChangeBasisByDim,    ONLY: ChangeBasisSurf
+USE MOD_Interpolation_Vars,  ONLY:NodeType
+USE MOD_ChangeBasisByDim,    ONLY:ChangeBasisSurf
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                           :: GradU(PP_nVarPrim,3),prim(PP_nVarPrim),nv(3)
-REAL                           :: dUdn(3),dTdn,muS,lambda
-INTEGER                        :: i, j, SideID, WallSideID, iLocSide
+INTEGER                        :: SideID, WallSideID
 REAL                           :: Vdm(0:NOutSurf,0:PP_N)   !< Vandermonde matrix for converstion from DG to FV
 REAL                           :: IceSurfDG(ICS_NVAR,0:PP_N,0:PP_NZ)
 !==================================================================================================================================
