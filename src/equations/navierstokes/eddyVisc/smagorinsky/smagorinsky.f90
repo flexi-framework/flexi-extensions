@@ -51,6 +51,7 @@ USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_Interpolation_Vars ,ONLY: InterpolationInitIsDone,wGP
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone,nElems,sJ,Elem_xGP
 USE MOD_EOS_Vars           ,ONLY: mu0
+USE MOD_IO_HDF5           ,ONLY:AddToElemData,ElementOut
  IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -68,12 +69,14 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT SMAGORINSKY...'
 
 ! Read the variables used for LES model
 ! Smagorinsky model
-CS        = GETREAL('CS')
+!CS        = GETREAL('CS')
 ! Do Van Driest style damping or not (only for channel!)
 VanDriest = GETLOGICAL('VanDriest','.FALSE.')
 
 ALLOCATE(damp(1,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 damp = 1.
+ALLOCATE(CS(nElems))
+CS = GETREAL('CS')
 
 ! Smago: (damp*CS*deltaS)**2 * S_eN * dens
 ! Precompute first term and store in damp
@@ -90,9 +93,11 @@ DO iElem=1,nElems
   DeltaS(iElem) = ( CellVol)**(1./3.)  / (REAL(PP_N)+1.)
 
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-    damp(1,i,j,k,iElem) = (damp(1,i,j,k,iElem) * CS * deltaS(iElem))**2
+    damp(1,i,j,k,iElem) = (damp(1,i,j,k,iElem) * CS(iElem) * deltaS(iElem))**2
   END DO; END DO; END DO
 END DO
+
+CALL AddToElemData(ElementOut,'CS',RealArray=CS)
 
 SmagorinskyInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SMAGORINSKY DONE!'
@@ -102,14 +107,14 @@ END SUBROUTINE InitSmagorinsky
 !===================================================================================================================================
 !> Compute Smagorinsky Eddy-Visosity
 !===================================================================================================================================
-PPURE SUBROUTINE Smagorinsky_Point(gradUx,gradUy,gradUz,dens,damp,muSGS)
+PPURE SUBROUTINE Smagorinsky_Point(gradUx,gradUy,gradUz,dens,deltaS,CS,muSGS)
 ! MODULES
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !> Gradients in x,y,z directions
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: gradUx, gradUy, gradUz
-REAL                       ,INTENT(IN)  :: dens, damp
+REAL                       ,INTENT(IN)  :: dens, DeltaS, CS
 REAL                       ,INTENT(OUT) :: muSGS
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -123,7 +128,8 @@ S_eN = SQRT ( 2.*(gradUx(2)**2 + gradUy(3)**2 + gradUz(4)**2) &
 ! Smagorinsky model
 ! Smago: (damp * CS * deltaS)**2 * S_eN * rho
 ! we store the first constant term in damp
-muSGS = damp * S_eN * dens
+!muSGS = damp * S_eN * dens
+muSGS = (deltaS * CS)**2 * S_eN * dens
 END SUBROUTINE Smagorinsky_Point
 
 !===================================================================================================================================
@@ -133,7 +139,7 @@ SUBROUTINE Smagorinsky_Volume()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars,         ONLY: nElems
-USE MOD_EddyVisc_Vars,     ONLY: damp, muSGS
+USE MOD_EddyVisc_Vars,     ONLY: DeltaS, muSGS, CS
 USE MOD_Lifting_Vars,      ONLY: gradUx, gradUy, gradUz
 USE MOD_DG_Vars,           ONLY: U
 IMPLICIT NONE
@@ -145,8 +151,8 @@ INTEGER             :: i,j,k,iElem
 !===================================================================================================================================
 DO iElem = 1,nElems
   DO k = 0,PP_NZ; DO j = 0,PP_N; DO i = 0,PP_N
-    CALL Smagorinsky_Point(gradUx(:,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
-                                 U(1,i,j,k,iElem),   damp(1,i,j,k,iElem),  muSGS(1,i,j,k,iElem))
+    CALL Smagorinsky_Point(gradUx(:,i,j,k,iElem), gradUy(:,i,j,k,iElem),    gradUz(:,i,j,k,iElem), &
+                                U(1,i,j,k,iElem), DeltaS(iElem), CS(iElem), muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE Smagorinsky_Volume

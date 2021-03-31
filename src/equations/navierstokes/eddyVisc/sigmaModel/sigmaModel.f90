@@ -68,9 +68,12 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT SigmaModel...'
 
 ! Read the variables used for LES model
 ! SigmaModel model
-CS     = GETREAL('CS')
+!CS     = GETREAL('CS')
 ! Do Van Driest style damping or not
 VanDriest = GETLOGICAL('VanDriest','.FALSE.')
+
+ALLOCATE(CS(nElems))
+CS = GETREAL('CS')
 
 ! Calculate the filter width deltaS: deltaS=( Cell volume )^(1/3) / ( PP_N+1 )
 DO iElem=1,nElems
@@ -93,15 +96,14 @@ END SUBROUTINE InitSigmaModel
 !===================================================================================================================================
 !> Compute SigmaModel Eddy-Visosity
 !===================================================================================================================================
-SUBROUTINE SigmaModel_Point(gradUx,gradUy,gradUz,dens,deltaS,muSGS)
+SUBROUTINE SigmaModel_Point(gradUx,gradUy,gradUz,dens,deltaS,CS,muSGS)
 ! MODULES
-USE MOD_EddyVisc_Vars,     ONLY:CS
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !> Gradients in x,y,z directions
 REAL,DIMENSION(PP_nVarPrim),INTENT(IN)  :: gradUx, gradUy, gradUz
-REAL                       ,INTENT(IN)  :: dens, deltaS
+REAL                       ,INTENT(IN)  :: dens, deltaS, CS
 REAL                       ,INTENT(OUT) :: muSGS
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! External procedures defined in LAPACK
@@ -143,7 +145,7 @@ SUBROUTINE SigmaModel_Volume()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars,         ONLY: nElems
-USE MOD_EddyVisc_Vars,     ONLY: muSGS, deltaS
+USE MOD_EddyVisc_Vars,     ONLY: muSGS, deltaS, CS
 USE MOD_Lifting_Vars,      ONLY: gradUx, gradUy, gradUz
 USE MOD_DG_Vars,           ONLY: U
 IMPLICIT NONE
@@ -156,7 +158,7 @@ INTEGER             :: i,j,k,iElem
 DO iElem = 1,nElems
   DO k = 0,PP_NZ; DO j = 0,PP_N; DO i = 0,PP_N
     CALL SigmaModel_Point(gradUx(:,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
-                                 U(1,i,j,k,iElem),        deltaS(iElem),  muSGS(1,i,j,k,iElem))
+                               U(1,i,j,k,iElem), deltaS(iElem), CS(iElem), muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE SigmaModel_Volume

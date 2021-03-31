@@ -33,6 +33,11 @@ INTERFACE FinalizeTimeDisc
   MODULE PROCEDURE FinalizeTimeDisc
 END INTERFACE
 
+INTERFACE TimeStepByLSERKW2
+  MODULE PROCEDURE TimeStepByLSERKW2
+END INTERFACE
+
+PUBLIC :: TimeStepByLSERKW2
 PUBLIC :: InitTimeDisc,FinalizeTimeDisc
 PUBLIC :: TimeDisc
 PUBLIC :: DefineParametersTimeDisc
