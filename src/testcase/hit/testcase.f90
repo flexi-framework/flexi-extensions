@@ -138,7 +138,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-LOGICAL                  :: hitDataExists
+LOGICAL                  :: HITDataExists
 INTEGER                  :: HSize_proc(5)
 REAL,ALLOCATABLE         :: HIT_local(:,:,:,:,:)
 CHARACTER(LEN=31)        :: varnames(nHITVars)
@@ -152,76 +152,80 @@ CALL CollectiveStop(__STAMP__,'The testcase has not been implemented for FV yet!
 
 HIT_Forcing = GETLOGICAL('HIT_Forcing','.TRUE.')
 
-! Initialize HIT filter
-! HIT_nFilter = GETINT( 'HIT_nFilter','0')
-HIT_tFilter = GETREAL('HIT_tFilter','0.')
+IF(HIT_Forcing) THEN
+  ! Initialize HIT filter
+  ! HIT_nFilter = GETINT( 'HIT_nFilter','0')
+  HIT_tFilter = GETREAL('HIT_tFilter','0.')
 
-! ! Abort if Navier-Stokes filter is requested in addition to the HIT filter
-! IF(FilterType.GT.0) CALL CollectiveStop(__STAMP__,"HIT incompatible with Navier-Stokes filter!")
-!
-! ! Prepare modal cut-off filter (low pass)
-! ALLOCATE(FilterMat(0:PP_N,0:PP_N))
-! FilterMat = 0.
-!
-! ! Modal Filter, default to cut-off at 0
-! DO iDeg=0,HIT_nFilter
-!   FilterMat(iDeg,iDeg) = 1.
-! END DO
-!
-! ! Assemble filter matrix in nodal space
-! FilterMat=MATMUL(MATMUL(Vdm_Leg,FilterMat),sVdm_Leg)
+  ! ! Abort if Navier-Stokes filter is requested in addition to the HIT filter
+  ! IF(FilterType.GT.0) CALL CollectiveStop(__STAMP__,"HIT incompatible with Navier-Stokes filter!")
+  !
+  ! ! Prepare modal cut-off filter (low pass)
+  ! ALLOCATE(FilterMat(0:PP_N,0:PP_N))
+  ! FilterMat = 0.
+  !
+  ! ! Modal Filter, default to cut-off at 0
+  ! DO iDeg=0,HIT_nFilter
+  !   FilterMat(iDeg,iDeg) = 1.
+  ! END DO
+  !
+  ! ! Assemble filter matrix in nodal space
+  ! FilterMat=MATMUL(MATMUL(Vdm_Leg,FilterMat),sVdm_Leg)
 
-! Read only rho from IniRefState
-HIT_rho = RefStatePrim(1,IniRefState)
+  ! Read only rho from IniRefState
+  HIT_rho = RefStatePrim(1,IniRefState)
 
-! Read target turbulent kinetic energy and relaxation time
-HIT_k      = GETREAL('HIT_k'     ,'0.')
-HIT_tauRMS = GETREAL('HIT_tauRMS','0.')
+  ! Read target turbulent kinetic energy and relaxation time
+  HIT_k      = GETREAL('HIT_k'     ,'0.')
+  HIT_tauRMS = GETREAL('HIT_tauRMS','0.')
 
-IF ((HIT_tFilter.EQ.0)) &
-  CALL CollectiveStop(__STAMP__, 'HIT target parameters cannot be zero!')
+  IF ((HIT_tFilter.EQ.0)) &
+    CALL CollectiveStop(__STAMP__, 'HIT target parameters cannot be zero!')
 
-! Allocate array for temporally filtered RMS
-ALLOCATE(HIT_RMS(1:3,0:PP_N,0:PP_N,0:PP_NZ,nElems))
-ALLOCATE(UPrim_temp(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_NZ,nElems))
-UPRIM_temp = 0.
+  ! Allocate array for temporally filtered RMS
+  ALLOCATE(HIT_RMS(1:3,0:PP_N,0:PP_N,0:PP_NZ,nElems))
+  ALLOCATE(UPrim_temp(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_NZ,nElems))
+  UPRIM_temp = 0.
 
-! Try to restart from state file
-IF(DoRestart)THEN
-  CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-  CALL DatasetExists(File_ID,'HIT',HITDataExists)
-  IF (HITDataExists) THEN
-    CALL GetDataSize(File_ID,'HIT',nDims,HSize)
-    HSize_proc = INT(HSize)
-    HSize_proc(5) = nElems
-    IF (HSize_proc(1).EQ.3) THEN
-        SWRITE(UNIT_stdOut,'(A,I1,A)',ADVANCE='YES') ' | HDF5 state file containing HIT data with ',HSize_proc(1), &
-                                                     ' variables and matching current setup. Continuing run...'
+  ! Try to restart from state file
+  IF(DoRestart)THEN
+    CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+    CALL DatasetExists(File_ID,'HIT',HITDataExists)
+    IF (HITDataExists) THEN
+      CALL GetDataSize(File_ID,'HIT',nDims,HSize)
+      HSize_proc = INT(HSize)
+      HSize_proc(5) = nElems
+      IF (HSize_proc(1).EQ.3) THEN
+          SWRITE(UNIT_stdOut,'(A,I1,A)',ADVANCE='YES') ' | HDF5 state file containing HIT data with ',HSize_proc(1), &
+                                                       ' variables and matching current setup. Continuing run...'
+      ELSE
+        CALL CollectiveStop(__STAMP__,'HDF5 state file containing HIT data with different number of variables!')
+      END IF
+
+      ALLOCATE(HIT_local(1:3,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))
+      CALL ReadArray('HIT',5,HSize_proc,OffsetElem,5,RealArray=HIT_local)
+      ! No interpolation needed, read solution directly from file
+      IF(.NOT. InterpolateSolution)THEN
+        HIT_RMS = HIT_local
+        DEALLOCATE(HIT_local)
+      ELSE
+        CALL CollectiveStop(__STAMP__,'Interpolation currently not supported for HIT test case!')
+      END IF
+      ! Indicate that we already initialized HIT_RMS from restartfile
+      HIT_RMS_InitDone = .TRUE.
     ELSE
-      CALL CollectiveStop(__STAMP__,'HDF5 state file containing HIT data with different number of variables!')
+      SWRITE(UNIT_stdOut,'(A)')' | No restart variables for HIT test case found. Starting without u_RMS history!'
+      HIT_RMS    = 0.
     END IF
-
-    ALLOCATE(HIT_local(1:3,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))
-    CALL ReadArray('HIT',5,HSize_proc,OffsetElem,5,RealArray=HIT_local)
-    ! No interpolation needed, read solution directly from file
-    IF(.NOT. InterpolateSolution)THEN
-      HIT_RMS = HIT_local
-      DEALLOCATE(HIT_local)
-    ELSE
-      CALL CollectiveStop(__STAMP__,'Interpolation currently not supported for HIT test case!')
-    END IF
+    CALL CloseDataFile()
   ELSE
-    SWRITE(UNIT_stdOut,'(A)')' | No restart variables for HIT test case found. Starting without u_RMS history!'
     HIT_RMS    = 0.
   END IF
-  CALL CloseDataFile()
-ELSE
-  HIT_RMS    = 0.
-END IF
 
-! HIT_RMS required for restart, so add it as additional field data
-CALL AddToFieldData(FieldOut,(/3,PP_N+1,PP_N+1,PP_NZ+1,nElems/),'HIT',(/'HIT_RMSx','HIT_RMSy','HIT_RMSz'/), &
-                    RealArray=HIT_RMS,doSeparateOutput=.TRUE.)
+  ! HIT_RMS required for restart, so add it as additional field data
+  CALL AddToFieldData(FieldOut,(/3,PP_N+1,PP_N+1,PP_NZ+1,nElems/),'HIT',(/'HIT_RMSx','HIT_RMSy','HIT_RMSz'/), &
+                      RealArray=HIT_RMS,doSeparateOutput=.TRUE.)
+END IF ! HIT_Forcing
 
 ! Length of Buffer for TGV output
 nWriteStats      = GETINT( 'nWriteStats'     ,'100')
@@ -326,6 +330,14 @@ END IF
 ! Return if no HIT forcing required
 IF (.NOT.HIT_Forcing) RETURN
 
+! Initialize HIT_RMS with initial solution if not already read from restart file
+! Otherwise forcing will be huge in the first timestep
+IF (.NOT.HIT_RMS_InitDone) THEN
+  CALL ConsToPrim(PP_N,UPrim_temp,U)
+  HIT_RMS = UPrim_temp(2:4,:,:,:,:)**2
+  HIT_RMS_InitDone = .TRUE.
+END IF
+
 !==================================================================================================================================
 !> de Laage de Meux mode, case 'D. Restriction to the isotropic case and link with the linear forcing of Lundgren'
 !> de Laage de Meux, B.; Audebert, B.; Manceau, R. and Perrin, R., "Anisotropic linear forcing for synthetic turbulence generation
@@ -348,7 +360,7 @@ HIT_RMS(1:3,:,:,:,:) = HIT_RMS(1:3,:,:,:,:) + ((UPrim_temp(2:4,:,:,:,:))**2 - HI
 IF (HIT_Avg) THEN
 
   ! Only update forcing coefficient during first RK stage if required
-  IF (CurrentStage.EQ.1 .OR. HIT_1st) THEN
+  IF ( (CurrentStage.EQ.1) .OR. (.NOT.HIT_1st) ) THEN
     TKE = 0.
     ! Calculate forcing coefficient based on global spatial average
     DO iElem=1,nElems; DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
@@ -592,7 +604,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-IF (MPIroot) THEN
+IF(MPIroot) THEN
   SDEALLOCATE(Time)
   SDEALLOCATE(writeBuf)
 END IF
