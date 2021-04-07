@@ -42,6 +42,7 @@ REAL,ALLOCATABLE          :: UPrim_temp(:,:,:,:,:)    !< temporal derivative of 
 !INTEGER                   :: HIT_nFilter              !< polynomial degree of cut-off filter
 REAL                      :: HIT_tFilter              !< filter width of temporal filter
 REAL                      :: A_ILF                    !< forcing coefficient
+REAL,ALLOCATABLE          :: E_k(:)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! ANAYLZE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------

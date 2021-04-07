@@ -96,6 +96,11 @@ ELSE()
   ENDIF()
 ENDIF()
 
+# =========================================================================
+# ADD FLAGS FOR FFTW
+# =========================================================================
+SET(FLEXI_INSTRUCTION "${FLEXI_INSTRUCTION} -fPIC") # Needed to compile FFTW into shared Flexi lib
+
 
 # =========================================================================
 # COMPILER FLAGS

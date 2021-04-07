@@ -70,6 +70,10 @@ INTERFACE Lifting_GetBoundaryFluxTestcase
   MODULE PROCEDURE Lifting_GetBoundaryFluxTestcase
 END INTERFACE
 
+INTERFACE ComputeEnergySpectra
+  MODULE PROCEDURE ComputeEnergySpectra
+END INTERFACE
+
 PUBLIC:: DefineParametersTestcase
 PUBLIC:: InitTestcase
 PUBLIC:: FinalizeTestcase
@@ -80,6 +84,7 @@ PUBLIC:: AnalyzeTestCase
 PUBLIC:: GetBoundaryFluxTestcase
 PUBLIC:: GetBoundaryFVgradientTestcase
 PUBLIC:: Lifting_GetBoundaryFluxTestcase
+PUBLIC:: ComputeEnergySpectra
 
 CONTAINS
 
@@ -120,6 +125,8 @@ USE MOD_Globals
 #if PP_N==N
 USE MOD_PreProc,            ONLY: N
 #endif
+USE MOD_FFT,                ONLY: InitFFT
+USE MOD_FFT_Vars,           ONLY: kmax
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 !USE MOD_Filter_Vars
 USE MOD_HDF5_Input,         ONLY: File_ID,OpenDataFile,CloseDataFile,ReadArray,DatasetExists,GetDataSize
@@ -252,6 +259,10 @@ HIT_1st = GETLOGICAL('HIT_1st','.FALSE.')
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
+
+CALL InitFFT()
+ALLOCATE(E_k(0:kmax))
+
 END SUBROUTINE InitTestcase
 
 
@@ -576,6 +587,49 @@ END SUBROUTINE AnalyzeTestcase
 
 
 !==================================================================================================================================
+!> Computes Energy Spectra for current U with FFTW library
+!==================================================================================================================================
+SUBROUTINE ComputeEnergySpectra()
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_DG_Vars,            ONLY: UPrim
+USE MOD_FFT,                ONLY: Interpolate_DG2FFT,ComputeFFT_R2C
+USE MOD_FFT_Vars,           ONLY: N_FFT,Endw,kmax,Nc,localk
+USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_Interpolation_Vars, ONLY: NodeType
+USE MOD_Testcase_Vars,      ONLY: E_k
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER,PARAMETER :: nVar=3
+INTEGER :: i,j,k,iElem
+REAL    :: U_Global(nVar,1:N_FFT  ,1:N_FFT  ,1:N_FFT  )  ! Real global DG solution
+COMPLEX :: U_FFT(   nVar,1:Endw(1),1:Endw(2),1:Endw(3))  ! Complex FFT solution
+!==================================================================================================================================
+! 1. Interpolate DG solution to equidistant points
+CALL Interpolate_DG2FFT(NodeType,nVar,UPrim(MOMV,:,:,:,:),U_Global)
+
+! 2. Apply complex Fourier-Transform on solution
+CALL ComputeFFT_R2C(nVar,U_Global,U_FFT)
+
+! 3. Fourier cutoff filter
+DO k=1,Endw(3); DO j=1,Endw(2); DO i=1,Endw(1)
+  IF(localk(4,i,j,k).GT.Nc) U_FFT(:,i,j,k) = 0.
+END DO; END DO; END DO
+
+! 4. Compute kinetic energy per wavelength
+E_k = 0.
+DO k=1,endw(3); DO j=1,endw(2); DO i=1,endw(1)
+  IF (localk(4,i,j,k).GT.Nc) CYCLE
+  E_k(localk(4,i,j,k)) = E_k(localk(4,i,j,k)) + REAL(SUM(U_FFT(:,i,j,k)*CONJG(U_FFT(:,i,j,k))))
+END DO; END DO; END DO
+
+END SUBROUTINE ComputeEnergySpectra
+
+!==================================================================================================================================
 !> Write HIT Analysis Data to File
 !==================================================================================================================================
 SUBROUTINE WriteStats()
@@ -595,6 +649,7 @@ END SUBROUTINE WriteStats
 SUBROUTINE FinalizeTestcase()
 ! MODULES
 USE MOD_Globals
+USE MOD_FFT,  ONLY: FinalizeFFT
 USE MOD_TestCase_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -604,6 +659,8 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+CALL FinalizeFFT()
+SDEALLOCATE(E_k)
 IF(MPIroot) THEN
   SDEALLOCATE(Time)
   SDEALLOCATE(writeBuf)

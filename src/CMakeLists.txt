@@ -193,7 +193,7 @@ ENDIF()
 # =========================================================================
 FUNCTION(add_exec target)
   ADD_EXECUTABLE(       ${target} ${ARGN})
-  TARGET_LINK_LIBRARIES(${target} libflexishared)
+  TARGET_LINK_LIBRARIES(${target} libflexishared ${linkedlibs})
   SET_TARGET_PROPERTIES(${target} PROPERTIES COMPILE_FLAGS ${FLEXI_COMPILE_FLAGS}
                                              LINKER_LANGUAGE Fortran)
   INSTALL(PROGRAMS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${target} DESTINATION bin)
@@ -281,6 +281,12 @@ LIST(APPEND flexiF90 ${dgF90})
 IF (FLEXI_FV)
   FILE(GLOB fvF90 ./src/fv/*.f90)
   LIST(APPEND flexiF90 ${fvF90})
+ENDIF()
+
+# collect F90 files of 'fft' directory (non-recursive) and append to 'flexiF90' list 
+IF (LIBS_USE_FFTW)
+  FILE(GLOB fftF90 ./src/fft/*.f90)
+  LIST(APPEND flexiF90 ${fftF90})
 ENDIF()
 
 # define libs
