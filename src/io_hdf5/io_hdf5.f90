@@ -487,6 +487,7 @@ TYPE(tElementOut),POINTER          :: current,tmp
 
 IF(ASSOCIATED(ElementOut_In))THEN
   current => ElementOut_In
+  NULLIFY(ElementOut_In)
   DO WHILE (ASSOCIATED(current%next))
     IF (ASSOCIATED( current%RealArray)) THEN
       NULLIFY   (current%RealArray)
@@ -548,6 +549,7 @@ TYPE(tFieldOut),POINTER          :: current,tmp
 
 IF(ASSOCIATED(FieldOut_In))THEN
   current => FieldOut_In
+  NULLIFY(FieldOut_In)
   DO WHILE (ASSOCIATED(current%next))
     IF (ASSOCIATED( current%RealArray)) THEN
       NULLIFY   (current%RealArray)
