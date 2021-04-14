@@ -112,6 +112,7 @@ USE MOD_IO_HDF5,            ONLY:AddToElemData,ElementOut
 #if (PP_dim == 2)
 USE MOD_2D
 #endif
+USE MOD_BatchInput_Vars,    ONLY: StochMeshFileExists,StochMeshFile
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -146,6 +147,9 @@ IF (PRESENT(MeshFile_IN)) THEN
 ELSE
   MeshFile = GETSTR('MeshFile')
 END IF
+
+IF(StochMeshFileExists) MeshFile = StochMeshFile
+
 validMesh = ISVALIDMESHFILE(MeshFile)
 IF(.NOT.validMesh) &
     CALL CollectiveStop(__STAMP__,'ERROR - Mesh file not a valid HDF5 mesh.')

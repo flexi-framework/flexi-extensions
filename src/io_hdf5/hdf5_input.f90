@@ -787,13 +787,33 @@ CALL OpenDataFile(StochFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,commun
 
 
 CALL ReadAttribute(File_ID,'nStochVars',1,IntScalar=nStochVars)
+IF(nStochVars.GT.0)THEN
+  ALLOCATE(StochVarNames(nStochVars))
+  ALLOCATE(iOccurrence(nStochVars))
+  ALLOCATE(iArray(nStochVars))
+  CALL ReadAttribute(File_ID,'StochVarNames',nStochVars,StrArray=StochVarNames)
+  CALL ReadAttribute(File_ID,'iOccurrence',  nStochVars,IntArray=iOccurrence)
+  CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
 
-ALLOCATE(StochVarNames(nStochVars))
-ALLOCATE(iOccurrence(nStochVars))
-ALLOCATE(iArray(nStochVars))
-CALL ReadAttribute(File_ID,'StochVarNames',nStochVars,StrArray=StochVarNames)
-CALL ReadAttribute(File_ID,'iOccurrence',  nStochVars,IntArray=iOccurrence)
-CALL ReadAttribute(File_ID,'iArray',       nStochVars,IntArray=iArray)
+  ALLOCATE(iStochSample(nStochVars))
+  CALL ReadArray(ArrayName  = 'Samples',&
+                 Rank       = 2,&
+                 nVal       = (/nStochVars,1/),&
+                 Offset_in  = iGlobalRun-1,&
+                 Offset_dim = 2,&
+                 RealArray  = iStochSample)
+END IF 
+
+CALL DatasetExists(File_ID,'MeshFiles',StochMeshFileExists,attrib=.False.)
+IF(StochMeshFileExists)THEN
+  CALL ReadArray(ArrayName  = 'MeshFiles',&
+                 Rank       = 1,&
+                 nVal       = (/1/),&
+                 Offset_in  = iGlobalRun-1,&
+                 Offset_dim = 1,&
+                 StrArray   = StochMeshFile)
+END IF 
+
 
 
 CALL ReadAttribute(File_ID,'nLevelVarsInt',1,IntScalar=nLevelVarsInt)
@@ -820,13 +840,7 @@ IF(nLevelVarsStr.GT.0)THEN
   CALL ReadAttribute(File_ID,'LevelVarsStr',nLevelVarsStr,StrArray=LevelVarsStr)
 END IF
 
-ALLOCATE(iStochSample(nStochVars))
-CALL ReadArray(ArrayName  = 'Samples',&
-               Rank       = 2,&
-               nVal       = (/nStochVars,1/),&
-               Offset_in  = iGlobalRun-1,&
-               Offset_dim = 2,&
-               RealArray  = iStochSample)
+
 
 CALL CloseDataFile()
 

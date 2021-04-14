@@ -43,5 +43,7 @@ CHARACTER(LEN=255),ALLOCATABLE :: LevelVarsStr(:)
 
 LOGICAL                        :: BatchMode
 LOGICAL                        :: BatchInputInitIsDone=.FALSE.
+LOGICAL                        :: StochMeshFileExists=.FALSE.
+CHARACTER(LEN=255)             :: StochMeshFile
 !==================================================================================================================================
 END MODULE MOD_BatchInput_Vars
