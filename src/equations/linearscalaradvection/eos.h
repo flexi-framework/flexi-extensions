@@ -11,31 +11,15 @@
 !
 ! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
 !=================================================================================================================================
-#include "flexi.h"
+! Define variables for normal and extended state vector
+! Normal   U(1:1)  with conservative variables
+! Extended U(1:2) with conservative and primitive variables
 
-!==================================================================================================================================
-!> Control program of the Flexi code.
-!==================================================================================================================================
-PROGRAM Flexi
-! MODULES
-USE MOD_Globals
-USE MOD_Flexi
-USE MOD_TimeDisc,          ONLY:TimeDisc
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!==================================================================================================================================
-! Initialize
-CALL InitFlexi(0)
+#define CONS 1:PP_nVar          /* all cons variables */
+#define PRIM 1:PP_nVarPrim      /* all prim variables */
 
-! Run Simulation
-CALL TimeDisc()
-
-! Finalize
-CALL FinalizeFlexi()
-#if USE_MPI
-! we also have to finalize MPI itself here
-CALL MPI_FINALIZE(iError)
-IF(iError .NE. 0) STOP 'MPI finalize error'
-#endif
-END PROGRAM Flexi
+#define PP_2Var PP_nVar+PP_nVarPrim
+! Lifting
+#define PP_nVarLifting               1
+#define LIFT_VARS                    (/1/)
+#define PRIM_LIFT                    (/1/)

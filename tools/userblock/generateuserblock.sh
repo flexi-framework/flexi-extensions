@@ -95,7 +95,7 @@ cat libflexistatic.dir/flags.make            >> $1/userblock.txt
 echo "{[( libflexishared.dir/flags.make )]}" >> $1/userblock.txt
 cat libflexishared.dir/flags.make            >> $1/userblock.txt
 echo "{[( flexi.dir/flags.make )]}"          >> $1/userblock.txt
-cat flexi.dir/flags.make                     >> $1/userblock.txt
+cat flexibatch.dir/flags.make                >> $1/userblock.txt
 
 # change directory to actual cmake version
 cd "$3"

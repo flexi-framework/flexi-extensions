@@ -70,8 +70,9 @@ USE MOD_FV_Basis,          ONLY:InitFV_Basis
 USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
 USE MOD_IceSurf,           ONLY:DefineParametersIceSurf,InitIceSurf
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
-USE MOD_Restart_Vars      ,ONLY:RestartFile
-USE MOD_StringTools       ,ONLY:STRICMP, GetFileExtension
+USE MOD_Restart_Vars,      ONLY:RestartFile
+USE MOD_StringTools,       ONLY:STRICMP, GetFileExtension
+USE MOD_Unittest,          ONLY:GenerateUnittestReferenceData        
 USE MOD_HDF5_Input,        ONLY:BatchInput
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -214,6 +215,16 @@ Time=FLEXITIME()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
+
+! Generate Unittest Data
+IF (doGenerateUnittestReferenceData) THEN
+#if USE_MPI
+  CALL CollectiveStop(__STAMP__, "Can't generate Unittest Reference Data with MPI enabled.")
+#endif
+  CALL GenerateUnittestReferenceData()
+  CALL FinalizeFlexi()
+  CALL EXIT()
+END IF
 END SUBROUTINE InitFlexi
 
 !==================================================================================================================================
@@ -250,12 +261,14 @@ USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_IceSurf,           ONLY:FinalizeIceSurf
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
 USE MOD_HDF5_Input,        ONLY:FinalizeBatchInput
+USE MOD_IO_HDF5,           ONLY:FinalizeIOHDF5
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
 !==================================================================================================================================
 !Finalize
+CALL FinalizeIOHDF5()
 CALL FinalizeOutput()
 CALL FinalizeIceSurf()
 CALL FinalizeRecordPoints()
