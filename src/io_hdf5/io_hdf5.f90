@@ -491,7 +491,7 @@ IF(ASSOCIATED(ElementOut_In)) THEN
   NULLIFY(ElementOut_In)
 
   ! Finalize all entries
-  DO WHILE (ASSOCIATED(current%next))
+  DO WHILE (ASSOCIATED(current))
     next => current%next
     IF (ASSOCIATED( current%RealArray  ))  NULLIFY(current%RealArray )
     IF (ASSOCIATED( current%RealScalar ))  NULLIFY(current%RealScalar)
