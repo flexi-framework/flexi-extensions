@@ -273,7 +273,6 @@ DO j=0,ZDIM(Nloc); DO i=0,Nloc
   U_LL(SRHO)=1./U_LL(DENS)
   U_LL(ENER)=U_L(5,i,j)
   U_LL(PRES)=UPrim_L(5,i,j)
-  U_LL(TEMP)=UPrim_L(6,i,j)
 
 
   ! rotate velocity in normal and tangential direction
@@ -293,7 +292,6 @@ DO j=0,ZDIM(Nloc); DO i=0,Nloc
   U_RR(SRHO)=1./U_RR(DENS)
   U_RR(ENER)=U_R(5,i,j)
   U_RR(PRES)=UPrim_R(5,i,j)
-  U_RR(TEMP)=UPrim_R(6,i,j)
   ! rotate momentum in normal and tangential direction
   U_RR(VEL1)=DOT_PRODUCT(UPRIM_R(2:4,i,j),nv(:,i,j))
   U_RR(VEL2)=DOT_PRODUCT(UPRIM_R(2:4,i,j),t1(:,i,j))
@@ -606,7 +604,6 @@ REAL                    :: RoeVel(3),RoeH,Roec,RoeDens
 REAL,DIMENSION(PP_nVar) :: r1,r2,r3,r4,r5,a,al,ar,Delta_U,Alpha  ! Roe eigenvectors
 REAL                    :: tmp,da
 !=================================================================================================================================
-!WRITE (*,*) U_LL(DENS),U_RR(DENS),U_RR(PRES),U_LL(PRES)
 c_L       = SPEEDOFSOUND_HE(U_LL)
 c_R       = SPEEDOFSOUND_HE(U_RR)
 H_L       = TOTALENTHALPY_HE(U_LL)

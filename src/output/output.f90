@@ -236,9 +236,9 @@ INTEGER :: FVcounter
 REAL    :: FV_percent
 #endif
 #if PPLimiter
-INTEGER :: HPcounter
+INTEGER :: PPcounter
 REAL    :: PP_percent
-INTEGER :: HPSidescounter
+INTEGER :: PPSidescounter
 REAL    :: PPSides_percent
 #endif
 REAL    :: percent,time_remaining,mins,secs,hours
@@ -248,10 +248,10 @@ FVcounter = SUM(FV_Elems)
 totalFV_nElems = totalFV_nElems + FVcounter ! counter for output of FV amount during analyze
 #endif
 #if PPLimiter
-HPcounter = SUM(PP_Elems)
-totalPP_nElems = totalPP_nElems + HPcounter ! counter for output of FV amount during analyze
-HPSidescounter = SUM(PP_Sides)
-totalPP_nSides = totalPP_nSides + HPSidescounter ! counter for output of FV amount during analyze
+PPcounter = SUM(PP_Elems)
+totalPP_nElems = totalPP_nElems + PPcounter ! counter for output of FV amount during analyze
+PPSidescounter = SUM(PP_Sides)
+totalPP_nSides = totalPP_nSides + PPSidescounter ! counter for output of FV amount during analyze
 #endif
 
 IF(.NOT.doPrintStatusLine) RETURN
@@ -261,8 +261,8 @@ CALL MPI_ALLREDUCE(MPI_IN_PLACE,FVcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,i
 #endif
 
 #if PPLimiter && USE_MPI
-CALL MPI_ALLREDUCE(MPI_IN_PLACE,HPcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
-CALL MPI_ALLREDUCE(MPI_IN_PLACE,HPSidescounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,PPcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,PPSidescounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
 
 IF(MPIroot)THEN
@@ -283,9 +283,9 @@ IF(MPIroot)THEN
   WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') FV_percent, '% FV,'
 #endif
 #if PPLimiter
-  PP_percent = REAL(HPcounter) / nGlobalElems * 100.
+  PP_percent = REAL(PPcounter) / nGlobalElems * 100.
   WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') PP_percent, '% PP,'
-  PPSides_percent = REAL(HPSidescounter) / nGlobalElems * 100.
+  PPSides_percent = REAL(PPSidescounter) / nGlobalElems * 100.
   WRITE(UNIT_stdOut,'(F5.2,A6)',ADVANCE='NO') PPSides_percent, '% PPS  '
 #endif
   WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') ' Time = ', t, &
