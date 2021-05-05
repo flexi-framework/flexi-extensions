@@ -287,6 +287,9 @@ ENDIF()
 IF (LIBS_USE_FFTW)
   FILE(GLOB fftF90 ./src/fft/*.f90)
   LIST(APPEND flexiF90 ${fftF90})
+  ADD_DEFINITIONS(-DUSE_FFTW=1)
+ELSE()
+  ADD_DEFINITIONS(-DUSE_FFTW=0)
 ENDIF()
 
 # define libs

@@ -269,7 +269,7 @@ LOGICAL       :: PrintTimeLoc
 !===================================================================================================================================
 PrintTimeLoc=MERGE(.TRUE.,.FALSE.,(PRESENT(PrintTime).AND.PrintTime))
 
-IF(PrintTimeLoc) SWRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' INTERPOLATE DG SOLUTION TO FFT COORDS...'
+IF(PrintTimeLoc.AND.MPIroot) WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' INTERPOLATE DG SOLUTION TO FFT COORDS...'
 
 ! Vandermonde to interpolate from HDF5_Nodetype to equidistant points
 CALL GetVandermonde(PP_N,NodeType_In,N_Visu,'VISU_INNER',VdmGaussEqui)
@@ -299,7 +299,7 @@ END DO
 !$OMP END DO
 !$OMP END PARALLEL
 
-IF(PrintTimeLoc) SWRITE(UNIT_stdOut,'(A)',ADVANCE='YES')'DONE'
+IF(PrintTimeLoc.AND.MPIroot) WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')'DONE'
 END SUBROUTINE Interpolate_DG2FFT
 
 !===================================================================================================================================

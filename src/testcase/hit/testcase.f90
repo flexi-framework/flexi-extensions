@@ -70,9 +70,11 @@ INTERFACE Lifting_GetBoundaryFluxTestcase
   MODULE PROCEDURE Lifting_GetBoundaryFluxTestcase
 END INTERFACE
 
+#if USE_FFTW
 INTERFACE ComputeEnergySpectra
   MODULE PROCEDURE ComputeEnergySpectra
 END INTERFACE
+#endif
 
 PUBLIC:: DefineParametersTestcase
 PUBLIC:: InitTestcase
@@ -84,7 +86,9 @@ PUBLIC:: AnalyzeTestCase
 PUBLIC:: GetBoundaryFluxTestcase
 PUBLIC:: GetBoundaryFVgradientTestcase
 PUBLIC:: Lifting_GetBoundaryFluxTestcase
+#if USE_FFTW
 PUBLIC:: ComputeEnergySpectra
+#endif
 
 CONTAINS
 
@@ -125,8 +129,10 @@ USE MOD_Globals
 #if PP_N==N
 USE MOD_PreProc,            ONLY: N
 #endif
+#if USE_FFTW
 USE MOD_FFT,                ONLY: InitFFT
 USE MOD_FFT_Vars,           ONLY: kmax
+#endif
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 !USE MOD_Filter_Vars
 USE MOD_HDF5_Input,         ONLY: File_ID,OpenDataFile,CloseDataFile,ReadArray,DatasetExists,GetDataSize
@@ -260,8 +266,10 @@ HIT_1st = GETLOGICAL('HIT_1st','.FALSE.')
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 
+#if USE_FFTW
 CALL InitFFT()
 ALLOCATE(E_k(0:kmax))
+#endif
 
 END SUBROUTINE InitTestcase
 
@@ -586,6 +594,7 @@ END IF
 END SUBROUTINE AnalyzeTestcase
 
 
+#if USE_FFTW
 !==================================================================================================================================
 !> Computes Energy Spectra for current U with FFTW library
 !==================================================================================================================================
@@ -628,6 +637,7 @@ DO k=1,endw(3); DO j=1,endw(2); DO i=1,endw(1)
 END DO; END DO; END DO
 
 END SUBROUTINE ComputeEnergySpectra
+#endif /* USE_FFTW */
 
 !==================================================================================================================================
 !> Write HIT Analysis Data to File
@@ -659,8 +669,10 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+#if USE_FFTW
 CALL FinalizeFFT()
 SDEALLOCATE(E_k)
+#endif
 IF(MPIroot) THEN
   SDEALLOCATE(Time)
   SDEALLOCATE(writeBuf)
