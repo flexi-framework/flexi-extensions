@@ -99,7 +99,8 @@ USE MOD_Equation_Vars     ,ONLY: StrVarNames
 #if PP_dim == 2
 USE MOD_2D                ,ONLY: ExpandArrayTo3D
 #endif
-USE MOD_IceSurf_Vars      ,ONLY: doCalcIceSurfData,nWallSidesGlob,nWallSides,offsetWallSides,IceSurfData,NOutSurf
+USE MOD_IceSurf_Vars      ,ONLY: doCalcIceSurfData,doAvgIceSurf
+USE MOD_IceSurf_Vars      ,ONLY: nWallSidesGlob,nWallSides,offsetWallSides,IceSurfData,nVarSurf,NOutSurf
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -207,11 +208,11 @@ IF(iSequentialRun .EQ. 1) THEN
   CALL WriteAdditionalFieldData(FileName,FieldOut)
 ENDIF
 
-IF(doCalcIceSurfData)THEN 
+IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf))THEN 
   CALL GatheredWriteArray(FileName,create=.FALSE.,&
                           DataSetName='IceSurfData', rank=5,&
-                          nValGlobal=(/ICS_NVAR,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
-                          nVal      =(/ICS_NVAR,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
+                          nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
+                          nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
                           offset=    (/0,      0,     0 ,      offsetWallSides, iGlobalRun-1/),&
                           collective=.TRUE.,RealArray=IceSurfData)
 END IF 
@@ -689,6 +690,8 @@ USE MOD_Globals
 USE MOD_Output_Vars,ONLY: ProjectName
 USE MOD_Mesh_Vars  ,ONLY: offsetElem,nGlobalElems,nElems
 USE MOD_2D         ,ONLY: ExpandArrayTo3D
+USE MOD_IceSurf_Vars      ,ONLY: doCalcIceSurfData,doAvgIceSurf
+USE MOD_IceSurf_Vars      ,ONLY: nWallSidesGlob,nWallSides,offsetWallSides,IceSurfData,nVarSurf,NOutSurf
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -785,6 +788,15 @@ DO i=1,2
   IF(.NOT.output2D) DEALLOCATE(UOut2D)
 #endif
 END DO
+
+IF(doCalcIceSurfData.AND.doAvgIceSurf)THEN 
+  CALL GatheredWriteArray(FileName,create=.FALSE.,&
+                          DataSetName='IceSurfData', rank=5,&
+                          nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
+                          nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
+                          offset=    (/0,      0,     0 ,      offsetWallSides, iGlobalRun-1/),&
+                          collective=.TRUE.,RealArray=IceSurfData)
+END IF 
 
 IF(MPIGlobalRoot) CALL MarkWriteSuccessfull(FileName)
 

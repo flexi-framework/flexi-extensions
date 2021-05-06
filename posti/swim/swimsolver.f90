@@ -67,13 +67,14 @@ WRITE (*,*) "Read Data"
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL GetDataSize(File_ID,'IceSurfData',nDims,HSize)
 CALL ReadAttribute(File_ID,'MeshFile',1,StrScalar=MeshFile)
+nVarSurf = INT(HSize(1))
 ICS_N = INT(HSize(2))-1
 ICS_NZ = INT(HSize(3))-1
 nWallSides = INT(HSize(4))
 nRuns = INT(HSize(5))
 ! WriteDim and ICS_NZ should be redundant 
-ALLOCATE(VolData(ICS_NVAR,0:ICS_N,0:ICS_NZ,nWallSides,nRuns))
-CALL ReadArray('IceSurfData',5,(/ICS_NVAR,ICS_N+1,ICS_NZ+1,nWallSides,nRuns/),0,5,RealArray=VolData)
+ALLOCATE(VolData(nVarSurf,0:ICS_N,0:ICS_NZ,nWallSides,nRuns))
+CALL ReadArray('IceSurfData',5,(/nVarSurf,ICS_N+1,ICS_NZ+1,nWallSides,nRuns/),0,5,RealArray=VolData)
 CALL CloseDataFile()
 
 
@@ -89,8 +90,7 @@ CALL CloseDataFile()
 nCells = nWallSides*(ICS_N+1)
 !Allocate and fill Input arrays
 !TODO: in Vars!
-ALLOCATE(CP(1,nCells,nRuns))
-ALLOCATE(XY(2,nCells))
+ALLOCATE(SwimData(nVarSurf,nCells,nRuns))
 
 WRITE (*,*) "Sort"
 DO iSideIn=1,nWallSides
@@ -102,18 +102,14 @@ DO iSideIn=1,nWallSides
   ELSE ! 2D: Data is already sorted clockwise (due to p SurfVec orientation in 2D CGNS) 
     flip = 1
   END IF 
-  IF(SideID.EQ.1) WRITE(*,*) 'VolData(ICS_X,:,:,iSideIn,1)', VolData(ICS_X,:,:,iSideIn,1)
-  CALL DoFlip(2,VolData(ICS_X:ICS_Y,:,:,iSideIn,1),flip,XY(:, lo:up))
-  IF(SideID.EQ.1) WRITE(*,*) 'XY(1,lo:up)', XY(1,lo:up)
   Do iRun=1,nRuns
-    CALL DoFlip(1,VolData(ICS_P,:,:,iSideIn,iRun),flip,CP(1:1,lo:up,iRun))
+    CALL DoFlip(nVarSurf,VolData(:,:,:,iSideIn,1),flip,SwimData(:,lo:up,iRun))
   END DO 
 END DO 
 
 WRITE (*,*) "Write To File"
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.)
-CALL WriteArray('SwimCP',2,(/nCells,nRuns/),(/nCells,nRuns/),(/0,0/),collective=.FALSE.,RealArray=CP(1,:,:))
-CALL WriteArray('SwimXY',2,(/2,nCells/),(/2,nCells/),(/0,0/),collective=.FALSE.,RealArray=XY)
+CALL WriteArray('SwimData',3,(/nVarSurf,nCells,nRuns/),(/nVarSurf,nCells,nRuns/),(/0,0,0/),collective=.FALSE.,RealArray=SwimData)
 CALL CloseDataFile()
 
 END SUBROUTINE InitSwim

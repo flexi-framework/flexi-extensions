@@ -34,7 +34,8 @@ REAL,ALLOCATABLE    :: VolData(:,:,:,:,:)
 INTEGER             :: ICS_N,ICS_NZ
 INTEGER             :: WriteDim
 INTEGER             :: nRuns
+INTEGER             :: nVarSurf
 REAL,ALLOCATABLE    :: XY(:,:)
-REAL,ALLOCATABLE    :: CP(:,:,:)
+REAL,ALLOCATABLE    :: SwimData(:,:,:)
 !===================================================================================================================================
 END MODULE MOD_Swim_Vars

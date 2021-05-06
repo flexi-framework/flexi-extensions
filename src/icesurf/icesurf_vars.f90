@@ -24,13 +24,18 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL             :: doCalcIceSurfData = .FALSE.
 
+LOGICAL             :: doAvgIceSurf = .TRUE.
+LOGICAL             :: SurfFirstZOnly = .TRUE.
 REAL,ALLOCATABLE    :: IceSurfData(:,:,:,:)
+REAL,ALLOCATABLE    :: UAvg_master(:,:,:,:)
+REAL,ALLOCATABLE    :: UAvg_slave(:,:,:,:)
 INTEGER,ALLOCATABLE :: MapIceSurf(:)
 
 INTEGER             :: nWallSides
 INTEGER             :: nWallSidesglob
 INTEGER             :: offsetWallSides
 INTEGER             :: NOutSurf
+INTEGER             :: nVarSurf
 
 ! Orientation of P and Q relative to TangVec1 and TangVec2 (number => which vector, sign => which orientation)
 ! Derivation below

@@ -58,6 +58,8 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("IceSurf")
 CALL prms%CreateLogicalOption('doCalcIceSurfData'  , "Calculate and write ice surface data for icing model","T")
+CALL prms%CreateLogicalOption('doAvgIceSurf'  , "to do","T")
+CALL prms%CreateLogicalOption('SurfFirstZOnly'  , "to do","T")
 CALL prms%CreateIntOption('NOutSurf'  , "Surface FV Output polynomial degree")
 END SUBROUTINE DefineParametersIceSurf
 
@@ -72,6 +74,9 @@ USE MOD_PreProc
 USE MOD_IceSurf_Vars
 USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETINT
 USE MOD_Mesh_Vars, ONLY: nBCSides,BoundaryType,BC,ElemToSide,nElems
+USE MOD_AnalyzeEquation_Vars,ONLY:nVarAvg,doCalcTimeAverage
+USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,SideToElem,nSides
+USE MOD_Mesh_Readin,     ONLY: ReadIJKSorting
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -90,8 +95,27 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT ICESURF...'
 doCalcIceSurfData = GETLOGICAL("doCalcIceSurfData","T")
 
 IF(doCalcIceSurfData)THEN 
+  doAvgIceSurf = GETLOGICAL("doAvgIceSurf")
+  SurfFirstZOnly = GETLOGICAL("SurfFirstZOnly")
+  IF(doAvgIceSurf.AND.(.NOT.doCalcTimeAverage)) CALL Abort(__STAMP__,'Turn on Time Avg!')
+  IF(doAvgIceSurf)THEN 
+    nVarSurf = nVarAvg+2
+  ELSE
+    nVarSurf = PP_nVar+2 
+  END IF 
+
+  IF(SurfFirstZOnly)THEN
+    nElems_IJK = 0
+    CALL ReadIJKSorting()
+    IF(SUM(nElems_IJK).EQ.0) CALL Abort(__STAMP__,'Build Mesh with Elem_IJK!')
+  END IF 
+
   nWallSides = 0
   DO SideID=1,nBCSides
+    IF(SurfFirstZOnly)THEN
+      iElem = SideToElem(S2E_ELEM_ID,SideID)
+      IF(Elem_IJK(3,iElem).NE.1) CYCLE
+    END IF 
     BCType  = BoundaryType(BC(SideID),BC_TYPE)
     IF(ANY(BCType.EQ.WALLBCTYPES())) nWallSides = nWallSides +1 
   END DO
@@ -118,13 +142,20 @@ IF(doCalcIceSurfData)THEN
       IF(SideID.GT.nBCSides) CYCLE
       BCType  = Boundarytype(BC(SideID),BC_TYPE)
       IF(.NOT.ANY(BCType.EQ.WALLBCTYPES())) CYCLE
+      IF(SurfFirstZOnly)THEN
+        IF(Elem_IJK(3,iElem).NE.1) CYCLE
+      END IF 
       nWallSides = nWallSides + 1 
       MapIceSurf(nWallSides) = SideID
     END DO 
   END DO 
 
   NOutSurf = GETINT("NOutSurf")
-  ALLOCATE(IceSurfData(ICS_NVAR,0:NOutSurf,0:ZDIM(NOutSurf),nWallSides))
+  ALLOCATE(IceSurfData(nVarSurf,0:NOutSurf,0:ZDIM(NOutSurf),nWallSides))
+  IF(doAvgIceSurf)THEN 
+    ALLOCATE(UAvg_master(nVarAvg,0:NOutSurf,0:ZDIM(NOutSurf),nSides))
+    ALLOCATE(UAvg_slave(nVarAvg,0:NOutSurf,0:ZDIM(NOutSurf),nSides))
+  END IF 
 ENDIF 
 
 
@@ -146,6 +177,9 @@ USE MOD_DG_Vars,             ONLY:UPrim_master
 USE MOD_Mesh_Vars,           ONLY:Face_xGP
 USE MOD_Interpolation_Vars,  ONLY:NodeType
 USE MOD_ChangeBasisByDim,    ONLY:ChangeBasisSurf
+USE MOD_AnalyzeEquation_Vars,ONLY:nVarAvg,UAvg
+USE MOD_ProlongToFace,       ONLY:ProlongToFace
+USE MOD_Interpolation_Vars  ,ONLY:L_Minus,L_Plus
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -153,27 +187,34 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER                        :: SideID, WallSideID
 REAL                           :: Vdm(0:NOutSurf,0:PP_N)   !< Vandermonde matrix for converstion from DG to FV
-REAL                           :: IceSurfDG(ICS_NVAR,0:PP_N,0:PP_NZ)
+REAL                           :: IceSurfDG(nVarSurf,0:PP_N,0:PP_NZ)
 !==================================================================================================================================
 CALL ICE_FV_GetVandermonde(PP_N,NOutSurf,NodeType,Vdm)
 
+IF(doAvgIceSurf) THEN
+  CALL ProlongToFace(nVarAvg,PP_N,Uavg,UAvg_master,UAvg_slave,L_Minus,L_Plus,doMPISides=.FALSE.)
+END IF 
 
 DO WallSideID=1,nWallSides
   SideID = MapIceSurf(WallSideID)
   !TODO: This is only correct for 1D surf!!
   !IceSurfDG(ICS_VCEL,:,:) = SurfElem(:,:,0,SideID) *2. / (PP_N+1)
 
-  IceSurfDG(ICS_X   ,:,:) = Face_xGP(1,:,:,0,SideID)
-  IceSurfDG(ICS_Y   ,:,:) = Face_xGP(2,:,:,0,SideID)
-  IceSurfDG(ICS_P,:,:) = UPrim_master(5,:,:,SideID)
+  IceSurfDG(1,:,:) = Face_xGP(1,:,:,0,SideID)
+  IceSurfDG(2,:,:) = Face_xGP(2,:,:,0,SideID)
+  IF(doAvgIceSurf)THEN 
+    IceSurfDG(3:nVarSurf,:,:) = UAvg_master(:,:,:,SideID)
+  ELSE 
+    IceSurfDG(3:nVarSurf,:,:) = UPrim_master(:,:,:,SideID)
+  END IF 
 
   !TODO: Only change basis if not FVElem
-  CALL ChangeBasisSurf(ICS_NVAR,PP_N,NOutSurf,Vdm,IceSurfDG,IceSurfData(:,:,:,WallSideID))
+  CALL ChangeBasisSurf(nVarSurf,PP_N,NOutSurf,Vdm,IceSurfDG,IceSurfData(:,:,:,WallSideID))
 END DO
 
 !==================================================================================================================================
 ! TODO: 
-! fix bug where first entry of IceSurfData(ICS_X...) is 0
+! fix bug where first entry of IceSurfData(1...) is 0
 ! rename all "ice" in varnames 
 !==================================================================================================================================
 
@@ -304,6 +345,8 @@ IMPLICIT NONE
 ! Deallocate global variables
 SDEALLOCATE(IceSurfData)
 SDEALLOCATE(MapIceSurf)
+SDEALLOCATE(UAvg_master)
+SDEALLOCATE(UAvg_slave)
 
 IceSurfInitIsDone = .FALSE.
 END SUBROUTINE FinalizeIceSurf

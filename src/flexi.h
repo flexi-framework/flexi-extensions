@@ -146,7 +146,3 @@
 #define DIMV    1:3
 #endif
 
-#define ICS_X 1 
-#define ICS_Y 2 
-#define ICS_P 3 
-#define ICS_NVAR 3 
