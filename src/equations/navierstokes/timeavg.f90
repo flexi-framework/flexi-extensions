@@ -329,6 +329,8 @@ USE MOD_AnalyzeEquation_Vars
 USE MOD_FV_Vars      ,ONLY: FV_Elems,FV_Vdm
 USE MOD_ChangeBasisByDim,ONLY:ChangeBasisVolume
 #endif
+USE MOD_IceSurf_Vars ,ONLY: doCalcIceSurfData,doAvgIceSurf
+USE MOD_IceSurf      ,ONLY: CalcIceSurfData
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -502,6 +504,7 @@ IF(Finalize)THEN
   IF(nVarFluc.GT.0) UFluc=UFluc/dtAvg
   tFuture=t+WriteData_dt
   FV_Elems_loc=FV_ENABLED
+  IF(doCalcIceSurfData.AND.doAvgIceSurf) CALL CalcIceSurfData()
   CALL WriteTimeAverage(MeshFile,t,dtAvg,FV_Elems_loc,(/PP_N+1,PP_N+1,PP_NZ+1/),&
                         nVarAvg ,VarNamesAvgOut ,UAvg ,&
                         nVarFluc,VarNamesFlucOut,UFluc,&

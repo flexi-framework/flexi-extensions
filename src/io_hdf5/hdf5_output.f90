@@ -219,6 +219,10 @@ END IF
 
 
 IF(MPIGlobalRoot)THEN
+  CALL OpenDataFile(TRIM(FileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
+  CALL WriteAttribute(File_ID,'LastSequentialRun',1,IntScalar=iSequentialRun)
+  CALL CloseDataFile()
+
   CALL MarkWriteSuccessfull(FileName)
   GETTIME(EndT)
   WRITE(UNIT_stdOut,'(A,F0.3,A)',ADVANCE='YES')'DONE  [',EndT-StartT,'s]'
@@ -792,9 +796,9 @@ END DO
 IF(doCalcIceSurfData.AND.doAvgIceSurf)THEN 
   CALL GatheredWriteArray(FileName,create=.FALSE.,&
                           DataSetName='IceSurfData', rank=5,&
-                          nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
-                          nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
-                          offset=    (/0,      0,     0 ,      offsetWallSides, iGlobalRun-1/),&
+                          nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob, nGlobalRuns/),&
+                          nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,     1/),&
+                          offset=    (/0,       0,         0,               offsetWallSides,iGlobalRun-1/),&
                           collective=.TRUE.,RealArray=IceSurfData)
 END IF 
 

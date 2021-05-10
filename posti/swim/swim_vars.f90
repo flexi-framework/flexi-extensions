@@ -37,5 +37,11 @@ INTEGER             :: nRuns
 INTEGER             :: nVarSurf
 REAL,ALLOCATABLE    :: XY(:,:)
 REAL,ALLOCATABLE    :: SwimData(:,:,:)
+
+LOGICAL             :: doInterpolateX
+REAL                :: xMin,xMax
+INTEGER             :: nPts
+REAL,ALLOCATABLE    :: NewData(:,:,:)
+INTEGER,ALLOCATABLE :: nHits(:)
 !===================================================================================================================================
 END MODULE MOD_Swim_Vars

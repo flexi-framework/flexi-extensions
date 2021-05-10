@@ -58,6 +58,13 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: iSideIn,SideID,flip,lo,up,iCell,iRun
+
+INTEGER             :: nItv
+REAL                :: dx
+INTEGER             :: iXMin,iOld,iNew
+REAL                :: xMinLoc,xMaxLoc
+INTEGER             :: iMinLoc,iMaxLoc
+REAL                :: xi,fac
 !===================================================================================================================================
 
 
@@ -89,7 +96,6 @@ CALL CloseDataFile()
 
 nCells = nWallSides*(ICS_N+1)
 !Allocate and fill Input arrays
-!TODO: in Vars!
 ALLOCATE(SwimData(nVarSurf,nCells,nRuns))
 
 WRITE (*,*) "Sort"
@@ -107,11 +113,76 @@ DO iSideIn=1,nWallSides
   END DO 
 END DO 
 
+!doInterpolateX = GETLOGICAL("doInterpolateX")
+IF(doInterpolateX)THEN 
+  !xMin = GETREAL("xMin")
+  !xMax = GETREAL("xMax")
+  !nPts = GETINT("nPts")
+  nItv = nPts-1
+  dx = (xMax-xMin)/nItv
+  ALLOCATE(NewData(nVarSurf-2,2*nPts,nRuns))
+  NewData = 0.
+  ALLOCATE(nHits(2*nPts))
+  Do iRun=1,nRuns
+
+    iXMin = MINLOC(SwimData(1,:,iRun),1)
+    nHits = 0
+    !Loop over all old line segments. 
+    !For each segment, loop over all points within it and add point to pressure sum. 
+    !Finally divide by number of points found.
+
+    !first: pressure side from TE to LE 
+    DO iOld = 1,iXMin-1
+      xMinLoc = MINVAL(SwimData(1,iOld:iOld+1,iRun))
+      xMaxLoc = MAXVAL(SwimData(1,iOld:iOld+1,iRun))
+      iMinLoc = CEILING(nItv*(xMaxLoc-xMax)/(xMin-xMax))+1
+      iMaxLoc = FLOOR(  nItv*(xMinLoc-xMax)/(xMin-xMax))+1
+      DO iNew = iMinLoc,iMaxLoc
+        xi = xMax - (iNew-1)*dx
+        ! fac is 0 at iOld
+        fac = (xi - SwimData(1,iOld,iRun))/(SwimData(1,iOld+1,iRun)-SwimData(1,iOld,iRun))
+        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + (1.-fac)*SwimData(3:,iOld,iRun) + fac*SwimData(3:,iOld+1,iRun) 
+        nHits(iNew) = nHits(iNew) + 1 
+      END DO 
+    END DO 
+    !second: suction side from LE to TE 
+    DO iOld = iXMin,nCells-1
+      xMinLoc = MINVAL(SwimData(1,iOld:iOld+1,iRun))
+      xMaxLoc = MAXVAL(SwimData(1,iOld:iOld+1,iRun))
+      iMinLoc = CEILING(nPts*(xMinLoc-xMin)/(xMax-xMin))+nPts+1
+      iMaxLoc = FLOOR(  nPts*(xMaxLoc-xMin)/(xMax-xMin))+nPts+1
+      DO iNew = iMinLoc,iMaxLoc
+        xi = xMin + (iNew-1-nPts)*dx
+        ! fac is 0 at iOld
+        fac = (xi - SwimData(1,iOld,iRun))/(SwimData(1,iOld+1,iRun)-SwimData(1,iOld,iRun))
+        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + (1.-fac)*SwimData(3:,iOld,iRun) + fac*SwimData(3:,iOld+1,iRun) 
+        nHits(iNew) = nHits(iNew) + 1 
+      END DO 
+    END DO 
+    !average
+    DO iNew = 1,2*nPts
+      IF(nHits(iNew).GT.0)THEN
+        NewData(:,iNew,iRun) = NewData(:,iNew,iRun)/nHits(iNew) !MAX(nHits(iNew),1)
+      ELSE
+        NewData(:,iNew,iRun) = -1.
+      END IF 
+    END DO 
+  END DO 
+END IF 
+
 WRITE (*,*) "Write To File"
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.)
-CALL WriteArray('SwimData',3,(/nVarSurf,nCells,nRuns/),(/nVarSurf,nCells,nRuns/),(/0,0,0/),collective=.FALSE.,RealArray=SwimData)
+IF(doInterpolateX)THEN 
+  CALL WriteArray('SwimData',3,(/nVarSurf-2,2*nPts,nRuns/),(/nVarSurf-2,2*nPts,nRuns/),(/0,0,0/),&
+                  collective=.FALSE.,RealArray=NewData)
+ELSE 
+  CALL WriteArray('SwimData',3,(/nVarSurf,nCells,nRuns/),(/nVarSurf,nCells,nRuns/),(/0,0,0/),collective=.FALSE.,RealArray=SwimData)
+END IF 
 CALL CloseDataFile()
 
+SDEALLOCATE(SwimData)
+SDEALLOCATE(NewData)
+SDEALLOCATE(nHits)
 END SUBROUTINE InitSwim
 
 

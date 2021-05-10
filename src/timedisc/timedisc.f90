@@ -160,7 +160,7 @@ USE MOD_RecordPoints        ,ONLY: RecordPoints,WriteRP
 USE MOD_RecordPoints_Vars   ,ONLY: RP_onProc
 USE MOD_Sponge_Vars         ,ONLY: CalcPruettDamping
 USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
-USE MOD_IceSurf_Vars        ,ONLY: doCalcIceSurfData
+USE MOD_IceSurf_Vars        ,ONLY: doCalcIceSurfData,doAvgIceSurf
 USE MOD_IceSurf             ,ONLY: CalcIceSurfData
 #if FV_ENABLED
 USE MOD_FV
@@ -228,7 +228,7 @@ END IF
 
 ! TODO: Should this be done before or after Overintegration? (see above) For FV we need it after DGTimeDerivative_weakForm!
 ! Write the state at time=0, i.e. the initial condition
-IF(doCalcIceSurfData) CALL CalcIceSurfData()
+IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf)) CALL CalcIceSurfData()
 CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
                       FutureTime=tWriteData,isErrorFile=.FALSE.)
 
@@ -303,17 +303,13 @@ DO
   nCalcTimestep=nCalcTimestep-1
 
   dt=dt_Min
-  dtAnalyze=HUGE(1.)
   IF(tAnalyze-t.LE.dt*(1.+1.E-4))THEN
-    dtAnalyze=tAnalyze-t; doAnalyze=.TRUE.
+    dt=tAnalyze-t; doAnalyze=.TRUE.
   END IF
-  dt=MIN(dt,dtAnalyze)
 
-  dtEnd=HUGE(1.)
-  IF(tEnd-t    .LE.dt*(1.+1.E-4))THEN
-    dtEnd=tEnd-t;         doAnalyze=.TRUE.; doFinalize=.TRUE.
+  IF(tEnd-t.LE.dt*(1.+1.E-4))THEN
+    dt=tEnd-t; doAnalyze=.TRUE.; doFinalize=.TRUE.
   END IF
-  dt=MIN(dt,dtEnd)
 
   IF(doCalcTimeAverage) CALL CalcTimeAverage(.FALSE.,dt,t)
   IF(doTCSource) CALL CalcForcing(t,dt)
@@ -378,7 +374,7 @@ DO
       IF(doCalcTimeAverage) CALL CalcTimeAverage(.TRUE.,dt,t)
       IF(RP_onProc)         CALL WriteRP(PP_nVar,StrVarNames,t,.TRUE.)
       IF(CalcPruettDamping) CALL WriteBaseflow(TRIM(MeshFile),t)
-      IF(doCalcIceSurfData) CALL CalcIceSurfData()
+      IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf)) CALL CalcIceSurfData()
       ! Write state file
       ! NOTE: this should be last in the series, so we know all previous data
       ! has been written correctly when the state file is present
