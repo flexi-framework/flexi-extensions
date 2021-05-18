@@ -66,6 +66,9 @@ CONTAINS
 SUBROUTINE DefineParametersFilter()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
+#if PPLimiter
+USE MOD_PPLimiter   ,ONLY: DefineParametersPPLimiter
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -82,6 +85,9 @@ CALL addStrListEntry('FilterType','laf',   FILTERTYPE_LAF)
 CALL prms%CreateIntOption(             'NFilter',           "Cut-off mode (FilterType==CutOff or LAF)")
 CALL prms%CreateRealOption(            'LAF_alpha',         "Relaxation factor for LAF, see Flad et al. JCP 2016")
 CALL prms%CreateRealArrayOption(       'HestFilterParam',   "Parameters for Hesthaven filter (FilterType==Modal)")
+#if PPLimiter
+CALL DefineParametersPPLimiter()
+#endif
 END SUBROUTINE DefineParametersFilter
 
 
@@ -102,6 +108,9 @@ USE MOD_IO_HDF5           ,ONLY:AddToElemData,ElementOut
 #if EQNSYSNR==2
 USE MOD_Interpolation_Vars,ONLY:wGP
 USE MOD_Mesh_Vars         ,ONLY:nElems,sJ
+#endif
+#if PPLimiter
+USE MOD_PPLimiter         ,ONLY: InitPPLimiter
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -202,6 +211,9 @@ IF(FilterType.GT.0) THEN
   FilterMat=MATMUL(MATMUL(Vdm_Leg,FilterMat),sVdm_Leg)
 END IF !FilterType=0
 
+#if PPLimiter
+CALL InitPPLimiter()
+#endif 
 FilterInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT FILTER DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -531,6 +543,14 @@ SDEALLOCATE(ekin_fluc_avg_old)
 SDEALLOCATE(Vol)
 #endif /*EQNSYSNR==2*/
 FilterInitIsDone = .FALSE.
+#if PPLimiter
+SDEALLOCATE(PP_Elems)
+SDEALLOCATE(PP_Sides)
+#endif
+#if FV_ENABLED
+SDEALLOCATE(IntegrationweightFV)
+SDEALLOCATE(VolFV)
+#endif
 END SUBROUTINE FinalizeFilter
 
 END MODULE MOD_Filter

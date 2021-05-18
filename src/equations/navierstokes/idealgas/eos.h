@@ -26,6 +26,7 @@
 #define MOM2  3   /* momentum y */
 #define MOM3  4   /* momentum z */
 #define MOMV  2:4 /* momentum vector */
+#define MMV2  2:1+PP_dim /* momentum vector */
 #define ENER  5   /* energy */
 
 ! primitive (extended) variables
@@ -34,6 +35,7 @@
 #define VEL2  8   /* velocity y */
 #define VEL3  9   /* velocity z */
 #define VELV  7:9 /* velocity range */
+#define VLV2  7:6+PP_dim /* velocity range */
 #define PRES  10  /* pressure */
 #define TEMP  11  /* temperature */
 
@@ -59,6 +61,7 @@
 ! assume that both prim and cons vars are filled
 #define VELOCITY_HE(UE)                (UE(MOMV)*UE(SRHO))
 #define PRESSURE_HE(UE)                (KappaM1*(UE(ENER)-0.5*DOT_PRODUCT(UE(VELV),UE(MOMV))))
+#define PRESSURE_CONS(U)               (KappaM1*(U(ENER)-0.5*DOT_PRODUCT(U(MMV2),U(MMV2))/U(DENS)))
 #define SPEEDOFSOUND_HE(UE)            (SQRT(Kappa*UE(PRES)*UE(SRHO)))
 #define TOTALENERGY_HE(UE)             (UE(ENER)*UE(SRHO))
 #define TOTALENTHALPY_HE(UE)           ((UE(ENER)+UE(PRES))*UE(SRHO))

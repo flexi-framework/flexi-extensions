@@ -211,10 +211,14 @@ SUBROUTINE PrintStatusLine(t,dt,tStart,tEnd)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Output_Vars , ONLY: doPrintStatusLine
-#if FV_ENABLED
 USE MOD_Mesh_Vars   , ONLY: nGlobalElems
+#if FV_ENABLED
 USE MOD_FV_Vars     , ONLY: FV_Elems
 USE MOD_Analyze_Vars, ONLY: totalFV_nElems
+#endif
+#if PPLimiter
+USE MOD_Filter_Vars , ONLY: PP_Elems,PP_Sides
+USE MOD_Analyze_Vars, ONLY: totalPP_nElems,totalPP_nSides
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------!
 ! insert modules here
@@ -231,17 +235,34 @@ REAL,INTENT(IN) :: tEnd   !< end time of simulation
 INTEGER :: FVcounter
 REAL    :: FV_percent
 #endif
+#if PPLimiter
+INTEGER :: PPcounter
+REAL    :: PP_percent
+INTEGER :: PPSidescounter
+REAL    :: PPSides_percent
+#endif
 REAL    :: percent,time_remaining,mins,secs,hours
 !==================================================================================================================================
 #if FV_ENABLED
 FVcounter = SUM(FV_Elems)
 totalFV_nElems = totalFV_nElems + FVcounter ! counter for output of FV amount during analyze
 #endif
+#if PPLimiter
+PPcounter = SUM(PP_Elems)
+totalPP_nElems = totalPP_nElems + PPcounter ! counter for output of FV amount during analyze
+PPSidescounter = SUM(PP_Sides)
+totalPP_nSides = totalPP_nSides + PPSidescounter ! counter for output of FV amount during analyze
+#endif
 
 IF(.NOT.doPrintStatusLine) RETURN
 
 #if FV_ENABLED && USE_MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,FVcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
+#endif
+
+#if PPLimiter && USE_MPI
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,PPcounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,PPSidescounter,1,MPI_INTEGER,MPI_SUM,MPI_COMM_FLEXI,iError)
 #endif
 
 IF(MPIGlobalRoot)THEN
@@ -259,9 +280,15 @@ IF(MPIGlobalRoot)THEN
   hours = MOD(time_remaining,24.)
 #if FV_ENABLED
   FV_percent = REAL(FVcounter) / nGlobalElems * 100.
-  WRITE(UNIT_stdOut,'(F7.2,A5)',ADVANCE='NO') FV_percent, '% FV '
+  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') FV_percent, '% FV,'
 #endif
-  WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') 'Time = ', t, &
+#if PPLimiter
+  PP_percent = REAL(PPcounter) / nGlobalElems * 100.
+  WRITE(UNIT_stdOut,'(F5.2,A5)',ADVANCE='NO') PP_percent, '% PP,'
+  PPSides_percent = REAL(PPSidescounter) / nGlobalElems * 100.
+  WRITE(UNIT_stdOut,'(F5.2,A6)',ADVANCE='NO') PPSides_percent, '% PPS  '
+#endif
+  WRITE(UNIT_stdOut,'(A,E10.4,A,E10.4,A,F6.2,A,I4,A1,I0.2,A1,I0.2,A1)',ADVANCE='NO') ' Time = ', t, &
       ' dt = ', dt, '  ', percent, '% complete, est. Time Remaining = ',INT(hours),':',INT(mins),':',INT(secs), ACHAR(13)
 #ifdef INTEL
   CLOSE(UNIT_stdOut)

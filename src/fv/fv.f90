@@ -477,7 +477,7 @@ REAL                   :: Elem_xFV(1:3,0:PP_N,0:PP_N,0:PP_NZ)
 ! initial call of indicator
 FV_Elems = 0
 ! Switch DG elements to FV if necessary (converts initial DG solution to FV solution)
-CALL FV_Switch(U,AllowToDG=.FALSE.)
+!CALL FV_Switch(U,AllowToDG=.FALSE.)
 
 IF (.NOT.FV_IniSharp) THEN
   ! Super sample initial solution of all FV elements. Necessary if already initial DG solution contains oscillations, which
@@ -573,7 +573,6 @@ DO SideID=firstSideID,lastSideID
 END DO
 
 END SUBROUTINE FV_DGtoFV
-
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.

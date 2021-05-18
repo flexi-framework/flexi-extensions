@@ -166,6 +166,9 @@ USE MOD_IceSurf             ,ONLY: CalcIceSurfData
 USE MOD_FV
 #endif
 use MOD_IO_HDF5
+#if PPLimiter
+USE MOD_PPLimiter           ,ONLY: PositivityPreservingLimiter,PP_Info
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -218,6 +221,9 @@ IF(doCalcIndicator) CALL CalcIndicator(U,t)
 IF(.NOT.DoRestart)THEN
   CALL FV_FillIni()
 END IF
+#endif
+#if PPLimiter
+CALL PositivityPreservingLimiter()
 #endif
 
 IF(.NOT.DoRestart)THEN
@@ -272,6 +278,9 @@ END IF
 #if FV_ENABLED
 CALL FV_Info(1_8)
 #endif
+#if PPLimiter
+CALL PP_Info(1_8)
+#endif
 SWRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 
 
@@ -286,6 +295,9 @@ DO
     IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
     CALL FV_Switch(U,AllowToDG=(nCalcTimestep.LT.1))
+#endif
+#if PPLimiter
+    CALL PositivityPreservingLimiter()
 #endif
     CALL DGTimeDerivative_weakForm(t)
   END IF
@@ -367,6 +379,10 @@ DO
     CALL FV_Info(iter_loc)
 #endif
 
+#if PPLimiter
+    CALL PP_Info(iter_loc)
+#endif
+
     ! Visualize data and write solution
     writeCounter=writeCounter+1
     IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
@@ -421,6 +437,9 @@ USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
 USE MOD_FV           ,ONLY: FV_Switch
 USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
 #endif
+#if PPLimiter
+USE MOD_PPLimiter    ,ONLY: PositivityPreservingLimiter
+#endif
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -442,6 +461,9 @@ tStage=t
 !CALL DGTimeDerivative_weakForm(tStage)      !allready called in timedisc
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
+#if PPLimiter
+CALL PositivityPreservingLimiter()
+#endif
 
 
 ! Following steps
@@ -451,10 +473,16 @@ DO iStage=2,nRKStages
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
   CALL FV_Switch(U,Ut_temp,AllowToDG=FV_toDGinRK)
+#if PPLimiter
+  CALL PositivityPreservingLimiter()
+#endif
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+#if PPLimiter
+  CALL PositivityPreservingLimiter()
+#endif
 END DO
 CurrentStage=1
 
@@ -482,6 +510,9 @@ USE MOD_Indicator    ,ONLY: doCalcIndicator,CalcIndicator
 USE MOD_FV           ,ONLY: FV_Switch
 USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
 #endif
+#if PPLimiter
+USE MOD_PPLimiter    ,ONLY: PositivityPreservingLimiter
+#endif
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -508,6 +539,9 @@ CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
 CALL VCopy(nTotalU,S2,U)                       !S2=U
 !CALL DGTimeDerivative_weakForm(t)             ! allready called in timedisc
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+#if PPLimiter
+CALL PositivityPreservingLimiter()
+#endif
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
@@ -515,12 +549,18 @@ DO iStage=2,nRKStages
   IF(doCalcIndicator) CALL CalcIndicator(U,t)
 #if FV_ENABLED
   CALL FV_Switch(U,Uprev,S2,AllowToDG=FV_toDGinRK)
+#if PPLimiter
+  CALL PositivityPreservingLimiter()
+#endif
 #endif
   CALL DGTimeDerivative_weakForm(tStage)
   CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)
   CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
   CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
   CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
+#if PPLimiter
+  CALL PositivityPreservingLimiter()
+#endif
 END DO
 CurrentStage=1
 

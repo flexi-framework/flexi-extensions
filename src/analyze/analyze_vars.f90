@@ -31,6 +31,10 @@ REAL                 :: tWriteData                        !< actual time at whic
 #if FV_ENABLED
 INTEGER              :: totalFV_nElems=0
 #endif
+#if PPLimiter
+INTEGER              :: totalPP_nElems=0
+INTEGER              :: totalPP_nSides=0
+#endif
 REAL,ALLOCATABLE     :: wGPSurf(:,:)                      !< wGPSurf(i,j)=wGP(i)*wGP(j)
 REAL,ALLOCATABLE     :: wGPVol(:,:,:)                     !< wGPVol(i,j,k)=wGP(i)*wGP(j)*wGP(k)
 REAL,ALLOCATABLE     :: Surf(:)                           !< surface of each analyze set (e.g. of each boundary condition)

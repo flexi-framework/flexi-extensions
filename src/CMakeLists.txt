@@ -45,6 +45,17 @@ IF(FLEXI_SPLIT_DG)
 ENDIF()
 
 # =========================================================================
+# PPLimiter
+# =========================================================================
+OPTION(FLEXI_PPLimiter "Enable Positivity Preserving Limiter" OFF)
+IF(FLEXI_PPLimiter)
+   ADD_DEFINITIONS(-DPPLimiter)
+  IF(NOT FLEXI_EQNSYSNAME STREQUAL "navierstokes")
+     MESSAGE(SEND_ERROR "FLEXI_PPLimiter only works for FLEXI_EQNSYSNAME==navierstokes.")
+  ENDIF()
+ENDIF()
+
+# =========================================================================
 # Equation system
 # =========================================================================
 SET(FLEXI_EQNSYSNAME "navierstokes" CACHE STRING
