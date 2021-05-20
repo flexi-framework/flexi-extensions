@@ -53,6 +53,8 @@ USE MOD_Mesh_Vars,          ONLY: BoundaryType,BC,MeshFile,SideToElem,ElemToSide
 USE MOD_Mappings,           ONLY: SideToVol2
 USE MOD_HDF5_Output,        ONLY: WriteArray
 USE MOD_IO_HDF5
+USE MOD_Mesh_ReadIn,        ONLY: ReadIJKSorting
+USE MOD_Mesh_Vars,          ONLY: nElems_IJK,Elem_IJK
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
@@ -78,33 +80,49 @@ TYPE tChain
   TYPE(tChain),POINTER         :: prevChain
 END TYPE tChain
 
-TYPE(tChain),POINTER           :: firstChain,aChain,bChain
+TYPE tChainPointer
+  TYPE(tChain),POINTER         :: firstChain
+END TYPE tChainPointer
+TYPE(tChain),POINTER           :: aChain,bChain
+TYPE(tChainPointer),ALLOCATABLE:: Chains(:)
 TYPE(tSide),POINTER            :: aSide
 LOGICAL                        :: found,connected
 
 INTEGER             :: pq(2),p,q
 REAL                :: tmp(3,0:NGeo,0:NGeo),xTrailingEdge
+INTEGER             :: nZ,nCirc,iZ
 !===================================================================================================================================
 !clockwise = GETLOGICAL('clockwise','T')
 !XCut = GETREALARRAY('XCut',3)
 
 !--------------------------------------------------------------------------------
-ALLOCATE(firstChain)
-firstChain%i = 1
-NULLIFY(firstChain%firstSide)
-NULLIFY(firstChain%lastSide )
-NULLIFY(firstChain%nextChain)
-NULLIFY(firstChain%prevChain)
+
+nElems_IJK = 0 
+CALL ReadIJKSorting()
+IF(SUM(nElems_IJK).EQ.0) CALL Abort(__STAMP__,'Build Mesh with Elem_IJK!')
+nZ = nElems_IJK(3)
+
+ALLOCATE(Chains(nZ))
+DO iZ= 1,nZ
+  ALLOCATE(Chains(iZ)%firstChain)
+  Chains(iZ)%firstChain%i = 1
+  NULLIFY(Chains(iZ)%firstChain%firstSide)
+  NULLIFY(Chains(iZ)%firstChain%lastSide )
+  NULLIFY(Chains(iZ)%firstChain%nextChain)
+  NULLIFY(Chains(iZ)%firstChain%prevChain)
+END DO 
 
 xTrailingEdge = -1.E10
-nWallSides = 0 
+nCirc = 0 
 DO SideID=1,nBCSides
   BCType  = Boundarytype(BC(SideID),BC_TYPE)
   IF(.NOT.ANY(BCType.EQ.WALLBCTYPES())) CYCLE
 
-  nWallSides = nWallSides + 1 
-
   ElemID = SideToElem(S2E_ELEM_ID,SideID)
+  iZ = Elem_IJK(3,ElemID)
+
+  IF(iZ.EQ.1) nCirc = nCirc + 1 
+
   ! offsetElem = 0 in single mode!
   locSideID = SideToElem(S2E_LOC_SIDE_ID,SideID)
   GlobSideID = (ElemID-1)*6+LocSideID
@@ -134,7 +152,7 @@ DO SideID=1,nBCSides
 
 
   ! TRY TO APPEND TO CHAIN
-  aChain => firstChain
+  aChain => Chains(iZ)%firstChain
   NULLIFY(aSide)
   DO WHILE(ASSOCIATED(aChain))
     found = .FALSE.
@@ -208,28 +226,34 @@ DO SideID=1,nBCSides
 END DO 
 
 ! join circle 
-firstChain%firstSide%prevSide => firstChain%lastSide
-firstChain%lastSide%nextSide => firstChain%firstSide
-!cut circle at back
-aSide => firstChain%firstSide
-DO
-  IF(ABS(aSide%x(1,1)-xTrailingEdge).LT.1.E-10) EXIT
-  aSide => aSide%nextSide
+DO iZ= 1,nZ
+  Chains(iZ)%firstChain%firstSide%prevSide => Chains(iZ)%firstChain%lastSide
+  Chains(iZ)%firstChain%lastSide%nextSide => Chains(iZ)%firstChain%firstSide
+  !cut circle at back
+  aSide => Chains(iZ)%firstChain%firstSide
+  DO
+    IF(ABS(aSide%x(1,1)-xTrailingEdge).LT.1.E-10) EXIT
+    aSide => aSide%nextSide
+  END DO 
+  Chains(iZ)%firstChain%firstSide => aSide
+  NULLIFY(aSide%prevSide%nextSide)
 END DO 
-NULLIFY(aSide%prevSide%nextSide)
 
 !--------------------------------------------------------------------------------
-ALLOCATE(SurfIndicesAll(2,6*nGlobalElems))
-ALLOCATE(SurfIndices(2,nWallSides))
+ALLOCATE(SurfIndicesAll(3,6*nGlobalElems))
+ALLOCATE(SurfIndices(3,nCirc*nZ))
 SurfIndicesAll=0
 
-!aSide => firstChain%firstSide
-nWallSides = 0 
-DO WHILE(ASSOCIATED(aSide))
-  nWallSides = nWallSides + 1
-  SurfIndicesAll(1,aSide%GlobSideID) = nWallSides
-  SurfIndicesAll(2,aSide%GlobSideID) = aSide%flip
-  aSide => aSide%nextSide
+DO iZ= 1,nZ
+  aSide => Chains(iZ)%firstChain%firstSide
+  nCirc = 0 
+  DO WHILE(ASSOCIATED(aSide))
+    nCirc = nCirc + 1
+    SurfIndicesAll(1,aSide%GlobSideID) = nCirc
+    SurfIndicesAll(2,aSide%GlobSideID) = iZ
+    SurfIndicesAll(3,aSide%GlobSideID) = aSide%flip
+    aSide => aSide%nextSide
+  END DO 
 END DO 
 
 ! reduce array
@@ -242,7 +266,7 @@ DO GlobSideID = 1,6*nGlobalElems
 END DO 
 
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.)
-CALL WriteArray("IcingSideInfo",2,(/2,nWallSides/),(/2,nWallSides/),(/0,0/),collective=.TRUE.,IntArray=SurfIndices)
+CALL WriteArray("IcingSideInfo",2,(/3,nWallSides/),(/3,nWallSides/),(/0,0/),collective=.TRUE.,IntArray=SurfIndices)
 CALL CloseDataFile()
 
 DEALLOCATE(SurfIndicesAll)

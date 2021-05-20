@@ -52,6 +52,7 @@ USE MOD_HDF5_Input,         ONLY: GetDataSize
 USE MOD_HDF5_Input,         ONLY: ReadArray,GetArrayAndName
 USE MOD_HDF5_Input,         ONLY: ReadAttribute
 USE MOD_HDF5_Output,        ONLY: WriteArray
+USE MOD_Mesh_Vars,          ONLY: nElems_IJK
 !----------------------------------------------------------------------------------------------------------------------------------!
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
@@ -65,6 +66,7 @@ INTEGER             :: iXMin,iOld,iNew
 REAL                :: xMinLoc,xMaxLoc
 INTEGER             :: iMinLoc,iMaxLoc
 REAL                :: xi,fac
+INTEGER             :: nZ,nCirc,nCellsZ
 !===================================================================================================================================
 
 
@@ -90,13 +92,18 @@ CALL CloseDataFile()
 WRITE (*,*) "Read Mesh Mapping"
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL GetDataSize(File_ID,'IcingSideInfo',nDims,HSize)
-ALLOCATE(Mapping(2,nWallSides))
-CALL ReadArray('IcingSideInfo',2,(/2,nWallSides/),0,2,IntArray=Mapping)
+ALLOCATE(Mapping(3,nWallSides))
+CALL ReadArray('IcingSideInfo',2,(/3,nWallSides/),0,2,IntArray=Mapping)
+CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
+nZ = nElems_IJK(3)
+nCirc = nWallSides/nZ
 CALL CloseDataFile()
 
-nCells = nWallSides*(ICS_N+1)
+nCells  = nCirc*(ICS_N+1)
+nCellsZ = nZ   *(ICS_N+1)
 !Allocate and fill Input arrays
 ALLOCATE(SwimData(nVarSurf,nCells,nRuns))
+SwimData = 0.
 
 WRITE (*,*) "Sort"
 DO iSideIn=1,nWallSides
@@ -104,17 +111,23 @@ DO iSideIn=1,nWallSides
   lo = (SideID-1)*(ICS_N+1) + 1
   up =  SideID   *(ICS_N+1)
   IF(WriteDim.EQ.3)THEN ! SurfData was created in 3D
-    flip   = Mapping(2,iSideIn)
-  ELSE ! 2D: Data is already sorted clockwise (due to p SurfVec orientation in 2D CGNS) 
-    flip = 1
+    flip   = Mapping(3,iSideIn)
+    Do iRun=1,nRuns
+      CALL DoFlip(nVarSurf,VolData(:,:,:,iSideIn,iRun),flip,SwimData(:,lo:up,iRun))
+    END DO 
+  ELSE 
+    ! 2D: - Data is already sorted clockwise (due to p SurfVec orientation in 2D CGNS) 
+    !     - Data is constant in Z => first cell in Z is sufficient
+    Do iRun=1,nRuns
+      SwimData(:,lo:up,iRun) = VolData(:,:,0,iSideIn,iRun)
+    END DO 
   END IF 
-  Do iRun=1,nRuns
-    CALL DoFlip(nVarSurf,VolData(:,:,:,iSideIn,1),flip,SwimData(:,lo:up,iRun))
-  END DO 
 END DO 
+IF(WriteDim.EQ.3) SwimData = SwimData / nCellsZ !Average
 
 !doInterpolateX = GETLOGICAL("doInterpolateX")
 IF(doInterpolateX)THEN 
+  WRITE (*,*) "Interpolate X"
   !xMin = GETREAL("xMin")
   !xMax = GETREAL("xMax")
   !nPts = GETINT("nPts")
@@ -201,20 +214,23 @@ IMPLICIT NONE
 INTEGER,INTENT(IN)   :: NIn
 REAL,INTENT(IN)      :: UIn(NIn,0:ICS_N,0:ICS_NZ)
 INTEGER,INTENT(IN)   :: flip
-REAL,INTENT(OUT)     :: UOut(NIn,0:ICS_N)
+REAL,INTENT(INOUT)   :: UOut(NIn,0:ICS_N)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER             :: iZ
 !===================================================================================================================================
-SELECT CASE(flip)
-CASE(1)
-  UOut(:,:)=UIn(:,:,0)
-CASE(2)
-  UOut(:,:)=UIn(:,0,:)
-CASE(3)
-  UOut(:,:)=UIn(:,ICS_N:0:-1,0)
-CASE(4)
-  UOut(:,:)=UIn(:,0,ICS_N:0:-1)
-END SELECT
+DO iZ = 0,ICS_NZ
+  SELECT CASE(flip)
+  CASE(1)
+    UOut(:,:)=UOut(:,:)+UIn(:,:,iZ)
+  CASE(2)
+    UOut(:,:)=UOut(:,:)+UIn(:,iZ,:)
+  CASE(3)
+    UOut(:,:)=UOut(:,:)+UIn(:,ICS_N:0:-1,iZ)
+  CASE(4)
+    UOut(:,:)=UOut(:,:)+UIn(:,iZ,ICS_N:0:-1)
+  END SELECT
+END DO 
 END SUBROUTINE DoFlip
 
 

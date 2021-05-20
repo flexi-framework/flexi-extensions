@@ -59,7 +59,7 @@ IMPLICIT NONE
 CALL prms%SetSection("IceSurf")
 CALL prms%CreateLogicalOption('doCalcIceSurfData'  , "Calculate and write ice surface data for icing model","T")
 CALL prms%CreateLogicalOption('doAvgIceSurf'  , "to do","T")
-CALL prms%CreateLogicalOption('SurfFirstZOnly'  , "to do","T")
+CALL prms%CreateLogicalOption('SurfFirstZOnly'  , "to do","F")
 CALL prms%CreateIntOption('NOutSurf'  , "Surface FV Output polynomial degree")
 END SUBROUTINE DefineParametersIceSurf
 
@@ -96,7 +96,7 @@ doCalcIceSurfData = GETLOGICAL("doCalcIceSurfData","T")
 
 IF(doCalcIceSurfData)THEN 
   doAvgIceSurf = GETLOGICAL("doAvgIceSurf")
-  SurfFirstZOnly = GETLOGICAL("SurfFirstZOnly")
+  SurfFirstZOnly = GETLOGICAL("SurfFirstZOnly","F")
   IF(doAvgIceSurf.AND.(.NOT.doCalcTimeAverage)) CALL Abort(__STAMP__,'Turn on Time Avg!')
   IF(doAvgIceSurf)THEN 
     nVarSurf = nVarAvg+2
