@@ -22,7 +22,7 @@ USE MOD_Globals
 USE MOD_Flexi
 USE MOD_TimeDisc   ,ONLY: TimeDisc
 USE MOD_IO_HDF5    ,ONLY: OpenDataFile,CloseDataFile,File_ID,InitMPIInfo
-USE MOD_HDF5_Input ,ONLY: ReadAttribute,DatasetExists
+USE MOD_HDF5_Input ,ONLY: ReadAttribute,DatasetExists,ISVALIDHDF5FILE
 USE MOD_BatchInput_Vars, ONLY: StochFile,BatchMode
 USE MOD_StringTools ,ONLY: STRICMP,GetFileExtension
 IMPLICIT NONE
@@ -33,6 +33,9 @@ CHARACTER(LEN=255),ALLOCATABLE :: ArgsLoc(:)
 CHARACTER(LEN=255)             :: FirstArg
 LOGICAL                        :: exists,isActive
 REAL                           :: GlobalStartTime,GlobalEndTime
+INTEGER                        :: StartSequentialRun,nArgsIn,lastRun
+CHARACTER(LEN=255)             :: FinishFile
+LOGICAL                        :: validHDF5
 !==================================================================================================================================
 #if USE_MPI
 CALL MPI_INIT(iError)
@@ -50,7 +53,7 @@ CALL InitMPIInfo()
 
 ! read command line arguments
 nArgsLoc = COMMAND_ARGUMENT_COUNT()
-IF(nArgsLoc.LT.1) CALL Abort(__STAMP__,'Provide Ini File!')
+IF(nArgsLoc.LT.1) CALL Abort(__STAMP__,UsageErrorStr)
 CALL GET_COMMAND_ARGUMENT(1,FirstArg)
 BatchMode = STRICMP(GetFileExtension(FirstArg),'h5')
 
@@ -63,12 +66,30 @@ ELSE
   SWRITE(*,*) "SINGLE MODE"
 END IF 
 
-IF(nArgsLoc.LT.1+nArgsAdd) CALL Abort(__STAMP__,'Provide Ini File!')
+IF(nArgsLoc.LT.1+nArgsAdd) CALL Abort(__STAMP__,UsageErrorStr)
 ALLOCATE(ArgsLoc(nArgsLoc-nArgsAdd))
 IF(.NOT.BatchMode) ArgsLoc(1)=FirstArg
 DO iArg=2,nArgsLoc
   CALL GET_COMMAND_ARGUMENT(iArg,ArgsLoc(iArg-nArgsAdd))
 END DO 
+
+FinishMode = .False.
+IF(nArgsLoc-nArgsAdd.GT.3) THEN
+  CALL Abort(__STAMP__,UsageErrorStr)
+ELSEIF(nArgsLoc-nArgsAdd.EQ.3) THEN
+  IF(TRIM(ArgsLoc(3)).EQ."-f")THEN 
+    FinishMode = .TRUE.
+
+    FinishFile = ArgsLoc(2)
+    validHDF5 = ISVALIDHDF5FILE(FinishFile)
+    IF(.NOT.validHDF5) CALL CollectiveStop(__STAMP__,"INVALID HDF5 FILE... "//TRIM(UsageErrorStr))
+    CALL OpenDataFile(FinishFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.,communicatorOpt=MPI_COMM_ACTIVE)
+    CALL ReadAttribute(File_ID,'LastWrittenRun',1,IntScalar=lastRun)
+    CALL CloseDataFile()
+  ELSE 
+    CALL Abort(__STAMP__,UsageErrorStr)
+  END IF 
+END IF 
 
 
 IF(BatchMode)THEN
@@ -92,10 +113,17 @@ CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iErr
 !IF(MOD(nGlobalRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nGlobalRuns has to be a multiple of nParallelRuns')
 nSequentialRuns = (nGlobalRuns-1) / nParallelRuns + 1
 
+StartSequentialRun=1
+nArgsIn = nArgsLoc-1
+IF(FinishMode)THEN
+  StartSequentialRun = MERGE(nSequentialRuns, lastRun/nParallelRuns, lastRun.EQ.nGlobalRuns)
+  nArgsIn = nArgsIn-1 !Cut "-f" 
+END IF 
+
 ! run FLEXI in loop
 GlobalStartTime=FLEXITIME()
 
-DO iSequentialRun=1,nSequentialRuns
+DO iSequentialRun=StartSequentialRun,nSequentialRuns
 
   iGlobalRun=iParallelRun+nParallelRuns*(iSequentialRun-1)
 
@@ -106,14 +134,17 @@ DO iSequentialRun=1,nSequentialRuns
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
     IF(.NOT.isActive) EXIT
   END IF 
+  
 
   ! Initialize
-  CALL InitFlexi(nArgsLoc-1,ArgsLoc,mpi_comm_loc=MPI_COMM_FLEXI)
+  CALL InitFlexi(nArgsIn,ArgsLoc,mpi_comm_loc=MPI_COMM_FLEXI)
   ! Run Simulation
   CALL TimeDisc()
 
   ! Finalize
   CALL FinalizeFlexi()
+
+  IF(FinishMode.AND.(iSequentialRun.EQ.StartSequentialRun)) nArgsIn=nArgsIn-1 !Cut FinishFile, no more restart
 END DO
 GlobalEndTime=FLEXITIME()
 

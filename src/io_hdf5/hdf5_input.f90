@@ -537,7 +537,6 @@ CALL H5DGET_SPACE_F(DSet_ID, FileSpace, iError)
 Offset(:)=0
 Offset(offset_dim)=Offset_in
 IF(isBatch_loc) Offset(Rank+1) = iGlobalRun-1
-IF(isBatch_loc) WRITE(*,*) 'iGlobalRun-1', iGlobalRun-1
 CALL H5SSELECT_HYPERSLAB_F(FileSpace, H5S_SELECT_SET_F, Offset, Dimsf, iError)
 ! Create property list
 CALL H5PCREATE_F(H5P_DATASET_XFER_F, PList_ID, iError)

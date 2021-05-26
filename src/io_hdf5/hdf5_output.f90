@@ -120,6 +120,7 @@ REAL                           :: Utmp(5,0:PP_N,0:PP_N,0:PP_NZ)
 REAL                           :: JN(1,0:PP_N,0:PP_N,0:PP_NZ),JOut(1,0:NOut,0:NOut,0:ZDIM(NOut))
 INTEGER                        :: iElem,i,j,k
 INTEGER                        :: nVal(5)
+INTEGER                        :: lastRun
 !==================================================================================================================================
 IF (.NOT.WriteStateFiles) RETURN
 IF(MPIGlobalRoot)THEN
@@ -130,8 +131,8 @@ END IF
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 FileType=MERGE('ERROR_State','State      ',isErrorFile)
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.h5'
-IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
-                                                    MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
+IF(MPIGlobalRoot .AND. iSequentialRun.EQ.1) CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,&
+                                                                      MeshFileName,OutputTime,FutureTime,withUserblock=.TRUE.)
 
 ! Set size of output
 nVal=(/PP_nVar,NOut+1,NOut+1,ZDIM(NOut)+1,nElems/)
@@ -220,7 +221,8 @@ END IF
 
 IF(MPIGlobalRoot)THEN
   CALL OpenDataFile(TRIM(FileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
-  CALL WriteAttribute(File_ID,'LastSequentialRun',1,IntScalar=iSequentialRun)
+  lastRun = MIN(nGlobalRuns,iSequentialRun*nParallelRuns)
+  CALL WriteAttribute(File_ID,'LastWrittenRun',1,IntScalar=lastRun)
   CALL CloseDataFile()
 
   CALL MarkWriteSuccessfull(FileName)

@@ -99,10 +99,10 @@ END IF
 ! Check if the number of arguments is correct
 IF (nArgs.GT.2) THEN
   ! Print out error message containing valid syntax
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: flexi parameter.ini [restart.h5] or flexi --help'// &
-  '[option/section name] to print help for a single parameter, parameter sections or all parameters.')
+  CALL CollectiveStop(__STAMP__,UsageErrorStr)
 END IF
 ParameterFile = Args(1)
+RestartFile=""
 IF (nArgs.GT.1) THEN
   RestartFile = Args(2)
 ELSE IF (STRICMP(GetFileExtension(ParameterFile), "h5")) THEN

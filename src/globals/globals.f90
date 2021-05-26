@@ -34,6 +34,8 @@ INTEGER            :: UNIT_errOut=999                                   !< unit 
 LOGICAL            :: Logging                                           !< switch to turn log file writing on or of
 LOGICAL            :: ErrorFiles                                        !< switch to turn error file writing on or of
 CHARACTER(LEN=255) :: ErrorFileName='NOT_SET'                           !< file to write error data into
+CHARACTER(LEN=255) :: UsageErrorStr="ERROR: Invalid syntax. Please use: flexi [batch_file.h5] parameter.ini [restart_file.h5] [-f]"
+                                                                        !< string when wrong arguments are given
 INTEGER            :: iError                                            !< default error handle
 REAL               :: StartTime                                         !< start time of the simulation
 INTEGER            :: myRank,myLocalRank,myLeaderRank,myWorkerRank
@@ -57,6 +59,7 @@ INTEGER            :: nSequentialRuns
 INTEGER            :: iSequentialRun
 INTEGER            :: iGlobalRun
 LOGICAL            :: MPIGlobalRoot         
+LOGICAL            :: FinishMode                                        !< finish previous simulation (special kind of restart)
 
 #if USE_MPI
 INTEGER            :: MPIStatus(MPI_STATUS_SIZE)

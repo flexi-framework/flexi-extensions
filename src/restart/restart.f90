@@ -108,6 +108,7 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT RESTART...'
 
 ! Check if we want to perform a restart
+DoRestart=.FALSE.
 IF (LEN_TRIM(RestartFile).GT.0) THEN
   SWRITE(UNIT_StdOut,'(A,A,A)')' | Restarting from file "',TRIM(RestartFile),'":'
   ! Check if restart file is a valid state
@@ -122,7 +123,7 @@ IF (LEN_TRIM(RestartFile).GT.0) THEN
   ! Read in time from restart file
   CALL ReadAttribute(File_ID,'Time',1,RealScalar=RestartTime)
   CALL ReadAttribute(File_ID,'Project_Name',1,StrScalar=ProjectName_Restart)
-  IF (TRIM(ProjectName_Restart).EQ.TRIM(ProjectName)) THEN
+  IF ((TRIM(ProjectName_Restart).EQ.TRIM(ProjectName)).AND.(.NOT.FinishMode)) THEN
     CALL PrintWarning('Change ProjectName to avoid file overwrite  (causes crash in later seq. runs)!')
     ProjectName = TRIM(ProjectName)//"_Restart"
   END IF
@@ -229,7 +230,7 @@ CHARACTER(LEN=255),ALLOCATABLE :: VarNamesElemData(:)
 IF (PRESENT(doFlushFiles)) THEN
   doFlushFiles_loc = doFlushFiles
 ELSE
-  doFlushFiles_loc = .TRUE.
+  doFlushFiles_loc = .NOT.FinishMode
 END IF
 
 IF(DoRestart)THEN
