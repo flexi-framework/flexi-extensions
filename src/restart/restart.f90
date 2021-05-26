@@ -88,6 +88,7 @@ USE MOD_Interpolation_Vars, ONLY: InterpolationInitIsDone,NodeType
 USE MOD_HDF5_Input,         ONLY: OpenDataFile,CloseDataFile,GetDataProps,ReadAttribute,File_ID
 USE MOD_ReadInTools,        ONLY: GETLOGICAL,GETREALARRAY
 USE MOD_Mesh_Vars,          ONLY: nGlobalElems,NGeo
+USE MOD_Output_Vars,        ONLY: ProjectName
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -95,6 +96,7 @@ CHARACTER(LEN=255),INTENT(IN),OPTIONAL :: RestartFile_in !< state file to restar
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 LOGICAL            :: ResetTime,validHDF5
+CHARACTER(LEN=255) :: ProjectName_Restart
 !==================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.RestartInitIsDone)THEN
   CALL CollectiveStop(__STAMP__,'InitRestart not ready to be called or already called.')
@@ -119,6 +121,11 @@ IF (LEN_TRIM(RestartFile).GT.0) THEN
   CALL GetDataProps(nVar_Restart,N_Restart,nElems_Restart,NodeType_Restart)
   ! Read in time from restart file
   CALL ReadAttribute(File_ID,'Time',1,RealScalar=RestartTime)
+  CALL ReadAttribute(File_ID,'Project_Name',1,StrScalar=ProjectName_Restart)
+  IF (TRIM(ProjectName_Restart).EQ.TRIM(ProjectName)) THEN
+    CALL PrintWarning('Change ProjectName to avoid file overwrite  (causes crash in later seq. runs)!')
+    ProjectName = TRIM(ProjectName)//"_Restart"
+  END IF
   ! Option to set the calculation time to 0 even tho performing a restart
   ResetTime=GETLOGICAL('ResetTime','.FALSE.')
   IF(ResetTime) RestartTime=0.
@@ -253,10 +260,10 @@ IF(DoRestart)THEN
   IF ((HSize(1).LT.PP_nVar).OR.(HSize(2).NE.N_Restart+1).OR.(HSize(3).NE.N_Restart+1).OR.(HSize(5).NE.nGlobalElems)) THEN
     CALL Abort(__STAMP__,"Dimensions of restart file do not match!")
   END IF
-  HSize_proc = INT(HSize)
+  HSize_proc = INT(HSize(1:5))
   HSize_proc(5) = nElems
   ALLOCATE(U_local(nVar_Restart,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))
-  CALL ReadArray('DG_Solution',5,HSize_proc,OffsetElem,5,RealArray=U_local)
+  CALL ReadArray('DG_Solution',5,HSize_proc,OffsetElem,5,RealArray=U_local,isBatch=.TRUE.)
   ! Truncate the solution if we read a restart file from a different equation system
   IF (PP_nVar.NE.nVar_Restart) THEN
     ALLOCATE(U_localNVar(PP_nVar,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))

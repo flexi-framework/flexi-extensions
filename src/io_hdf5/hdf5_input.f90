@@ -431,7 +431,7 @@ END SUBROUTINE GetVarnames
 !> Assume that the array to be read is of size (nVar,.,.,.,.,nElems) and that an associated
 !> attribute containing the variable names exists
 !===================================================================================================================================
-SUBROUTINE GetArrayAndName(ArrayName,AttribName,nVal,Array,VarNames)
+SUBROUTINE GetArrayAndName(ArrayName,AttribName,nVal,Array,VarNames,isBatch)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars    ,ONLY: nElems,nGlobalElems,OffsetElem
@@ -443,11 +443,19 @@ CHARACTER(LEN=*),INTENT(IN)     :: AttribName  !< name of varnames to be read
 INTEGER,INTENT(OUT)             :: nVal(15)    !< size of array
 REAL,ALLOCATABLE,INTENT(OUT)    :: Array(:)    !< array to be read
 CHARACTER(LEN=255),ALLOCATABLE,INTENT(OUT) :: VarNames(:) !< variable names
+LOGICAL,INTENT(IN),OPTIONAL    :: isBatch
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 LOGICAL  :: found
 INTEGER  :: dims
+LOGICAL  :: isBatch_loc
 !===================================================================================================================================
+IF(PRESENT(isBatch))THEN 
+  isBatch_loc = isBatch
+ELSE 
+  isBatch_loc = .FALSE.
+END IF 
+
 nVal=-1
 SDEALLOCATE(Array)
 SDEALLOCATE(VarNames)
@@ -456,7 +464,8 @@ CALL DatasetExists(File_ID, TRIM(ArrayName), found)
 IF (found) THEN
   ! get size of array
   CALL GetDataSize(File_ID,TRIM(ArrayName),dims,HSize)
-  nVal(1:dims)=INT(HSize)
+  IF(isBatch_loc) dims = dims -1 
+  nVal(1:dims)=INT(HSize(1:dims))
   IF(nVal(dims).NE.nGlobalElems) STOP 'Last array dimension != nElems !'
   nVal(dims)=nElems
   DEALLOCATE(HSize)
@@ -464,7 +473,7 @@ IF (found) THEN
   ALLOCATE(VarNames(nVal(1)))
 
   ! read array
-  CALL ReadArray(TRIM(ArrayName),dims,nVal(1:dims),OffsetElem,dims,RealArray=array)
+  CALL ReadArray(TRIM(ArrayName),dims,nVal(1:dims),OffsetElem,dims,RealArray=array,isBatch=isBatch_loc)
 
   ! read variable names
   CALL ReadAttribute(File_ID,TRIM(AttribName),nVal(1),StrArray=VarNames)
@@ -476,7 +485,7 @@ END SUBROUTINE GetArrayAndName
 !==================================================================================================================================
 !> Subroutine to read arrays of rank "Rank" with dimensions "Dimsf(1:Rank)".
 !==================================================================================================================================
-SUBROUTINE ReadArray(ArrayName,Rank,nVal,Offset_in,Offset_dim,RealArray,IntArray,StrArray)
+SUBROUTINE ReadArray(ArrayName,Rank,nVal,Offset_in,Offset_dim,RealArray,IntArray,StrArray,isBatch)
 ! MODULES
 USE MOD_Globals
 USE,INTRINSIC :: ISO_C_BINDING
@@ -491,15 +500,31 @@ CHARACTER(LEN=*),INTENT(IN)    :: ArrayName             !< name of array to be r
 REAL              ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: RealArray    !< only if real array shall be read
 INTEGER           ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: IntArray     !< only if integer array shall be read
 CHARACTER(LEN=255),DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: StrArray     !< only if real string shall be read
+LOGICAL,INTENT(IN),OPTIONAL    :: isBatch
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER(HID_T)                 :: DSet_ID,Type_ID,MemSpace,FileSpace,PList_ID
-INTEGER(HSIZE_T)               :: Offset(Rank),Dimsf(Rank)
+INTEGER(HSIZE_T),ALLOCATABLE   :: Offset(:),Dimsf(:)
 TYPE(C_PTR)                    :: buf
 INTEGER(HID_T)                 :: driver
+LOGICAL                        :: isBatch_loc
 !==================================================================================================================================
+IF(PRESENT(isBatch))THEN 
+  isBatch_loc = isBatch
+ELSE 
+  isBatch_loc = .FALSE.
+END IF 
+IF(isBatch_loc)THEN 
+  ALLOCATE(Offset(Rank+1))
+  ALLOCATE(Dimsf(Rank+1))
+  Dimsf(Rank+1) = 1
+ELSE 
+  ALLOCATE(Offset(Rank))
+  ALLOCATE(Dimsf(Rank))
+END IF 
+
 LOGWRITE(*,'(A,I1.1,A,A,A)')'    READ ',Rank,'D ARRAY "',TRIM(ArrayName),'"'
-Dimsf=nVal
+Dimsf(1:Rank)=nVal
 LOGWRITE(*,*)'Dimsf,Offset=',Dimsf,Offset_in
 CALL H5SCREATE_SIMPLE_F(Rank, Dimsf, MemSpace, iError)
 CALL H5DOPEN_F(File_ID, TRIM(ArrayName) , DSet_ID, iError)
@@ -511,6 +536,8 @@ IF(iError.NE.0) &
 CALL H5DGET_SPACE_F(DSet_ID, FileSpace, iError)
 Offset(:)=0
 Offset(offset_dim)=Offset_in
+IF(isBatch_loc) Offset(Rank+1) = iGlobalRun-1
+IF(isBatch_loc) WRITE(*,*) 'iGlobalRun-1', iGlobalRun-1
 CALL H5SSELECT_HYPERSLAB_F(FileSpace, H5S_SELECT_SET_F, Offset, Dimsf, iError)
 ! Create property list
 CALL H5PCREATE_F(H5P_DATASET_XFER_F, PList_ID, iError)
@@ -541,6 +568,9 @@ CALL H5PCLOSE_F(PList_ID,iError)
 CALL H5SCLOSE_F(FileSpace,iError)
 CALL H5DCLOSE_F(DSet_ID, iError)
 CALL H5SCLOSE_F(MemSpace,iError)
+
+DEALLOCATE(Offset)
+DEALLOCATE(Dimsf)
 
 LOGWRITE(*,*)'...DONE!'
 END SUBROUTINE ReadArray
