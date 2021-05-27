@@ -84,6 +84,7 @@ IMPLICIT NONE
 !LOCAL VARIABLES
 INTEGER             :: SideID, BCType, iElem, LocSideID
 INTEGER             :: nWallSidesProcs(0:nProcessors-1)
+INTEGER             :: Color
 !==================================================================================================================================
 IF (IceSurfInitIsDone) THEN
   CALL CollectiveStop(__STAMP__,&
@@ -153,11 +154,14 @@ IF(doCalcIceSurfData)THEN
   NOutSurf = GETINT("NOutSurf")
   ALLOCATE(IceSurfData(nVarSurf,0:NOutSurf,0:ZDIM(NOutSurf),nWallSides))
   IF(doAvgIceSurf)THEN 
-    ALLOCATE(UAvg_master(nVarAvg,0:NOutSurf,0:ZDIM(NOutSurf),nSides))
-    ALLOCATE(UAvg_slave(nVarAvg,0:NOutSurf,0:ZDIM(NOutSurf),nSides))
+    ALLOCATE(UAvg_master(nVarAvg,0:PP_N,0:PP_NZ,nSides))
+    ALLOCATE(UAvg_slave(nVarAvg,0:PP_N,0:PP_NZ,nSides))
   END IF 
-ENDIF 
 
+  doCalcIceSurfData=(nWallSides.GT.0)
+  Color=MERGE(0,MPI_UNDEFINED,doCalcIceSurfData)
+  CALL MPI_COMM_SPLIT(MPI_COMM_FLEXI,Color,myGlobalRank,MPI_COMM_ICESURF,iError) 
+ENDIF 
 
 IceSurfInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT ICESURF DONE!'
@@ -171,6 +175,7 @@ END SUBROUTINE InitIceSurf
 !==================================================================================================================================
 SUBROUTINE CalcIceSurfData()
 ! MODULES
+USE MOD_Globals
 USE MOD_PreProc
 USE MOD_IceSurf_Vars
 USE MOD_DG_Vars,             ONLY:UPrim_master
@@ -214,7 +219,6 @@ END DO
 
 !==================================================================================================================================
 ! TODO: 
-! fix bug where first entry of IceSurfData(1...) is 0
 ! rename all "ice" in varnames 
 !==================================================================================================================================
 

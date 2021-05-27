@@ -41,6 +41,7 @@ REAL               :: StartTime                                         !< start
 INTEGER            :: myRank,myLocalRank,myLeaderRank,myWorkerRank
 INTEGER            :: nProcessors,nLocalProcs,nLeaderProcs,nWorkerProcs
 INTEGER            :: MPI_COMM_FLEXI                                    !< Flexi MPI communicator
+INTEGER            :: MPI_COMM_ICESURF                                  !<
 INTEGER            :: MPI_COMM_NODE                                     !< local node subgroup
 INTEGER            :: MPI_COMM_LEADERS                                  !< all node masters
 INTEGER            :: MPI_COMM_WORKERS                                  !< all non-master nodes

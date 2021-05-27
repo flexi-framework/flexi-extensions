@@ -215,7 +215,7 @@ IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf))THEN
                           nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob,nGlobalRuns/),&
                           nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,1/),&
                           offset=    (/0,      0,     0 ,      offsetWallSides, iGlobalRun-1/),&
-                          collective=.TRUE.,RealArray=IceSurfData)
+                          collective=.TRUE.,RealArray=IceSurfData,communicatorOpt=MPI_COMM_ICESURF)
 END IF 
 
 
@@ -801,7 +801,7 @@ IF(doCalcIceSurfData.AND.doAvgIceSurf)THEN
                           nValGlobal=(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSidesGlob, nGlobalRuns/),&
                           nVal      =(/nVarSurf,NOutSurf+1,ZDIM(NOutSurf)+1,nWallSides,     1/),&
                           offset=    (/0,       0,         0,               offsetWallSides,iGlobalRun-1/),&
-                          collective=.TRUE.,RealArray=IceSurfData)
+                          collective=.TRUE.,RealArray=IceSurfData,communicatorOpt=MPI_COMM_ICESURF)
 END IF 
 
 IF(MPIGlobalRoot) CALL MarkWriteSuccessfull(FileName)
