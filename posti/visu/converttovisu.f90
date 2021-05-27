@@ -466,6 +466,7 @@ DO iVar=nVarDep+1,nVarAll
         END IF
         ! Get dimensions of the dataset and store number of variables as well as size of array
         CALL GetDataSize(File_ID,TRIM(DatasetName),nDims,HSize)
+        nDims = nDims -1 !batch run
         nVal   = INT(HSize(1))
         nSize  = INT(HSize(2))
 #if PP_dim == 3
@@ -499,12 +500,12 @@ DO iVar=nVarDep+1,nVarAll
           ! Allocate array and read dataset
           SDEALLOCATE(ElemData)
           ALLOCATE(ElemData(nVal,nElems))
-          CALL ReadArray(TRIM(DatasetName),2,(/nVal,nElems/),offsetElem,2,RealArray=ElemData)
+          CALL ReadArray(TRIM(DatasetName),2,(/nVal,nElems/),offsetElem,2,RealArray=ElemData,isBatch=.TRUE.)
         CASE(5) ! Pointwise data
           ! Allocate array and read dataset
           SDEALLOCATE(FieldData)
           ALLOCATE(FieldData(nVal,nSize,nSize,nSizeZ,nElems))
-          CALL ReadArray(TRIM(DatasetName),5,(/nVal,nSize,nSize,nSizeZ,nElems/),offsetElem,5,RealArray=FieldData)
+          CALL ReadArray(TRIM(DatasetName),5,(/nVal,nSize,nSize,nSizeZ,nElems/),offsetElem,5,RealArray=FieldData,isBatch=.TRUE.)
           ! Get Vandermonde matrix used to convert to the visu grid
           SDEALLOCATE(Vdm_DG_Visu)
           ALLOCATE(Vdm_DG_Visu(0:NVisu,0:nSize-1))

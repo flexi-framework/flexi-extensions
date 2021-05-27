@@ -54,6 +54,7 @@ visuReader::visuReader()
    this->FileName = NULL;
    this->NVisu = 0;
    this->NCalc = 0;
+   this->iRun = 0;
    this->NodeTypeVisu = NULL;
    this->Avg2d = 0;
    this->DGonly = 0;
@@ -327,6 +328,7 @@ int visuReader::RequestData(
    // write settings to Posti parameter file
    dprintf(posti_unit, "NVisu = %d\n", NVisu); // insert NVisu
    dprintf(posti_unit, "NCalc = %d\n", NCalc); // insert NCalc
+   dprintf(posti_unit, "iRun = %d\n", iRun); // insert iRun
    dprintf(posti_unit, "NodeTypeVisu = %s\n", NodeTypeVisu); // insert NodeType
    dprintf(posti_unit, "Avg2D = %s\n", (this->Avg2d ? "T" : "F"));
    dprintf(posti_unit, "DGonly = %s\n", (this->DGonly ? "T" : "F"));

@@ -38,12 +38,23 @@
             animateable="0"
             name="NCalc"
             number_of_elements="1"
-            panel_visibility="advanced">
+            panel_visibility="advanced"
             label="Polynomial degree for calculations">
             <IntRangeDomain name="range" />
             <Documentation>
                This property sets the polynomial degree for the
                calculations (default: N).
+            </Documentation>
+         </IntVectorProperty>
+         <IntVectorProperty command="SetiRun"
+            default_values="1"
+            animateable="0"
+            name="iRun"
+            number_of_elements="1"
+            label="Number of run in batch">
+            <IntRangeDomain name="range" />
+            <Documentation>
+               Number of run in batch to show.
             </Documentation>
          </IntVectorProperty>
          <StringVectorProperty

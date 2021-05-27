@@ -289,7 +289,7 @@ SWRITE(*,*) "state file old -> new: ", TRIM(statefile_old), " -> ",TRIM(statefil
 SWRITE(*,*) " mesh file old -> new: ", TRIM(MeshFile_old) , " -> ",TRIM(MeshFile)
 
 ! if Mesh or State changed readin some more attributes/parameters
-IF (changedStateFile.OR.changedMeshFile) THEN
+IF (changedStateFile.OR.changedMeshFile.OR.changediRun) THEN
   IF (.NOT.STRICMP(NodeType_State, NodeType)) THEN
     CALL CollectiveStop(__STAMP__, &
         "NodeType of state does not match with NodeType the visu-posti is compiled with!")
@@ -306,6 +306,9 @@ CALL CloseDataFile()
 NCalc             = GETINT("NCalc",INTTOSTR(PP_N))
 IF (NCalc.LE.0) NCalc = PP_N
 changedNCalc      = NCalc.NE.NCalc_old
+
+iGlobalRun        = GETINT("iRun","1")
+changediRun       = iGlobalRun.NE.iRun_old
 
 ! Output of averaged data is only available for NVisu = PP_N and NodeTypeVisuPosti=NodeType_State
 ! These settings are enforced here!
@@ -342,7 +345,7 @@ ELSE
 END IF
 
 ! build distribution of FV and DG elements, which is stored in FV_Elems_loc
-IF (changedStateFile.OR.changedMeshFile.OR.changedDGonly) THEN
+IF (changedStateFile.OR.changedMeshFile.OR.changedDGonly.OR.changediRun) THEN
   CALL Build_FV_DG_distribution(&
 #if FV_ENABLED
     statefile&
@@ -505,6 +508,7 @@ CALL prms%CreateLogicalOption("noVisuVars"      , "If no VarNames are given, thi
                                                   ".FALSE.")
 CALL prms%CreateIntOption(    "NVisu"           , "Polynomial degree at which solution is sampled for visualization.")
 CALL prms%CreateIntOption(    "NCalc"           , "Polynomial degree at which calculations are done.")
+CALL prms%CreateIntOption(    "iRun"            , "number of run in batch to visualize")
 CALL prms%CreateLogicalOption("Avg2D"           , "Average solution in z-direction",".FALSE.")
 CALL prms%CreateLogicalOption("Avg2DHDF5Output" , "Write averaged solution to HDF5 file",".FALSE.")
 CALL prms%CreateStringOption( "NodeTypeVisu"    , "NodeType for visualization. Visu, Gauss,Gauss-Lobatto,Visu_inner"    ,"VISU")
@@ -522,6 +526,7 @@ changedStateFile      = .FALSE.
 changedMeshFile       = .FALSE.
 changedNVisu          = .FALSE.
 changedNCalc          = .FALSE.
+changediRun           = .FALSE.
 changedVarNames       = .FALSE.
 changedFV_Elems       = .FALSE.
 changedWithDGOperator = .FALSE.
@@ -550,6 +555,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   SWRITE (*,*) "changedMeshFile      ", changedMeshFile
   SWRITE (*,*) "changedNVisu         ", changedNVisu
   SWRITE (*,*) "changedNCalc         ", changedNCalc
+  SWRITE (*,*) "changediRun          ", changediRun
   SWRITE (*,*) "changedVarNames      ", changedVarNames
   SWRITE (*,*) "changedFV_Elems      ", changedFV_Elems
   SWRITE (*,*) "changedWithDGOperator", changedWithDGOperator
@@ -557,7 +563,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   SWRITE (*,*) "changedAvg2D         ", changedAvg2D
   SWRITE (*,*) "changedPrmFile       ", changedPrmFile, TRIM(prmfile_old), " -> ", TRIM(prmfile)
   SWRITE (*,*) "changedBCnames       ", changedBCnames
-  IF (changedStateFile.OR.changedWithDGOperator.OR.changedPrmFile.OR.changedDGonly) THEN
+  IF (changedStateFile.OR.changedWithDGOperator.OR.changedPrmFile.OR.changedDGonly.OR.changediRun) THEN
       CALL ReadState(prmfile,statefile)
   END IF
 
@@ -565,7 +571,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   CALL Build_mapBCSides()
 
   ! ===== calc solution =====
-  IF (changedStateFile.OR.changedVarNames.OR.changedDGonly.OR.changedNCalc) THEN
+  IF (changedStateFile.OR.changedVarNames.OR.changedDGonly.OR.changedNCalc.OR.changediRun) THEN
     CALL CalcQuantities_DG()
 #if FV_ENABLED
     CALL CalcQuantities_FV()
@@ -573,7 +579,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   END IF
   IF (doSurfVisu) THEN
     ! calc surface solution
-    IF (changedStateFile.OR.changedVarNames.OR.changedDGonly.OR.changedNCalc.OR.changedBCnames) THEN
+    IF (changedStateFile.OR.changedVarNames.OR.changedDGonly.OR.changedNCalc.OR.changedBCnames.OR.changediRun) THEN
       CALL CalcSurfQuantities_DG()
 #if FV_ENABLED
       CALL CalcSurfQuantities_FV()
@@ -582,7 +588,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   END IF
 
   ! ===== convert solution to visu grid =====
-  IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedNCalc.OR.changedAvg2D) THEN
+  IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedNCalc.OR.changedAvg2D.OR.changediRun) THEN
     ! ===== Avg2d =====
     IF (Avg2d) THEN
       SDEALLOCATE(UVisu_DG)
@@ -601,7 +607,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   END IF
   IF (doSurfVisu) THEN
     ! convert Surface DG solution to visu grid
-    IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedNCalc.OR.changedBCnames) THEN
+    IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedNCalc.OR.changedBCnames.OR.changediRun) THEN
       CALL ConvertToSurfVisu_DG()
 #if FV_ENABLED
       CALL ConvertToSurfVisu_FV()
@@ -610,7 +616,7 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
   END IF
 
   ! convert generic data to visu grid
-  IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedBCnames.OR.changedAvg2D) THEN
+  IF (changedStateFile.OR.changedVarNames.OR.changedNVisu.OR.changedDGonly.OR.changedBCnames.OR.changedAvg2D.OR.changediRun) THEN
     CALL ConvertToVisu_GenericData(statefile)
   END IF
 
@@ -634,12 +640,12 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! visualize state file
 
 
   ! Convert coordinates to visu grid
-  IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedAvg2D) THEN
+  IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedAvg2D.OR.changediRun) THEN
     CALL BuildVisuCoords()
   END IF
   IF (doSurfVisu) THEN
     ! Convert surface coordinates to visu grid
-    IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedBCnames) THEN
+    IF (changedMeshFile.OR.changedNVisu.OR.changedFV_Elems.OR.changedDGonly.OR.changedBCnames.OR.changediRun) THEN
       CALL BuildSurfVisuCoords()
     END IF
   END IF
@@ -652,6 +658,7 @@ prmfile_old           = prmfile
 statefile_old         = statefile
 NVisu_old             = NVisu
 NCalc_old             = NCalc
+iRun_old              = iGlobalRun
 nVar_State_old        = nVar_State
 withDGOperator_old    = withDGOperator
 DGonly_old            = DGonly

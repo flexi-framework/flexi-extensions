@@ -41,6 +41,7 @@ INTEGER                           :: NVisu_FV                    !< number of ou
 INTEGER                           :: NCalc_FV                    !< number of calculation points for FV elements (NVisu_FV or PP_N)
 INTEGER                           :: NCalc                       !< Different polynomial degree to do calculations on
 INTEGER                           :: NCalc_old                   !< Different polynomial degree to do calculations on
+INTEGER                           :: iRun_old                    !< 
 INTEGER                           :: nVar_State                  !< number of variables in the state file
 INTEGER                           :: nVar_State_old = -1         !< saves previous nVar_State
 INTEGER                           :: nState_old = -1             !< saves previous PP_N
@@ -74,6 +75,7 @@ LOGICAL                           :: changedStateFile            !< .h5 state fi
 LOGICAL                           :: changedMeshFile             !< Mesh file changed
 LOGICAL                           :: changedNVisu                !< Polyomial degree for visualization changed
 LOGICAL                           :: changedNCalc                !< Polyomial degree for calculation changed
+LOGICAL                           :: changediRun                 !< 
 LOGICAL                           :: changedVarNames             !< variables selected for visualization changed (ParaView plugin)
 LOGICAL                           :: changedFV_Elems             !< different distribution of DG and FV elements
 LOGICAL                           :: changedWithDGOperator       !< If the DG operator should be called or not changed

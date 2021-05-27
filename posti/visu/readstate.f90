@@ -118,6 +118,7 @@ USE MOD_Overintegration,ONLY:DefineParametersOverintegration,InitOverintegration
 USE MOD_ReadInTools   ,ONLY: prms
 USE MOD_ReadInTools   ,ONLY: FinalizeParameters
 USE MOD_Restart_Vars  ,ONLY: RestartTime
+USE MOD_HDF5_Input    ,ONLY: BatchInput
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -134,7 +135,7 @@ CALL FinalizeFV()
 CALL FinalizeMortar()
 CALL FinalizeRestart()
 #if USE_MPI
-IF (changedMeshFile.OR.changedWithDGOperator) THEN
+IF (changedMeshFile.OR.changedWithDGOperator.OR.changediRun) THEN
   CALL FinalizeMPI()
 END IF
 #endif
@@ -168,6 +169,8 @@ CALL DefineParametersLifting()
 #endif
 CALL prms%read_options(prmfile)
 
+CALL BatchInput()
+
 ! Initialization of I/O routines
 CALL InitIOHDF5()
 
@@ -180,7 +183,7 @@ CALL InitRestart(statefile)
 
 ! TODO: what todo with vars that are set in InitOutput, that normally is executed here.
 
-IF (changedMeshFile.OR.changedWithDGOperator) THEN
+IF (changedMeshFile.OR.changedWithDGOperator.OR.changediRun) THEN
   CALL FinalizeMesh()
   CALL InitMesh(meshMode=2,MeshFile_IN=MeshFile)
 END IF
@@ -189,7 +192,7 @@ CALL InitFilter()
 CALL InitOverintegration()
 CALL InitIndicator()
 #if USE_MPI
-IF (changedMeshFile.OR.changedWithDGOperator) THEN
+IF (changedMeshFile.OR.changedWithDGOperator.OR.changediRun) THEN
   CALL InitMPIvars()
 END IF
 #endif
@@ -236,6 +239,7 @@ USE MOD_Interpolation       ,ONLY: DefineParametersInterpolation,InitInterpolati
 USE MOD_FV_Basis            ,ONLY: InitFV_Basis,FinalizeFV_Basis
 USE MOD_Mortar              ,ONLY: InitMortar,FinalizeMortar
 #endif
+USE MOD_HDF5_Input          ,ONLY: BatchInput
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -268,7 +272,7 @@ changedMeshMode = (meshMode_loc.NE.meshMode_old)
 
 
 #if USE_MPI
-IF ((changedMeshFile).OR.(changedMeshMode)) THEN
+IF ((changedMeshFile).OR.(changedMeshMode).OR.changediRun) THEN
   CALL FinalizeMPI()
 END IF
 #endif
@@ -281,6 +285,8 @@ CALL DefineParametersInterpolation()
 CALL DefineParametersMesh()
 CALL DefineParametersEOS()
 CALL prms%read_options(prmfile)
+
+CALL BatchInput()
 
 ! Initialization of I/O routines
 CALL InitIOHDF5()
@@ -300,7 +306,7 @@ END IF
 #endif
 
 ! Call mesh init if the mesh file changed or we need a different mesh mode
-IF ((changedMeshFile).OR.(changedMeshMode)) THEN
+IF ((changedMeshFile).OR.(changedMeshMode).OR.changediRun) THEN
   CALL FinalizeMesh()
   CALL InitMesh(meshMode=meshMode_loc,MeshFile_IN=MeshFile)
 END IF
@@ -314,7 +320,7 @@ meshMode_old = meshMode_loc
 SDEALLOCATE(U)
 ALLOCATE(U(1:nVar_State,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 CALL OpenDataFile(statefile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-CALL ReadArray('DG_Solution',5,(/nVar_State,PP_N+1,PP_N+1,PP_NZ+1,nElems/),offsetElem,5,RealArray=U)
+CALL ReadArray('DG_Solution',5,(/nVar_State,PP_N+1,PP_N+1,PP_NZ+1,nElems/),offsetElem,5,RealArray=U,isBatch=.TRUE.)
 CALL CloseDataFile()
 
 CALL FinalizeParameters()
