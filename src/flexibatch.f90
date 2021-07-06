@@ -107,7 +107,9 @@ nProcsPerRun = nGlobalProcessors/nParallelRuns
 IF(MOD(nGlobalProcessors,nProcsPerRun).NE.0) CALL Abort(__STAMP__,'nProcs has to be a multiple of nProcsPerRun')
 iParallelRun = myGlobalRank/nProcsPerRun+1
 
+#if USE_MPI
 CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,iParallelRun,myGlobalRank,MPI_COMM_FLEXI,iError) 
+#endif
 
 !We now allow nGlobalRuns not to fit perfectly.
 !IF(MOD(nGlobalRuns,nParallelRuns).NE.0) CALL Abort(__STAMP__,'nGlobalRuns has to be a multiple of nParallelRuns')
@@ -128,12 +130,14 @@ DO iSequentialRun=StartSequentialRun,nSequentialRuns
   iGlobalRun=iParallelRun+nParallelRuns*(iSequentialRun-1)
 
   ! During last sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
+#if USE_MPI
   IF(iSequentialRun.EQ.nSequentialRuns)THEN
     isActive=iGlobalRun.LE.nGlobalRuns
     Color=MERGE(0,MPI_UNDEFINED,isActive)
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 
     IF(.NOT.isActive) EXIT
   END IF 
+#endif
   
 
   ! Initialize

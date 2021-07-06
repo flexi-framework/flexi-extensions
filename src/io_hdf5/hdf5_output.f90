@@ -209,6 +209,10 @@ IF(iSequentialRun .EQ. 1) THEN
   CALL WriteAdditionalFieldData(FileName,FieldOut)
 ENDIF
 
+#if USE_MPI
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
+#endif
+
 IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf))THEN 
   CALL GatheredWriteArray(FileName,create=.FALSE.,&
                           DataSetName='IceSurfData', rank=5,&
@@ -218,6 +222,9 @@ IF(doCalcIceSurfData.AND.(.NOT.doAvgIceSurf))THEN
                           collective=.TRUE.,RealArray=IceSurfData,communicatorOpt=MPI_COMM_ICESURF)
 END IF 
 
+#if USE_MPI
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
+#endif
 
 IF(MPIGlobalRoot)THEN
   CALL OpenDataFile(TRIM(FileName),create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
@@ -233,7 +240,7 @@ END IF
 #if USE_MPI
 ! Since we are going to abort directly after this wenn an error state is written, make sure that all processors are finished
 ! with everything or we might end up with a non-valid error state file
-IF (isErrorFile) CALL MPI_BARRIER(MPI_COMM_FLEXI,iError)
+IF (isErrorFile) CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
 #endif
 END SUBROUTINE WriteState
 
@@ -389,7 +396,11 @@ IF(gatheredWrite)THEN
   SDEALLOCATE(UStr)
 ELSE
 #endif
-  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.,communicatorOpt=comm)
+  CALL OpenDataFile(FileName,create=create,single=.FALSE.,readOnly=.FALSE.&
+#if USE_MPI
+      ,communicatorOpt=comm &
+#endif
+      )
   IF(PRESENT(RealArray)) CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
                                                offset,collective,RealArray=RealArray)
   IF(PRESENT(IntArray))  CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
@@ -750,9 +761,6 @@ IF(MPIGlobalRoot .AND. iSequentialRun .EQ. 1)THEN
   CALL WriteAttribute(File_ID,'AvgTime',1,RealScalar=dtAvg)
   CALL CloseDataFile()
 END IF
-#if USE_MPI
-CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
-#endif
 
 ! write dummy FV array
 NULLIFY(ElementOutTimeAvg)
@@ -795,6 +803,10 @@ DO i=1,2
 #endif
 END DO
 
+#if USE_MPI
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
+#endif
+
 IF(doCalcIceSurfData.AND.doAvgIceSurf)THEN 
   CALL GatheredWriteArray(FileName,create=.FALSE.,&
                           DataSetName='IceSurfData', rank=5,&
@@ -803,6 +815,10 @@ IF(doCalcIceSurfData.AND.doAvgIceSurf)THEN
                           offset=    (/0,       0,         0,               offsetWallSides,iGlobalRun-1/),&
                           collective=.TRUE.,RealArray=IceSurfData,communicatorOpt=MPI_COMM_ICESURF)
 END IF 
+
+#if USE_MPI
+CALL MPI_BARRIER(MPI_COMM_ACTIVE,iError)
+#endif
 
 IF(MPIGlobalRoot) CALL MarkWriteSuccessfull(FileName)
 

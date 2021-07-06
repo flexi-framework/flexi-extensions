@@ -30,7 +30,10 @@ USE MOD_Globals
 USE MOD_Commandline_Arguments
 USE MOD_ReadInTools
 USE MOD_StringTools,             ONLY: STRICMP,GetFileExtension
-USE MOD_MPI,                     ONLY: DefineParametersMPI,InitMPI,FinalizeMPI
+USE MOD_MPI,                     ONLY: DefineParametersMPI,InitMPI
+#if USE_MPI
+USE MOD_MPI,                     ONLY: FinalizeMPI
+#endif
 USE MOD_Mesh,                    ONLY: DefineParametersMesh,InitMesh,FinalizeMesh
 USE MOD_IO_HDF5,                 ONLY: DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_SortIcingSides,          ONLY: CalcSortIcingSides

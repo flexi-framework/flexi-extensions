@@ -159,8 +159,10 @@ IF(doCalcIceSurfData)THEN
   END IF 
 
   doCalcIceSurfData=(nWallSides.GT.0)
+#if USE_MPI
   Color=MERGE(0,MPI_UNDEFINED,doCalcIceSurfData)
-  CALL MPI_COMM_SPLIT(MPI_COMM_FLEXI,Color,myGlobalRank,MPI_COMM_ICESURF,iError) 
+  CALL MPI_COMM_SPLIT(MPI_COMM_ACTIVE,Color,myGlobalRank,MPI_COMM_ICESURF,iError) 
+#endif
 ENDIF 
 
 IceSurfInitIsDone = .TRUE.
