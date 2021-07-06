@@ -169,6 +169,9 @@ USE MOD_Indicator           ,ONLY: doCalcIndicator,CalcIndicator
 USE MOD_FV
 #endif
 use MOD_IO_HDF5
+#if USE_OPENMP
+USE OMP_Lib
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -278,7 +281,7 @@ SWRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 
 
 ! Run computation
-CalcTimeStart=FLEXITIME()
+CalcTimeStart=OMP_FLEXITIME()
 DO
   CurrentStage=1
 ! if doAnalyze=.TRUE.: gradients were already calculated in the previous step!
@@ -354,7 +357,7 @@ DO
 
   ! Analyze and output now
   IF(doAnalyze) THEN
-    CalcTimeEnd=FLEXITIME()
+    CalcTimeEnd=OMP_FLEXITIME()
 
 
     IF(MPIroot)THEN
@@ -394,7 +397,7 @@ DO
     ! do analysis
     CALL Analyze(t,iter)
     iter_loc=0
-    CalcTimeStart=FLEXITIME()
+    CalcTimeStart=OMP_FLEXITIME()
     tAnalyze=  MIN(tAnalyze+Analyze_dt,  tEnd)
 !    doAnalyze=.FALSE.
   END IF

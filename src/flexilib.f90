@@ -72,6 +72,9 @@ USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile
 USE MOD_Restart_Vars,      ONLY:RestartFile
 USE MOD_StringTools,       ONLY:STRICMP, GetFileExtension
 USE MOD_Unittest,          ONLY:GenerateUnittestReferenceData        
+#if USE_OPENMP
+USE OMP_Lib
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -173,7 +176,7 @@ SWRITE(UNIT_stdOut,'(A)') &
 SWRITE(UNIT_stdOut,'(A)')
 SWRITE(UNIT_stdOut,'(132("="))')
 ! Measure init duration
-StartTime=FLEXITIME()
+StartTime=OMP_FLEXITIME()
 
 ! Initialization
 CALL InitInterpolation()
@@ -206,7 +209,7 @@ CALL IgnoredParameters()
 CALL Restart()
 
 ! Measure init duration
-Time=FLEXITIME()
+Time=OMP_FLEXITIME()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
@@ -255,6 +258,9 @@ USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
 USE MOD_IO_HDF5,           ONLY:FinalizeIOHDF5
+#if USE_OPENMP
+USE OMP_Lib
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -286,7 +292,7 @@ CALL FinalizeFV_Basis()
 #endif
 CALL FinalizeIndicator()
 ! Measure simulation duration
-Time=FLEXITIME()
+Time=OMP_FLEXITIME()
 CALL FinalizeParameters()
 CALL FinalizeCommandlineArguments()
 #if USE_MPI
