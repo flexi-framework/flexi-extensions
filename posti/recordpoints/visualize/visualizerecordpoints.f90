@@ -13,17 +13,115 @@
 !=================================================================================================================================
 #include "flexi.h"
 
-MODULE MOD_VisualizeRP
+!===================================================================================================================================
+!> Postprocessing tool used to visualize the solution at the record points that has been recorded during a simulation.
+!> The tool takes several of the files and combines them into a single time series. From the conservative variables
+!> that are stored during the simulation, all available derived quantities can be computed.
+!> Additionally, several more advanced postprocessing algorithms are available. This includes calculation of time averages,
+!> FFT and PSD values and specific boundary layer properties.
+!===================================================================================================================================
+PROGRAM postrec
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Commandline_Arguments
+USE MOD_StringTools                 ,ONLY:STRICMP, GetFileExtension
+USE MOD_ReadInTools                 ,ONLY:prms,PrintDefaultParameterFile
+USE MOD_ParametersVisu              ,ONLY:equiTimeSpacing,doSpec,doFluctuations,doTurb,doFilter,doEnsemble
+USE MOD_ParametersVisu              ,ONLY:Plane_doBLProps
+USE MOD_RPSetVisu                   ,ONLY:FinalizeRPSet
+USE MOD_RPData                      ,ONLY:ReadRPData,AssembleRPData,FinalizeRPData
+USE MOD_OutputRPVisu
+USE MOD_RPInterpolation
+USE MOD_RPInterpolation_Vars        ,ONLY:CalcTimeAverage
+USE MOD_EquationRP
+USE MOD_FilterRP                    ,ONLY:FilterRP
+USE MOD_Spec                        ,ONLY:InitSpec,Spec,FinalizeSpec
+USE MOD_Turbulence
+USE MOD_EnsembleRP                  ,ONLY:EnsembleRP
+USE MOD_MPI                         ,ONLY:DefineParametersMPI,InitMPI
+USE MOD_IO_HDF5                     ,ONLY:DefineParametersIO_HDF5,InitIOHDF5
+USE MOD_EOS                         ,ONLY:DefineParametersEOS,InitEOS
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 
-INTERFACE DefineParameters
-  MODULE PROCEDURE DefineParameters
-END INTERFACE
-  
-INTERFACE InitParameters
-  MODULE PROCEDURE InitParameters
-END INTERFACE
+CALL DefineParameters()
+CALL DefineParametersMPI()
+CALL DefineParametersIO_HDF5()
+CALL DefineParametersEOS()
+
+! check for command line argument --help or --markdown
+IF (doPrintHelp.GT.0) THEN
+  CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, Args(1))
+  STOP
+END IF
+CALL prms%read_options(ParameterFile)
+
+CALL InitParameters()
+CALL InitIOHDF5()
+
+nDataFiles=nArgs-1
+ALLOCATE(DataFiles(1:nDataFiles))
+
+! get list of input files
+DO iArg=2,nArgs
+  CALL GET_COMMAND_ARGUMENT(iArg,DataFiles(iArg-1))
+END DO
+
+! readin RP Data from all input files
+DO iArg=1,nDataFiles
+  InputDataFile=DataFiles(iArg)
+  WRITE(UNIT_stdOut,'(132("="))')
+  WRITE(UNIT_stdOut,'(A,I5,A,I5,A)') ' PROCESSING FILE ',iArg,' of ',nDataFiles,' FILES.'
+  WRITE(UNIT_stdOut,'(A,A,A)') ' ( "',TRIM(InputDataFile),'" )'
+  WRITE(UNIT_stdOut,'(132("="))')
+
+  ! Get start index of file extension to check if it is a h5 file
+  iExt=INDEX(InputDataFile,'.',BACK = .TRUE.)
+  IF(InputDataFile(iExt+1:iExt+2) .NE. 'h5') &
+    CALL CollectiveStop(__STAMP__,'ERROR - Invalid file extension!')
+  ! Read in main attributes from given HDF5 State File
+  WRITE(UNIT_stdOUT,*) "READING DATA FROM RP FILE """,TRIM(InputDataFile), """"
+  IF(iArg.EQ.1) THEN
+    CALL ReadRPData(InputDataFile,firstFile=.TRUE.)
+  ELSE
+    CALL ReadRPData(InputDataFile)
+  END IF
+END DO
+
+! assemble data to one global array
+CALL AssembleRPData()
+
+CALL InitEquationRP()
+CALL InitInterpolation()
+IF(doSpec)             CALL InitSpec()
+CALL InitOutput()
+IF(equiTimeSpacing)    CALL InterpolateEquiTime()
+CALL CalcEquationRP()
+IF(doEnsemble)         CALL EnsembleRP()
+IF(calcTimeAverage)    CALL CalcTimeAvg()
+IF(doFluctuations)     CALL CalcFluctuations()
+IF(doFilter)           CALL FilterRP()
+IF(doSpec)             CALL Spec()
+IF(Plane_doBLProps)    CALL Plane_BLProps()
+IF(doTurb)             CALL Turbulence()
+CALL OutputRP()
+CALL FinalizeInterpolation()
+CALL FinalizeEquationRP()
+CALL FinalizeOutput()
+CALL FinalizeRPSet()
+CALL FinalizeRPData()
+CALL FinalizeSpec()
+CALL FinalizeCommandlineArguments()
+#if USE_MPI
+CALL MPI_FINALIZE(iError)
+IF(iError .NE. 0) &
+  CALL CollectiveStop(__STAMP__,'MPI finalize error',iError)
+#endif
+WRITE(UNIT_stdOut,'(132("="))')
+WRITE(UNIT_stdOut,'(A)') ' RECORDPOINTS POSTPROC FINISHED! '
+WRITE(UNIT_stdOut,'(132("="))')
 
 INTERFACE Build_mapCalc_mapVisu
   MODULE PROCEDURE Build_mapCalc_mapVisu
@@ -50,6 +148,8 @@ CALL prms%CreateStringOption( 'RP_DefFile'         ,"Path to the *RPset.h5 file"
 
 CALL prms%CreateLogicalOption('usePrims'           ,"Set to indicate that the RP file contains the primitive and not the&
                                                     & conservative variables",".FALSE.")
+
+CALL prms%CreateRealOption   ('meshScale'          ,"Specify a scalar scaling factor for the RP coordinates","1.")
 
 CALL prms%CreateLogicalOption('OutputTimeData'     ,"Should the time series be written? Not compatible with TimeAvg and FFT&
                                                      & options!",".FALSE.")
@@ -104,6 +204,11 @@ CALL prms%CreateStringOption( 'TimeAvgFile'        ,"Optional file that contains
 
 CALL prms%CreateIntOption    ('SkipSample'         ,"Used to skip every n-th RP evaluation")
 CALL prms%CreateIntOption    ('OutputFormat'       ,"Choose the main format for output. 0: ParaView, 2: HDF5")
+
+CALL prms%CreateLogicalOption('doEnsemble'         ,"Set to perform ensemble averaging for each RP",".FALSE.")
+CALL prms%CreateRealOption   ('EnsemblePeriod'     ,"Periodic time to be used for ensemble averaging")
+! CALL prms%CreateRealOption   ('EnsembleFreq'       ,"Frequency to be used for ensemble timestep")
+CALL prms%CreateRealOption   ('Kappa'              ,"Heat capacity ratio / isentropic exponent", '1.4')
 END SUBROUTINE DefineParameters
 
 !===================================================================================================================================
@@ -115,8 +220,8 @@ USE MOD_Globals
 USE MOD_Readintools         ,ONLY:GETINT,GETREAL,GETLOGICAL,GETSTR,GETREALARRAY,CountOption
 USE MOD_ParametersVisu
 USE MOD_RPInterpolation_Vars,ONLY:calcTimeAverage
+USE MOD_RPSetVisuVisu_Vars  ,ONLY:meshScale
 USE MOD_EquationRP_Vars     ,ONLY:pInf,uInf,rhoInf,nRefState,RefStatePrim
-
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -143,6 +248,9 @@ END IF
 ! use primitive variables for derived quantities if they exist in the state file
 usePrims=GETLOGICAL('usePrims','.FALSE.')
 
+! rescale RPs if required
+meshScale=GETREAL('meshScale','1.')
+
 ! =============================================================================== !
 ! TIME INTERVAL
 ! =============================================================================== !
@@ -157,6 +265,7 @@ IF(doFilter) THEN
   FilterWidth=GETREAL('FilterWidth')
   FilterMode=GETINT('FilterMode','0')
 END IF
+
 ! =============================================================================== !
 ! FOURIER TRANSFORM
 ! =============================================================================== !
@@ -186,9 +295,21 @@ doTurb=GETLOGICAL('doTurb','.FALSE.')
 IF(doSpec .OR. doTurb) cutoffFreq=GETREAL('cutoffFreq','-999.')
 
 ! for any FFT operation we need equidistant time spacing
-equiTimeSpacing=.FALSE.
 IF(OutputTimeData) equiTimeSpacing=GETLOGICAL('equiTimeSpacing','.FALSE.')
 IF(doTurb.OR.doSpec) equiTimeSpacing=.TRUE.
+
+! =============================================================================== !
+! ENSEMBLE AVERAGING
+! =============================================================================== !
+
+doEnsemble      = GETLOGICAL('doEnsemble','.FALSE.')
+IF(doEnsemble) THEN
+  EnsemblePeriod  = GETREAL('EnsemblePeriod')
+  ! EnsembleFreq   = GETREAL('EnsembleFreq')
+  Kappa           = GETREAL('Kappa','1.4')
+  equiTimeSpacing = .TRUE.
+  doSpec          = .TRUE.
+END IF
 
 ! =============================================================================== !
 ! PLANE OPTIONS
@@ -229,7 +350,7 @@ IF(Plane_doBLProps) THEN ! for BL properties we need local coords and velocities
   END IF
 #endif
   END DO
-  
+
   rhoInf = RefStatePrim(1,RPRefState)
   uInf   = sqrt(sum((RefStatePrim(2:4,RPRefState))**2))
   pInf   = RefStatePrim(5,RPRefState)
