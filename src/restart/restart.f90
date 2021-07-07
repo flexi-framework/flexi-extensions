@@ -404,7 +404,6 @@ IF (DoRestart) THEN
   ! Sanity check, number of elements
   IF ((HSize(2).NE.N_Restart+1).OR.(HSize(3).NE.N_Restart+1).OR.(HSize(5).NE.nGlobalElems)) &
     CALL Abort(__STAMP__,"Dimensions of restart file do not match!")
-  END IF
   HSize_proc = INT(HSize(1:5))
   HSize_proc(5) = nElems
   ! Allocate array to hold the restart data

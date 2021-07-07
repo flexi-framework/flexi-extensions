@@ -40,9 +40,9 @@ CHARACTER(LEN=255),ALLOCATABLE       :: tmpDatasetNames(:)
 INTEGER,ALLOCATABLE                  :: Elem_IJK(:,:)
 INTEGER                              :: nElems_IJK(3)
 INTEGER                              :: nElems,iElem,iDataset,l
-REAL,ALLOCATABLE                     :: RealArray(:,:,:,:,:),RealAvg(:,:,:,:,:)
+REAL,ALLOCATABLE                     :: RealArray(:,:,:,:,:,:),RealAvg(:,:,:,:,:,:)
 REAL,ALLOCATABLE                     :: RealElemArray(:,:),RealElemAvg(:,:,:)
-INTEGER                              :: nVar,N
+INTEGER                              :: nVar,N,nRuns
 INTEGER                              :: p,q,i,j
 CHARACTER(LEN=255)                   :: MeshFile,NodeType,NewFileName
 REAL,ALLOCATABLE                     :: xGP(:),wGP(:)
@@ -95,12 +95,13 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
     ALLOCATE(RealElemArray(INT(HSize(1)),INT(HSize(2))))
     CALL ReadArray(TRIM(tmpDatasetNames(iDataset)),2,INT(HSize),0,2,RealArray=RealElemArray)
     nVar = INT(HSize(1))
-  ELSE IF (nDims.EQ.5) THEN
+  ELSE IF (nDims.EQ.6) THEN
     ! Pointwise data set
-    ALLOCATE(RealArray(INT(HSize(1)),0:INT(HSize(2))-1,0:INT(HSize(3))-1,0:INT(HSize(4))-1,INT(HSize(5))))
-    CALL ReadArray(TRIM(tmpDatasetNames(iDataset)),5,INT(HSize),0,5,RealArray=RealArray)
+    ALLOCATE(RealArray(INT(HSize(1)),0:INT(HSize(2))-1,0:INT(HSize(3))-1,0:INT(HSize(4))-1,INT(HSize(5)),INT(HSize(6))))
+    CALL ReadArray(TRIM(tmpDatasetNames(iDataset)),6,INT(HSize),0,6,RealArray=RealArray)
     nVar = INT(HSize(1))
     N = INT(HSize(2)-1)
+    nRuns = INT(HSize(6))
     ! Prepare integration weights for averaging
     ALLOCATE(xGP(0:N))
     ALLOCATE(wGP(0:N))
@@ -132,9 +133,9 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
       j = Elem_IJK(2,iElem)
       RealElemArray(:,iElem) = RealElemAvg(:,i,j)
     END DO ! iElem
-  ELSE IF (nDims.EQ.5) THEN
+  ELSE IF (nDims.EQ.6) THEN
     ! Pointwise data set
-    ALLOCATE(RealAvg(nVar,0:N,0:N,nElems_IJK(1),nElems_IJK(2)))
+    ALLOCATE(RealAvg(nVar,0:N,0:N,nElems_IJK(1),nElems_IJK(2),nRuns))
     RealAvg = 0.
     DO iElem=1,nElems
       ! Indixes in the IJK sorting
@@ -143,7 +144,7 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
       ! Build sum
       DO q=0,N; DO p=0,N
         DO l = 0,N
-          RealAvg(:,p,q,i,j) = RealAvg(:,p,q,i,j) + RealArray(:,p,q,l,iElem)*wGP(l)/2.
+          RealAvg(:,p,q,i,j,:) = RealAvg(:,p,q,i,j,:) + RealArray(:,p,q,l,iElem,:)*wGP(l)/2.
         END DO ! l = 0,N
       END DO; END DO ! p,q=0,PP_N
     END DO ! iElem
@@ -157,7 +158,7 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
       ! Build sum
       DO q=0,N; DO p=0,N
         DO l = 0,N
-          RealArray(:,p,q,l,iElem) = RealAvg(:,p,q,i,j)
+          RealArray(:,p,q,l,iElem,:) = RealAvg(:,p,q,i,j,:)
         END DO ! l = 0,N
       END DO; END DO ! p,q=0,PP_N
     END DO ! iElem
@@ -172,11 +173,11 @@ DO iDataset = 1, SIZE(tmpDatasetNames)
                     INT(HSize),&
                     INT(HSize),&
                     (/0,0/),.FALSE.,RealArray=RealElemArray)
-  ELSE IF (nDims.EQ.5) THEN
-    CALL WriteArray(TRIM(tmpDatasetNames(iDataset)),5,&
+  ELSE IF (nDims.EQ.6) THEN
+    CALL WriteArray(TRIM(tmpDatasetNames(iDataset)),6,&
                     INT(HSize),&
                     INT(HSize),&
-                    (/0,0,0,0,0/),.FALSE.,RealArray=RealArray)
+                    (/0,0,0,0,0,0/),.FALSE.,RealArray=RealArray)
   END IF
   CALL CloseDataFile()
 
