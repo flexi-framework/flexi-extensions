@@ -54,15 +54,18 @@ IF (doPrintHelp.GT.0) THEN
   STOP
 END IF
 ! check if parameter file is given
-IF ((nArgs.EQ.1).AND.STRICMP(GetFileExtension(Args(1)),'h5')) THEN
+IF ((nArgs.EQ.2).AND.STRICMP(GetFileExtension(Args(1)),'h5').AND.STRICMP(GetFileExtension(Args(2)),'h5')) THEN
   dointerpolatex = .FALSE.
-  StateFile = Args(1)
-ELSEIF((nArgs.EQ.5).AND.STRICMP(Args(1),"--InterpolateX").AND.STRICMP(GetFileExtension(Args(5)),'h5')) THEN
+  StochInputFile = Args(1)
+  StateFile = Args(2)
+ELSEIF((nArgs.EQ.6).AND.STRICMP(Args(1),"--InterpolateX").AND.STRICMP(GetFileExtension(Args(5)),'h5') &
+                                                         .AND.STRICMP(GetFileExtension(Args(6)),'h5')) THEN
   dointerpolatex = .TRUE.
   READ(Args(2),*) xMin
   READ(Args(3),*) xMax
   READ(Args(4),*) nPts
-  StateFile = Args(5)
+  StochInputFile = Args(5)
+  StateFile = Args(6)
 ELSE
   CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: swim statefile')
 END IF

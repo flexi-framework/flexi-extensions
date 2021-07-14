@@ -63,9 +63,9 @@ INTEGER             :: iSideIn,SideID,flip,lo,up,iCell,iRun
 INTEGER             :: nItv
 REAL                :: dx
 INTEGER             :: iXMin,iOld,iNew
-REAL                :: xMinLoc,xMaxLoc
+REAL                :: xMinLoc,xMaxLoc,xLoc(2)
 INTEGER             :: iMinLoc,iMaxLoc
-REAL                :: xi,fac
+REAL                :: xi,fac,sig
 INTEGER             :: nZ,nCirc,nCellsZ
 !===================================================================================================================================
 
@@ -75,7 +75,6 @@ INTEGER             :: nZ,nCirc,nCellsZ
 WRITE (*,*) "Read Data"
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL GetDataSize(File_ID,'IceSurfData',nDims,HSize)
-CALL ReadAttribute(File_ID,'MeshFile',1,StrScalar=MeshFile)
 nVarSurf = INT(HSize(1))
 ICS_N = INT(HSize(2))-1
 ICS_NZ = INT(HSize(3))-1
@@ -87,17 +86,26 @@ CALL ReadArray('IceSurfData',5,(/nVarSurf,ICS_N+1,ICS_NZ+1,nWallSides,nRuns/),0,
 CALL CloseDataFile()
 
 
-!Read mappingg from mesh file 
-!MeshFile   = GETSTR('MeshFile')
-WRITE (*,*) "Read Mesh Mapping"
-CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-CALL GetDataSize(File_ID,'IcingSideInfo',nDims,HSize)
-ALLOCATE(Mapping(3,nWallSides))
-CALL ReadArray('IcingSideInfo',2,(/3,nWallSides/),0,2,IntArray=Mapping)
-CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
-nZ = nElems_IJK(3)
-nCirc = nWallSides/nZ
+!Read mapping from mesh file 
+WRITE (*,*) "Read Mesh File Names"
+ALLOCATE(MeshFiles(nRuns))
+CALL OpenDataFile(StochInputFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+CALL ReadArray('MeshFiles',1,(/nRuns/),0,1,StrArray=MeshFiles)
 CALL CloseDataFile()
+
+WRITE (*,*) "Read Mesh Mappings"
+ALLOCATE(Mapping(3,nWallSides,nRuns))
+DO iRun = 1,nRuns
+  CALL OpenDataFile(MeshFiles(iRun),create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
+  CALL GetDataSize(File_ID,'IcingSideInfo',nDims,HSize)
+  CALL ReadArray('IcingSideInfo',2,(/3,nWallSides/),0,2,IntArray=Mapping(:,:,iRun))
+  IF(iRun.EQ.1)THEN
+    CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
+    nZ = nElems_IJK(3)
+    nCirc = nWallSides/nZ
+  END IF 
+  CALL CloseDataFile()
+END DO 
 
 nCells  = nCirc*(ICS_N+1)
 nCellsZ = nZ   *(ICS_N+1)
@@ -106,22 +114,20 @@ ALLOCATE(SwimData(nVarSurf,nCells,nRuns))
 SwimData = 0.
 
 WRITE (*,*) "Sort"
-DO iSideIn=1,nWallSides
-  SideID = Mapping(1,iSideIn)
-  lo = (SideID-1)*(ICS_N+1) + 1
-  up =  SideID   *(ICS_N+1)
-  IF(WriteDim.EQ.3)THEN ! SurfData was created in 3D
-    flip   = Mapping(3,iSideIn)
-    Do iRun=1,nRuns
+Do iRun=1,nRuns
+  DO iSideIn=1,nWallSides
+    SideID = Mapping(1,iSideIn,iRun)
+    lo = (SideID-1)*(ICS_N+1) + 1
+    up =  SideID   *(ICS_N+1)
+    IF(WriteDim.EQ.3)THEN ! SurfData was created in 3D
+      flip   = Mapping(3,iSideIn,iRun)
       CALL DoFlip(nVarSurf,VolData(:,:,:,iSideIn,iRun),flip,SwimData(:,lo:up,iRun))
-    END DO 
-  ELSE 
-    ! 2D: - Data is already sorted clockwise (due to p SurfVec orientation in 2D CGNS) 
-    !     - Data is constant in Z => first cell in Z is sufficient
-    Do iRun=1,nRuns
+    ELSE 
+      ! 2D: - Data is already sorted clockwise (due to p SurfVec orientation in 2D CGNS) 
+      !     - Data is constant in Z => first cell in Z is sufficient
       SwimData(:,lo:up,iRun) = VolData(:,:,0,iSideIn,iRun)
-    END DO 
-  END IF 
+    END IF 
+  END DO 
 END DO 
 IF(WriteDim.EQ.3) SwimData = SwimData / nCellsZ !Average
 
@@ -133,7 +139,7 @@ IF(doInterpolateX)THEN
   !nPts = GETINT("nPts")
   nItv = nPts-1
   dx = (xMax-xMin)/nItv
-  ALLOCATE(NewData(nVarSurf-2,2*nPts,nRuns))
+  ALLOCATE(NewData(nVarSurf,2*nPts,nRuns))
   NewData = 0.
   ALLOCATE(nHits(2*nPts))
   Do iRun=1,nRuns
@@ -142,42 +148,46 @@ IF(doInterpolateX)THEN
     nHits = 0
     !Loop over all old line segments. 
     !For each segment, loop over all points within it and add point to pressure sum. 
-    !Finally divide by number of points found.
+    !subtract if segment is in fact upside down
+    !Finally divide by number of points found. (OUTDATED)
 
     !first: pressure side from TE to LE 
     DO iOld = 1,iXMin-1
-      xMinLoc = MINVAL(SwimData(1,iOld:iOld+1,iRun))
-      xMaxLoc = MAXVAL(SwimData(1,iOld:iOld+1,iRun))
+      xLoc = SwimData(1,iOld:iOld+1,iRun)
+      xMinLoc = MINVAL(xLoc)
+      xMaxLoc = MAXVAL(xLoc)
+      sig = MERGE(1.,-1.,xLoc(2).LT.xLoc(1)) !subtract if in other direction
       iMinLoc = CEILING(nItv*(xMaxLoc-xMax)/(xMin-xMax))+1
       iMaxLoc = FLOOR(  nItv*(xMinLoc-xMax)/(xMin-xMax))+1
       DO iNew = iMinLoc,iMaxLoc
         xi = xMax - (iNew-1)*dx
         ! fac is 0 at iOld
         fac = (xi - SwimData(1,iOld,iRun))/(SwimData(1,iOld+1,iRun)-SwimData(1,iOld,iRun))
-        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + (1.-fac)*SwimData(3:,iOld,iRun) + fac*SwimData(3:,iOld+1,iRun) 
+        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + sig*( (1.-fac)*SwimData(:,iOld,iRun) + fac*SwimData(:,iOld+1,iRun) )
         nHits(iNew) = nHits(iNew) + 1 
       END DO 
     END DO 
     !second: suction side from LE to TE 
     DO iOld = iXMin,nCells-1
-      xMinLoc = MINVAL(SwimData(1,iOld:iOld+1,iRun))
-      xMaxLoc = MAXVAL(SwimData(1,iOld:iOld+1,iRun))
+      xLoc = SwimData(1,iOld:iOld+1,iRun)
+      xMinLoc = MINVAL(xLoc)
+      xMaxLoc = MAXVAL(xLoc)
+      sig = MERGE(1.,-1.,xLoc(2).GT.xLoc(1)) !subtract if in other direction
       iMinLoc = CEILING(nPts*(xMinLoc-xMin)/(xMax-xMin))+nPts+1
       iMaxLoc = FLOOR(  nPts*(xMaxLoc-xMin)/(xMax-xMin))+nPts+1
       DO iNew = iMinLoc,iMaxLoc
         xi = xMin + (iNew-1-nPts)*dx
         ! fac is 0 at iOld
         fac = (xi - SwimData(1,iOld,iRun))/(SwimData(1,iOld+1,iRun)-SwimData(1,iOld,iRun))
-        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + (1.-fac)*SwimData(3:,iOld,iRun) + fac*SwimData(3:,iOld+1,iRun) 
+        NewData(:,iNew,iRun) = NewData(:,iNew,iRun) + sig*( (1.-fac)*SwimData(:,iOld,iRun) + fac*SwimData(:,iOld+1,iRun) )
         nHits(iNew) = nHits(iNew) + 1 
       END DO 
     END DO 
-    !average
     DO iNew = 1,2*nPts
-      IF(nHits(iNew).GT.0)THEN
-        NewData(:,iNew,iRun) = NewData(:,iNew,iRun)/nHits(iNew) !MAX(nHits(iNew),1)
-      ELSE
+      IF(nHits(iNew).EQ.0)THEN
         NewData(:,iNew,iRun) = -1.
+      !ELSE
+        !NewData(:,iNew,iRun) = NewData(:,iNew,iRun)/nHits(iNew) !MAX(nHits(iNew),1)
       END IF 
     END DO 
   END DO 
@@ -186,8 +196,7 @@ END IF
 WRITE (*,*) "Write To File"
 CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.FALSE.)
 IF(doInterpolateX)THEN 
-  CALL WriteArray('SwimData',3,(/nVarSurf-2,2*nPts,nRuns/),(/nVarSurf-2,2*nPts,nRuns/),(/0,0,0/),&
-                  collective=.FALSE.,RealArray=NewData)
+  CALL WriteArray('SwimData',3,(/nVarSurf,2*nPts,nRuns/),(/nVarSurf,2*nPts,nRuns/),(/0,0,0/),collective=.FALSE.,RealArray=NewData)
 ELSE 
   CALL WriteArray('SwimData',3,(/nVarSurf,nCells,nRuns/),(/nVarSurf,nCells,nRuns/),(/0,0,0/),collective=.FALSE.,RealArray=SwimData)
 END IF 

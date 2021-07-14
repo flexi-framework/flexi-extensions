@@ -101,8 +101,8 @@ END IF
 BodyForce=Fv+Fp
 #endif
 u_tmp = BodyForce(1:2,:)
-BodyForce(1,:) = COS(AlphaRefState)*u_tmp(1,:) - SIN(AlphaRefState)*u_tmp(2,:)
-BodyForce(2,:) = COS(AlphaRefState)*u_tmp(2,:) + SIN(AlphaRefState)*u_tmp(1,:) 
+BodyForce(1,:) = COS(AlphaRefState)*u_tmp(1,:) + SIN(AlphaRefState)*u_tmp(2,:)
+BodyForce(2,:) = COS(AlphaRefState)*u_tmp(2,:) - SIN(AlphaRefState)*u_tmp(1,:) 
 
 END SUBROUTINE CalcBodyForces
 

@@ -24,12 +24,13 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
-CHARACTER(LEN=255)             :: MeshFile      !< name of meshfile (contains indexing)
+CHARACTER(LEN=255),ALLOCATABLE :: MeshFiles(:)      !< name of meshfile (contains indexing)
+CHARACTER(LEN=255)             :: StochInputFile     !< name of hdf5 statefile (contains surface data)
 CHARACTER(LEN=255)             :: StateFile     !< name of hdf5 statefile (contains surface data)
 LOGICAL             :: dummy
 INTEGER             :: nWallSides
 INTEGER             :: nCells
-INTEGER,ALLOCATABLE :: Mapping(:,:)
+INTEGER,ALLOCATABLE :: Mapping(:,:,:)
 REAL,ALLOCATABLE    :: VolData(:,:,:,:,:)
 INTEGER             :: ICS_N,ICS_NZ
 INTEGER             :: WriteDim
