@@ -31,6 +31,7 @@ LOGICAL            :: InterpolateSolution = .FALSE.   !< flag whether restart so
                                                       !< if node type or polynomial degree are different
 CHARACTER(LEN=300) :: RestartFile = ''                !< name of restart file
 CHARACTER(LEN=255) :: NodeType_Restart                !< node type of restart file
+CHARACTER(LEN=255) :: ProjectName_Restart
 REAL               :: RestartTime                     !< time at which computation is resumed
 INTEGER            :: RestartMode         = -1        !< -1) Initial value, routines default to state file mode
                                                       !<  1) restart from State file

@@ -226,7 +226,6 @@ CHARACTER(LEN=255),INTENT(IN),OPTIONAL :: RestartFile_in !< state file to restar
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 LOGICAL            :: ResetTime,validHDF5
-CHARACTER(LEN=255) :: ProjectName_Restart
 !==================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.RestartInitIsDone)THEN
   CALL CollectiveStop(__STAMP__,'InitRestart not ready to be called or already called.')

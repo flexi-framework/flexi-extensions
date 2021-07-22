@@ -114,9 +114,8 @@ USE MOD_Sponge_Vars
 USE MOD_Exactfunc,    ONLY:ExactFunc
 USE MOD_Equation_Vars,ONLY:RefStateCons
 USE MOD_Mesh_Vars,    ONLY:Elem_xGP,nElems
-USE MOD_Output_Vars,  ONLY:ProjectName
 USE MOD_PruettDamping,ONLY:InitPruettDamping
-USE MOD_Restart_Vars, ONLY:DoRestart,RestartTime,RestartFile
+USE MOD_Restart_Vars, ONLY:DoRestart,RestartTime,RestartFile,ProjectName_Restart
 USE MOD_Equation_Vars,ONLY:IniExactFunc
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -160,7 +159,7 @@ CASE(SPONGEBASEFLOW_PRUETT) ! Pruett
     BaseFlowFile    = GETSTR('SpongeBaseFlowFile','none')
     IF (TRIM(BaseFlowFile) .EQ. 'none') THEN
       ! If no base flow file has been specified, assume a standard name for the base flow file
-      BaseFlowFile=TRIM(TIMESTAMP(TRIM(ProjectName)//'_BaseFlow',RestartTime))//'.h5'
+      BaseFlowFile=TRIM(TIMESTAMP(TRIM(ProjectName_Restart)//'_BaseFlow',RestartTime))//'.h5'
       ! Check if this file exists
       validBaseFlowFile = FILEEXISTS(BaseFlowFile)
       IF (.NOT.validBaseFlowFile) THEN
@@ -470,14 +469,14 @@ END IF
 ! Read in state
 IF((N_Base.EQ.PP_N).AND.(TRIM(NodeType_Base).EQ.TRIM(NodeType)))THEN
   ! No interpolation needed, read solution directly from file
-  CALL ReadArray('DG_Solution',5,(/PP_nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems/),OffsetElem,5,RealArray=SpBaseFlow)
+  CALL ReadArray('DG_Solution',5,(/PP_nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems/),OffsetElem,5,RealArray=SpBaseFlow,isBatch=.TRUE.)
 ELSE
   ! We need to interpolate the solution to the new computational grid
   SWRITE(UNIT_stdOut,*)'Interpolating base flow from file with N_Base=',N_Base,' to N=',PP_N
   ALLOCATE(UTmp(PP_nVar,0:N_Base,0:N_Base,0:N_Base,nElems))
   ALLOCATE(Vdm_NBase_N(0:N_Base,0:PP_N))
   CALL GetVandermonde(N_Base,NodeType_Base,PP_N,NodeType,Vdm_NBase_N,modal=.TRUE.)
-  CALL ReadArray('DG_Solution',5,(/PP_nVar,N_Base+1,N_Base+1,N_Base+1,nElems/),OffsetElem,5,RealArray=UTmp)
+  CALL ReadArray('DG_Solution',5,(/PP_nVar,N_Base+1,N_Base+1,N_Base+1,nElems/),OffsetElem,5,RealArray=UTmp,isBatch=.TRUE.)
   DO iElem=1,nElems
     CALL ChangeBasisVolume(PP_nVar,N_Base,PP_N,Vdm_NBase_N,UTmp(:,:,:,:,iElem),SpBaseFlow(:,:,:,:,iElem))
   END DO
