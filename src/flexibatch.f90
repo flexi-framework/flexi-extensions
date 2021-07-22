@@ -42,7 +42,8 @@ CALL MPI_INIT(iError)
 CALL MPI_COMM_RANK(MPI_COMM_WORLD, myGlobalRank     , iError)
 CALL MPI_COMM_SIZE(MPI_COMM_WORLD, nGlobalProcessors, iError)
 
-MPI_COMM_ACTIVE=MPI_COMM_WORLD
+CALL MPI_COMM_DUP(MPI_COMM_WORLD,MPI_COMM_ACTIVE,iError)
+!MPI_COMM_ACTIVE=MPI_COMM_WORLD
 #else
 myGlobalRank=0
 nGlobalProcessors=1
@@ -132,6 +133,7 @@ DO iSequentialRun=StartSequentialRun,nSequentialRuns
   ! During last sequential runs, some parallel runs might idle. We therefore split MPI_COMM_WORLD.
 #if USE_MPI
   IF(iSequentialRun.EQ.nSequentialRuns)THEN
+    CALL MPI_COMM_FREE(MPI_COMM_ACTIVE,iError) 
     isActive=iGlobalRun.LE.nGlobalRuns
     Color=MERGE(0,MPI_UNDEFINED,isActive)
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,Color,myGlobalRank,MPI_COMM_ACTIVE,iError) 

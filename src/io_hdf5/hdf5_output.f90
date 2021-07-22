@@ -346,9 +346,11 @@ END IF
 IF(REAL(PRODUCT(nVal)).GT.((2**28-1)/8.))  CALL Abort(__STAMP__, &
     'Total size of HDF5 array "'//TRIM(DataSetName)//'" is too big! Reduce number of entries per rank or compile without MPI!')
 
-IF(gatheredWrite)THEN
-  IF(ANY(offset(1:rank-1).NE.0)) &
-    CALL abort(__STAMP__,'Offset only allowed in last dimension for gathered IO.')
+IF(gatheredWrite.AND.(comm.EQ.MPI_COMM_ACTIVE))THEN !disable gathered write for other communicators
+  IF(ANY(offset(1:rank-2).NE.0)) &
+    CALL abort(__STAMP__,'Offset only allowed in last two dimensions for gathered IO.')
+  IF(nVal(rank).NE.1) &
+    CALL abort(__STAMP__,'Only one run allowed in last dim for gathered IO.')
 
   ! Get last dim of each array on IO nodes
   nDOFLocal=PRODUCT(nVal)
@@ -358,7 +360,7 @@ IF(gatheredWrite)THEN
   offsetNode=0
   IF(MPILocalRoot)THEN
     nValGather=nVal
-    nValGather(rank)=SUM(nDOFPerNode)/PRODUCT(nVal(1:rank-1))
+    nValGather(rank-1)=SUM(nDOFPerNode)/PRODUCT(nVal(1:rank-2))
     DO i=2,nLocalProcs
       offsetNode(i)=offsetNode(i-1)+nDOFPerNode(i-1)
     END DO
