@@ -139,7 +139,6 @@ USE MOD_HDF5_Input,         ONLY: File_ID,OpenDataFile,CloseDataFile,ReadArray,D
 USE MOD_IO_HDF5,            ONLY:AddToFieldData,FieldOut,HSIZE,nDims
 !USE MOD_Interpolation_Vars, ONLY: Vdm_Leg,sVdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,offsetElem
-USE MOD_Output,             ONLY: InitOutputToFile
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_ReadInTools,        ONLY: GETINT,GETREAL,GETLOGICAL
 USE MOD_Restart_Vars,       ONLY: doRestart,restartFile,interpolateSolution
@@ -154,7 +153,6 @@ IMPLICIT NONE
 LOGICAL                  :: HITDataExists
 INTEGER                  :: HSize_proc(5)
 REAL,ALLOCATABLE         :: HIT_local(:,:,:,:,:)
-CHARACTER(LEN=31)        :: varnames(nHITVars)
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
@@ -248,15 +246,6 @@ IF(MPIRoot)THEN
   ALLOCATE(Time(nWriteStats))
   ALLOCATE(writeBuf(nHITVars,nWriteStats))
   Filename = TRIM(ProjectName)//'_HITAnalysis'
-
-  varnames(1) ="Dissipation Rate Incompressible"
-  varnames(2) ="Dissipation Rate Compressible"
-  varnames(3) ="Ekin incomp"
-  varnames(4) ="Ekin comp"
-  varnames(5) ="U RMS"
-  varnames(6) ="Reynolds number"
-  varnames(7) ="A ILF"
-  CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
 END IF
 
 ! Spatial averaging according to de Laage de Meux, 2015
@@ -439,6 +428,7 @@ USE MOD_TestCase_Vars
 #if USE_MPI
 USE MOD_MPI_Vars
 #endif
+USE MOD_Output,             ONLY: InitOutputToFile
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -463,7 +453,23 @@ REAL                            :: rho_glob
 REAL                            :: Ekin_glob,Ekin_comp_glob
 REAL                            :: DR_S_glob,DR_Sd_glob,DR_p_glob !,DR_u_Glob
 #endif
+CHARACTER(LEN=31)               :: varnames(nHITVars)
 !==================================================================================================================================
+
+! Init file output if not already initialized
+IF(MPIRoot .AND. .NOT. AnalyzeFile_InitDone)THEN
+  AnalyzeFile_InitDone = .TRUE.
+  varnames(1) ="Dissipation Rate Incompressible"
+  varnames(2) ="Dissipation Rate Compressible"
+  varnames(3) ="Ekin incomp"
+  varnames(4) ="Ekin comp"
+  varnames(5) ="U RMS"
+  varnames(6) ="Reynolds number"
+  varnames(7) ="A ILF"
+  CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
+END IF
+
+
 Ekin      = 0.
 Ekin_comp = 0.
 rho       = 0.

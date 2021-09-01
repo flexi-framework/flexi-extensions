@@ -30,6 +30,7 @@ LOGICAL                   :: InitHITDone
 !----------------------------------------------------------------------------------------------------------------------------------
 ! TESTCASE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
+LOGICAL                   :: AnalyzeFile_InitDone=.FALSE.!< Flag to indicate whether testcase analyze file already initialized
 LOGICAL                   :: HIT_Forcing              !< Flag to perform HIT forcing
 LOGICAL                   :: HIT_Avg                  !< Flag to perform spatial averaging
 LOGICAL                   :: HIT_1st                  !< Flag to update forcing only in the 1st RK stage
