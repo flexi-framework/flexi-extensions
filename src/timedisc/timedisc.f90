@@ -175,6 +175,13 @@ USE MOD_Implicit_Vars       ,ONLY: nGMRESIterGlobal,nNewtonIterGlobal
 USE MOD_FV
 #endif
 use MOD_IO_HDF5
+
+! changed
+#if USE_SMARTREDIS
+USE iso_c_binding
+USE smartredis_client, ONLY: client_type
+#endif
+
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -187,6 +194,27 @@ INTEGER                      :: TimeArray(8)              !< Array for system ti
 INTEGER                      :: errType,nCalcTimestep,writeCounter
 LOGICAL                      :: doAnalyze,doFinalize
 !==================================================================================================================================
+
+! changed
+#if USE_SMARTREDIS
+! imported nElems at the top and added the following code to the main DO loop of timedisc.f90:
+!  u_tensor = U
+!  u_tensor_key = "u_tensor"
+!  call client%put_tensor(u_tensor_key, u_tensor, shape(u_tensor))
+!  call client%unpack_tensor(u_tensor_key, result_tensor, shape(result_tensor))
+!  PRINT *, "Received tensor:",  u_tensor_key, result_tensor
+ 
+type(client_type) :: client
+! dimension(shape(U)) and dimension(rank(U)) dont work here
+real(kind=c_double), dimension(:,:,:,:,:), allocatable :: u_tensor
+real, dimension(:,:,:,:,:), allocatable :: result_tensor
+character(len=255) :: u_tensor_key
+
+ALLOCATE(u_tensor(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
+ALLOCATE(result_tensor(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
+call client%initialize(.false.)
+#endif
+
 
 SWRITE(UNIT_StdOut,'(132("-"))')
 
@@ -415,6 +443,17 @@ DO
     tAnalyze=  MIN(tAnalyze+Analyze_dt,  tEnd)
 !    doAnalyze=.FALSE.
   END IF
+  
+  ! changed
+
+  ! change U to a C array
+  u_tensor = U
+  u_tensor_key = "u_tensor"
+
+  call client%put_tensor(u_tensor_key, u_tensor, shape(u_tensor))
+  !call client%unpack_tensor(u_tensor_key, result_tensor, shape(result_tensor))
+  !PRINT *, "Received tensor:",  u_tensor_key, result_tensor
+  ! end change
 
   IF(doFinalize) EXIT
 END DO
