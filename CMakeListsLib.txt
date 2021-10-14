@@ -407,3 +407,21 @@ IF(LIBS_USE_OPENMP)
 ELSE()
   ADD_DEFINITIONS(-DUSE_OPENMP=0)
 ENDIF()
+
+
+# =========================================================================
+# SmartRedis
+# =========================================================================
+OPTION(LIBS_USE_SMARTREDIS "Use SmartRedis Library" OFF)
+IF(LIBS_USE_SMARTREDIS)
+  FIND_LIBRARY(SR_LIB smartredis PATH SR_LIB-NOTFOUND)
+  FIND_LIBRARY(SR_LIB_FORTRAN smartredis_fortran PATH SR_LIB_FORTRAN-NOTFOUND)
+  LIST(APPEND linkedlibs ${SR_LIB})
+  LIST(APPEND linkedlibs ${SR_LIB_FORTRAN})
+  FIND_PATH(SR_INCLUDE smartredis_client PATH SR_INCLUDE-NOTFOUND)
+  INCLUDE_DIRECTORIES(${SR_INCLUDE})
+  ADD_DEFINITIONS(-DUSE_SMARTREDIS=1)
+  MESSAGE(STATUS "Building Flexi with SmartRedis")
+ELSE()
+  ADD_DEFINITIONS(-DUSE_SMARTREDIS=0)
+ENDIF()
