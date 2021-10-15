@@ -73,6 +73,9 @@ USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
 USE MOD_StringTools,       ONLY:STRICMP, GetFileExtension
 USE MOD_Unittest,          ONLY:GenerateUnittestReferenceData
+#if USE_SMARTREDIS
+USE MOD_SmartRedis,        ONLY:DefineParametersSmartRedis,InitSmartRedis
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -138,7 +141,9 @@ CALL DefineParametersImplicit()
 CALL DefineParametersPrecond()
 CALL DefineParametersAnalyze()
 CALL DefineParametersRecordPoints()
-
+#if USE_SMARTREDIS
+CALL DefineParametersSmartRedis()
+#endif
 ! check for command line argument --help or --markdown
 IF (doPrintHelp.GT.0) THEN
   CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, Args(1))
@@ -209,6 +214,9 @@ CALL InitImplicit()
 CALL InitRecordpoints()
 CALL IgnoredParameters()
 CALL Restart()
+#if USE_SMARTREDIS
+CALL InitSmartRedis()
+#endif
 
 ! Measure init duration
 Time=FLEXITIME()
@@ -261,6 +269,9 @@ USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
 USE MOD_IO_HDF5,           ONLY:FinalizeIOHDF5
+#if USE_SMARTREDIS
+USE MOD_SmartRedis,        ONLY:FinalizeSmartRedis
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -292,6 +303,9 @@ CALL FinalizeFilter()
 CALL FinalizeFV_Basis()
 #endif
 CALL FinalizeIndicator()
+#if USE_SMARTREDIS
+CALL FinalizeSmartRedis()
+#endif
 ! Measure simulation duration
 Time=FLEXITIME()
 CALL FinalizeParameters()
