@@ -159,7 +159,7 @@ USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
 USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState,WriteBaseFlow
-USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems
+USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems,nElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Overintegration     ,ONLY: Overintegration
@@ -176,7 +176,7 @@ USE MOD_FV
 #endif
 use MOD_IO_HDF5
 #if USE_SMARTREDIS
-USE MOD_SmartRedis_Vars
+USE MOD_SmartRedis          ,ONLY: WriteToSmartRedis
 #endif
 
 IMPLICIT NONE
@@ -420,12 +420,7 @@ DO
   END IF
 
 #if USE_SMARTREDIS
-  u_tensor = U
-  u_tensor_key = "u_tensor"
-
-  call client%put_tensor(u_tensor_key, u_tensor, shape(u_tensor))
-  !call client%unpack_tensor(u_tensor_key, result_tensor, shape(result_tensor))
-  !PRINT *, "Received tensor:",  u_tensor_key, result_tensor
+  call WriteToSmartRedis(5, (/PP_nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems/), U)
 #endif
 
   IF(doFinalize) EXIT
