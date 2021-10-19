@@ -290,6 +290,11 @@ SWRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 
 IF(TimeDiscType.EQ.'ESDIRK') CALL FillInitPredictor(t)
 
+#if USE_SMARTREDIS
+! Write initial data to SmartRedis
+CALL ExchangeDataSmartRedis(U,.FALSE.)
+#endif
+
 ! Run computation
 CalcTimeStart=FLEXITIME()
 DO
@@ -417,11 +422,12 @@ DO
     CalcTimeStart=FLEXITIME()
     tAnalyze=  MIN(tAnalyze+Analyze_dt,  tEnd)
 !    doAnalyze=.FALSE.
-  END IF
 
 #if USE_SMARTREDIS
-  call WriteToSmartRedis(5, (/PP_nVar,PP_N+1,PP_N+1,PP_NZ+1,nElems/), U)
+    CALL ExchangeDataSmartRedis(U,doFinalize)
 #endif
+
+  END IF
 
   IF(doFinalize) EXIT
 END DO
