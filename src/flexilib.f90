@@ -212,11 +212,11 @@ CALL InitTimeDisc()
 CALL InitAnalyze()
 CALL InitImplicit()
 CALL InitRecordpoints()
-CALL IgnoredParameters()
-CALL Restart()
 #if USE_SMARTREDIS
 CALL InitSmartRedis()
 #endif
+CALL IgnoredParameters()
+CALL Restart()
 
 ! Measure init duration
 Time=FLEXITIME()
