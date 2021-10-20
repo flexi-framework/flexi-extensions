@@ -81,6 +81,19 @@ DO iArg = 1, nArgs_tmp
     alreadyRead(iArg) = .TRUE.
     nArgs = nArgs - 1
   END IF
+  ! Parse format "--tag [value]
+  IF (STRICMP(tmp, "--tag")) THEN
+    ! Get next arg, which is the actual value
+    IF(PRESENT(Args_In))THEN
+      FlexiTag=Args_In(iArg+1)
+    ELSE
+      CALL GET_COMMAND_ARGUMENT(iArg+1,FlexiTag)
+    END IF
+    ! Mark both as read and decrease arg count by 2
+    alreadyRead(iArg)   = .TRUE.
+    alreadyRead(iArg+1) = .TRUE.
+    nArgs = nArgs - 2
+  END IF
 END DO ! iArg = 1, nArgs
 
 ! Get all remaining parameters

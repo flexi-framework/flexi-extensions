@@ -213,25 +213,29 @@ REAL,INTENT(IN)             :: U(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+CHARACTER(LEN=255)             :: Key
 LOGICAL                        :: found
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
+INTEGER,PARAMETER              :: tries    = HUGE(1) ! max. number of polling attempts before moving on
 REAL                           :: Cs(nGlobalElems)
 !==================================================================================================================================
 Dims = SHAPE(U)
 Dims_Out(:) = Dims(:)
 Dims_Out(5) = nGlobalElems
 
-CALL GatheredWriteSmartRedis(5, Dims, U, "U", Shape_Out = Dims_Out)
+Key = TRIM(FlexiTag)//"U"
+CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
 
 IF (MPIroot) THEN
   lastTimeStepInt = MERGE(-1,1,lastTimeStep)
-  CALL Client%put_tensor("step_type",lastTimeStepInt,(/1/))
+  Key = TRIM(FlexiTag)//"step_type"
+  CALL Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
 
-  found = Client%poll_tensor("Cs", interval, tries)
-  CALL Client%unpack_tensor("Cs", Cs, SHAPE(Cs))
-  CALL Client%delete_tensor("Cs")
+  Key = TRIM(FlexiTag)//"Cs"
+  found = Client%poll_tensor(TRIM(Key), interval, tries)
+  CALL Client%unpack_tensor(TRIM(Key), Cs, SHAPE(Cs))
+  CALL Client%delete_tensor(TRIM(Key))
 
   ! TODO: Use ScatterV to scatter the received Cs to the corresponding MPI ranks.
   ! CALL GatheredReadSmartRedis(.....)

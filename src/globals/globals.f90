@@ -28,6 +28,7 @@ IMPLICIT NONE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255)::ParameterFile                                             !< filename of the parameter file
+CHARACTER(LEN=255)::FlexiTag=''                                               !< name of FLEXI instance
 INTEGER,PARAMETER ::UNIT_stdOut=6                                             !< unit for writing to standard output (e.g. terminal)
 INTEGER,PARAMETER ::UNIT_logOut=133                                           !< unit for writing log files
 INTEGER           ::UNIT_errOut=999                                           !< unit for writing error files
