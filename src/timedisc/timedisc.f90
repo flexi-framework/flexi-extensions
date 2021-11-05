@@ -159,7 +159,7 @@ USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
 USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState,WriteBaseFlow
-USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems,nElems
+USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Overintegration     ,ONLY: Overintegration

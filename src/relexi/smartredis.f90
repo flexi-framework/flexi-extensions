@@ -99,18 +99,18 @@ INTEGER,INTENT(IN),OPTIONAL    :: Shape_Out(rank)           !< shape of output a
 ! LOCAL VARIABLES
 REAL,ALLOCATABLE               :: RealArray_Global(:)
 INTEGER                        :: i,nValGather(rank),nDOFLocal
-INTEGER,DIMENSION(nProcessors) :: nDOFPerNode,offsetNode
+INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
 !==================================================================================================================================
 
 nDOFLocal=PRODUCT(nVal)
-CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerNode,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
+CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
 
-offsetNode=0
+offsetRank=0
 IF(MPIroot)THEN
   nValGather=nVal
-  nValGather(rank)=SUM(nDOFPerNode)/PRODUCT(nVal(1:rank-1))
+  nValGather(rank)=SUM(nDOFPerRank)/PRODUCT(nVal(1:rank-1))
   DO i=2,nProcessors
-    offsetNode(i)=offsetNode(i-1)+nDOFPerNode(i-1)
+    offsetRank(i)=offsetRank(i-1)+nDOFPerRank(i-1)
   END DO
   ALLOCATE(RealArray_Global(PRODUCT(nValGather)))
 ELSE
@@ -118,7 +118,7 @@ ELSE
 ENDIF
 
 CALL MPI_GATHERV(RealArray,nDOFLocal,MPI_DOUBLE_PRECISION,&
-                 RealArray_Global,nDOFPerNode,offsetNode,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+                 RealArray_Global,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
 
 IF(MPIroot)THEN
   IF (PRESENT(Shape_Out)) THEN
@@ -135,66 +135,57 @@ DEALLOCATE(RealArray_Global)
 END SUBROUTINE GatheredWriteSmartRedis
 
 
-!!==================================================================================================================================
-!!> Get array from SmartRedis and Scatter it across all ranks
-!!==================================================================================================================================
-!SUBROUTINE GatheredReadSmartRedis(rank, nVal, RealArray, key, Shape_Out)
-!! MODULES
-!USE MOD_Globals
-!USE MOD_SmartRedis_Vars
-!IMPLICIT NONE
-!!----------------------------------------------------------------------------------------------------------------------------------
-!! INPUT/OUTPUT VARIABLES
-!INTEGER,INTENT(IN)             :: rank                      !< Rank of array
-!INTEGER,INTENT(IN)             :: nVal(rank)                !< Local number of variables in each rank
-!REAL,INTENT(IN)                :: RealArray(PRODUCT(nVal))  !< Real array to write
-!CHARACTER(LEN=*),INTENT(IN)    :: Key                       !< array name to write to database
-!INTEGER,INTENT(IN),OPTIONAL    :: Shape_Out(rank)           !< shape of output array
-!!----------------------------------------------------------------------------------------------------------------------------------
-!! LOCAL VARIABLES
-!REAL,ALLOCATABLE               :: RealArray_Global(:)
-!INTEGER                        :: i,nValGather(rank),nDOFLocal
-!INTEGER,DIMENSION(nProcessors) :: nDOFPerNode,offsetNode
-!INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-!INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
-!!==================================================================================================================================
-!
-!nDOFLocal=PRODUCT(nVal)
-!CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerNode,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
-!
-!offsetNode=0
-!IF(MPIroot)THEN
-!  nValGather=nVal
-!  nValGather(rank)=SUM(nDOFPerNode)/PRODUCT(nVal(1:rank-1))
-!  DO i=2,nProcessors
-!    offsetNode(i)=offsetNode(i-1)+nDOFPerNode(i-1)
-!  END DO
-!  ALLOCATE(RealArray_Global(PRODUCT(nValGather)))
-!ELSE
-!  ALLOCATE(RealArray_Global(1))
-!ENDIF
-!
-!!IF(MPIroot)THEN
-!!  IF (PRESENT(Shape_Out)) THEN
-!!    IF (PRODUCT(nValGather) .NE. PRODUCT(Shape_Out)) CALL ABORT(__STAMP__, &
-!!                                                                'Wrong output dimension in GatheredWrite to SmartRedis!')
-!!    CALL Client%put_tensor(TRIM(Key), RealArray_Global, Shape_Out)
-!!  ELSE
-!!    CALL Client%put_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
-!!  ENDIF
-!!ENDIF
-!IF(MPIroot)THEN
-!  found = Client%poll_tensor(TRIM(Key), interval, tries)
-!  CALL Client%unpack_tensor(TRIM(Key), RealArray, SHAPE(RealArray))
-!  CALL Client%delete_tensor(TRIM(Key))
-!ENDIF
-!
-!CALL MPI_ScatterV(RealArray,nDOFLocal,MPI_DOUBLE_PRECISION,&
-!                 RealArray_Global,nDOFPerNode,offsetNode,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
-!
-!DEALLOCATE(RealArray_Global)
-!
-!END SUBROUTINE GatheredReadSmartRedis
+!==================================================================================================================================
+!> Get array from SmartRedis and Scatter it across all ranks
+!==================================================================================================================================
+SUBROUTINE GatheredReadSmartRedis(rank, nVal, RealArray, key)
+! MODULES
+USE MOD_Globals
+USE MOD_SmartRedis_Vars
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)             :: rank                      !< Rank of array
+INTEGER,INTENT(IN)             :: nVal(rank)                !< Local number of variables in each rank
+REAL,INTENT(INOUT)             :: RealArray(PRODUCT(nVal))  !< Real array to write
+CHARACTER(LEN=*),INTENT(IN)    :: Key                       !< array name to write to database
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,ALLOCATABLE               :: RealArray_Global(:)
+INTEGER                        :: i,nValGather(rank),nDOFLocal
+INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
+INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
+LOGICAL                        :: found = .FALSE.
+!==================================================================================================================================
+
+nDOFLocal=PRODUCT(nVal)
+CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
+
+offsetRank=0
+IF(MPIroot)THEN
+  nValGather=nVal
+  nValGather(rank)=SUM(nDOFPerRank)/PRODUCT(nVal(1:rank-1))
+  DO i=2,nProcessors
+    offsetRank(i)=offsetRank(i-1)+nDOFPerRank(i-1)
+  END DO
+  ALLOCATE(RealArray_Global(PRODUCT(nValGather)))
+ELSE
+  ALLOCATE(RealArray_Global(1))
+ENDIF
+
+IF(MPIroot)THEN
+  found = Client%poll_tensor(TRIM(Key), interval, tries)
+  CALL Client%unpack_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
+  CALL Client%delete_tensor(TRIM(Key))
+ENDIF
+
+CALL MPI_ScatterV(RealArray_Global,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,&
+                  RealArray,nDOFLocal,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+
+DEALLOCATE(RealArray_Global)
+
+END SUBROUTINE GatheredReadSmartRedis
 
 
 !==================================================================================================================================
@@ -214,12 +205,12 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: Key
-LOGICAL                        :: found
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1) ! max. number of polling attempts before moving on
-REAL                           :: Cs(nGlobalElems)
+REAL                           :: Cs(nElems)
 !==================================================================================================================================
+! Gather U across all MPI ranks and write to Redis Database
 Dims = SHAPE(U)
 Dims_Out(:) = Dims(:)
 Dims_Out(5) = nGlobalElems
@@ -227,23 +218,16 @@ Dims_Out(5) = nGlobalElems
 Key = TRIM(FlexiTag)//"U"
 CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
 
+! Indicate if FLEXI is about to finalize
 IF (MPIroot) THEN
   lastTimeStepInt = MERGE(-1,1,lastTimeStep)
   Key = TRIM(FlexiTag)//"step_type"
   CALL Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
-
-  Key = TRIM(FlexiTag)//"Cs"
-  found = Client%poll_tensor(TRIM(Key), interval, tries)
-  CALL Client%unpack_tensor(TRIM(Key), Cs, SHAPE(Cs))
-  CALL Client%delete_tensor(TRIM(Key))
-
-  ! TODO: Use ScatterV to scatter the received Cs to the corresponding MPI ranks.
-  ! CALL GatheredReadSmartRedis(.....)
-
-! TODO; Alibi to init Cs with smth on non-root ranks....
-ELSE
-  Cs = -1.
 ENDIF
+
+! Get Cs from Redis Database and scatter across all MPI ranks
+Key = TRIM(FlexiTag)//"Cs"
+CALL GatheredReadSmartRedis(SIZE(SHAPE(Cs)), SHAPE(Cs), Cs, TRIM(Key))
 
 END SUBROUTINE ExchangeDataSmartRedis
 
