@@ -106,7 +106,9 @@ SUBROUTINE FinalizeEddyVisc()
 ! MODULES
 USE MOD_EddyVisc_Vars
 !===================================================================================================================================
+SDEALLOCATE(damp)
 SDEALLOCATE(DeltaS)
+SDEALLOCATE(CS)
 SDEALLOCATE(muSGS)
 SDEALLOCATE(muSGS_master)
 SDEALLOCATE(muSGS_slave)

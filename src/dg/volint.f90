@@ -75,6 +75,8 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ) :: fv,gv,hv  !< Volume viscous flu
 #endif
 !==================================================================================================================================
 ! Diffusive part
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,fv,gv,hv,f,g,h)
+!$OMP DO
 DO iElem=1,nElems
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.1) CYCLE ! FV Elem
@@ -117,6 +119,9 @@ DO iElem=1,nElems
     END DO ! l
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
+!$OMP END DO
+!$OMP END PARALLEL
+
 END SUBROUTINE VolInt_weakForm
 #endif
 
@@ -163,6 +168,8 @@ REAL,DIMENSION(PP_nVar                     )  :: Flux         !< temp variable f
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ) :: fv,gv,hv     !< Parabolic fluxes at GP
 #endif /*PARABOLIC*/
 !==================================================================================================================================
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,fv,gv,hv,Flux)
+!$OMP DO
 DO iElem=1,nElems
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.1) CYCLE ! FV Elem
@@ -259,6 +266,9 @@ DO iElem=1,nElems
 
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
+!$OMP END DO
+!$OMP END PARALLEL
+
 END SUBROUTINE VolInt_splitForm
 #endif /*SPLIT_DG*/
 

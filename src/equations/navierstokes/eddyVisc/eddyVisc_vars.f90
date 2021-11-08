@@ -48,7 +48,7 @@ REAL,ALLOCATABLE  :: muSGS(:,:,:,:,:)      !< Viscosity for the sub-grid
 REAL,ALLOCATABLE  :: muSGS_master(:,:,:,:) !< Viscosity for the sub-grid on master sides
 REAL,ALLOCATABLE  :: muSGS_slave (:,:,:,:) !< Viscosity for the sub-grid on slave sides
 REAL,ALLOCATABLE  :: muSGSmax(:)           !< Viscosity for the sub-grid
-REAL              :: CS                    !< Smagorinsky constant, LES
+REAL,ALLOCATABLE  :: CS(:)                 !< Smagorinsky constant, LES
 REAL              :: PrSGS                 !< Prandtl number for the sub-grid scales
 
 LOGICAL           :: VanDriest=.FALSE.     !< Logical indicating if Van Driest damping is activated (only use for channel flow)

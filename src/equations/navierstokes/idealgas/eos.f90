@@ -234,7 +234,7 @@ END SUBROUTINE ConsToPrim_Side
 !==================================================================================================================================
 !> Transformation from conservative variables to primitive variables in the whole volume
 !==================================================================================================================================
-PPURE SUBROUTINE ConsToPrim_Volume(Nloc,prim,cons)
+SUBROUTINE ConsToPrim_Volume(Nloc,prim,cons)
 ! MODULES
 USE MOD_Mesh_Vars,ONLY:nElems
 IMPLICIT NONE
@@ -247,11 +247,15 @@ REAL,INTENT(OUT)   :: prim(PP_nVarPrim,0:Nloc,0:Nloc,0:ZDIM(Nloc),1:nElems) !< v
 ! LOCAL VARIABLES
 INTEGER            :: i,j,k,iElem
 !==================================================================================================================================
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,iElem)
+!$OMP DO
 DO iElem=1,nElems
   DO k=0,ZDIM(Nloc); DO j=0,Nloc; DO i=0,Nloc
     CALL ConsToPrim(prim(:,i,j,k,iElem),cons(:,i,j,k,iElem))
   END DO; END DO; END DO! i,j,k=0,Nloc
 END DO ! iElem
+!$OMP END DO
+!$OMP END PARALLEL
 END SUBROUTINE ConsToPrim_Volume
 
 !==================================================================================================================================
@@ -304,7 +308,7 @@ END SUBROUTINE PrimToCons_Side
 !==================================================================================================================================
 !> Transformation from primitive to conservative variables in the whole volume
 !==================================================================================================================================
-PPURE SUBROUTINE PrimToCons_Volume(Nloc,prim,cons)
+SUBROUTINE PrimToCons_Volume(Nloc,prim,cons)
 ! MODULES
 USE MOD_Mesh_Vars,ONLY:nElems
 IMPLICIT NONE
@@ -317,11 +321,15 @@ REAL,INTENT(OUT)   :: cons(PP_nVar    ,0:Nloc,0:Nloc,0:ZDIM(Nloc),1:nElems)     
 ! LOCAL VARIABLES
 INTEGER            :: i,j,k,iElem
 !==================================================================================================================================
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,iElem)
+!$OMP DO
 DO iElem=1,nElems
   DO k=0,ZDIM(Nloc); DO j=0,Nloc; DO i=0,Nloc
     CALL PrimToCons(prim(:,i,j,k,iElem),cons(:,i,j,k,iElem))
   END DO; END DO; END DO
 END DO
+!$OMP END DO
+!$OMP END PARALLEL
 END SUBROUTINE PrimToCons_Volume
 
 !==================================================================================================================================
