@@ -97,9 +97,8 @@ END SUBROUTINE InitSigmaModel
 !===================================================================================================================================
 !> Compute SigmaModel Eddy-Visosity
 !===================================================================================================================================
-SUBROUTINE SigmaModel_Point(gradUx,gradUy,gradUz,dens,deltaS,muSGS)
+SUBROUTINE SigmaModel_Point(gradUx,gradUy,gradUz,dens,deltaS,CS,muSGS)
 ! MODULES
-USE MOD_EddyVisc_Vars,     ONLY:CS
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES

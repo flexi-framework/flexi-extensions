@@ -465,7 +465,7 @@ USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)  :: t                                     !< current simulation time
+REAL,INTENT(INOUT)  :: t                                     !< current simulation time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL     :: Ut_temp(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) ! temporal variable for Ut
@@ -526,7 +526,7 @@ USE MOD_FV_Vars      ,ONLY: FV_toDGinRK
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)  :: t                                     !< current simulation time
+REAL,INTENT(INOUT)  :: t                                     !< current simulation time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL     :: S2(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
