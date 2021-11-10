@@ -107,6 +107,8 @@ CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis r
                                               "(Note: always called at global analyze level)", '10')
 
 ! Parameters for HIT forcing
+CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
+                                                 &ATTENTION: INCREDIBLY EXPENSIVE!!'                  ,'T')
 CALL prms%CreateLogicalOption('HIT_Forcing', 'Flag to perform HIT forcing'                            ,'T')
 CALL prms%CreateLogicalOption('HIT_Avg'    , 'Flag to perform spatial averaging of HIT forcing'       ,'T')
 CALL prms%CreateLogicalOption('HIT_1st'    , 'Flag to update HIT forcing only in first RK stage'      ,'T')
@@ -156,14 +158,16 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
 CALL CollectiveStop(__STAMP__,'The testcase has not been implemented for FV yet!')
 #endif
 
-HIT_Forcing = GETLOGICAL('HIT_Forcing','.TRUE.')
+! Read only rho from IniRefState for initial condition
+HIT_rho = RefStatePrim(1,IniRefState)
 
+! Compute global energy spectra in analyze
+doComputeSpectra = GETLOGICAL('doComputeSpectra','.FALSE.')
+
+HIT_Forcing = GETLOGICAL('HIT_Forcing','.TRUE.')
 IF(HIT_Forcing) THEN
   ! Initialize HIT filter
   HIT_tFilter = GETREAL('HIT_tFilter','0.')
-
-  ! Read only rho from IniRefState
-  HIT_rho = RefStatePrim(1,IniRefState)
 
   ! Read target turbulent kinetic energy and relaxation time
   HIT_k      = GETREAL('HIT_k'     ,'0.')
@@ -396,6 +400,10 @@ USE MOD_TestCase_Vars
 #if USE_MPI
 USE MOD_MPI_Vars
 #endif
+#if USE_FFTW
+USE MOD_Mesh_Vars,      ONLY: nGlobalElems
+USE MOD_DG_Vars,        ONLY: UPrim
+#endif
 USE MOD_Output,             ONLY: InitOutputToFile
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -420,6 +428,9 @@ REAL                            :: Reynolds,lTaylor              ! Reynolds numb
 REAL                            :: rho_glob
 REAL                            :: Ekin_glob,Ekin_comp_glob
 REAL                            :: DR_S_glob,DR_Sd_glob,DR_p_glob !,DR_u_Glob
+#endif /* USE_MPI */
+#if USE_FFTW
+REAL                            :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,1:nGlobalElems)
 #endif
 CHARACTER(LEN=31)               :: varnames(nHITVars)
 !==================================================================================================================================
@@ -525,64 +536,134 @@ IF (MPIRoot) THEN
   DR_S      = DR_S_Glob
   DR_Sd     = DR_SD_Glob
   DR_p      = DR_p_Glob
-ELSE
-  ! Only root continues from here
-  RETURN
+!ELSE
+!  ! Only root continues from here
+!  RETURN
 END IF
 #endif
 
-! Normalize the integrals with the volume and calculate turbulent quantities. The density is already accounted for in the integrands
-rho       = rho      /Vol
-Ekin      = Ekin     /Vol
-Ekin_comp = Ekin_comp/Vol
-uRMS      = SQRT(Ekin*2./3.)
-!DR_u      = DR_u *mu0/Vol
-DR_S      = DR_S *mu0/Vol
-DR_SD     = DR_SD*mu0/Vol
-DR_p      = DR_p     /Vol
-IF (HIT_Avg) THEN
-  A_ILF = A_ILF/Vol
-END IF
+IF (MPIRoot) THEN
+  ! Normalize the integrals with the volume and calculate turbulent quantities. The density is already accounted for in the integrands
+  rho       = rho      /Vol
+  Ekin      = Ekin     /Vol
+  Ekin_comp = Ekin_comp/Vol
+  uRMS      = SQRT(Ekin*2./3.)
+  !DR_u      = DR_u *mu0/Vol
+  DR_S      = DR_S *mu0/Vol
+  DR_SD     = DR_SD*mu0/Vol
+  DR_p      = DR_p     /Vol
+  IF (HIT_Avg) THEN
+    A_ILF = A_ILF/Vol
+  END IF
 
-! Taylor microscale Reynolds number (Petersen, 2010)
-nu0      = mu0/rho
-!>> Taylor microscale should be calculated with compressible eps, but currently unstable. Use only deviatoric part eps1 for now
-!lTaylor  = SQRT(15.*nu0/(DR_SD+DR_p))*uRMS
-!>> Taylor microscale calculated using incompressible epsilon (Hillewaert, 2012)
-lTaylor  = SQRT(15.*nu0/DR_S)*uRMS
-Reynolds = uRMS * lTaylor/nu0
+  ! Taylor microscale Reynolds number (Petersen, 2010)
+  nu0      = mu0/rho
+  !>> Taylor microscale should be calculated with compressible eps, but currently unstable. Use only deviatoric part eps1 for now
+  !lTaylor  = SQRT(15.*nu0/(DR_SD+DR_p))*uRMS
+  !>> Taylor microscale calculated using incompressible epsilon (Hillewaert, 2012)
+  lTaylor  = SQRT(15.*nu0/DR_S)*uRMS
+  Reynolds = uRMS * lTaylor/nu0
 
-! Increment output counter and fill output array at every time step
-ioCounter        = ioCounter + 1
-Time(ioCounter)  = t
-writeBuf(1:nHITVars,ioCounter) = (/DR_S,DR_Sd+DR_p,Ekin,Ekin_comp,uRMS,Reynolds,A_ILF/)
+  ! Increment output counter and fill output array at every time step
+  ioCounter        = ioCounter + 1
+  Time(ioCounter)  = t
+  writeBuf(1:nHITVars,ioCounter) = (/DR_S,DR_Sd+DR_p,Ekin,Ekin_comp,uRMS,Reynolds,A_ILF/)
 
-! Perform output
-IF(ioCounter.EQ.nWriteStats)THEN
-  CALL WriteStats()
-  ioCounter = 0
-END IF
+  ! Perform output
+  IF(ioCounter.EQ.nWriteStats)THEN
+    CALL WriteStats()
+    ioCounter = 0
+  END IF
+END IF !MPIroot
+
+#if USE_FFTW
+IF (doComputeSpectra) THEN
+
+#if USE_MPI
+  IF (MPIroot) THEN
+    CALL GetGlobalSolution(UPrim, UPrim_Global)
+  ELSE
+    CALL GetGlobalSolution(UPrim)
+  END IF
+#else
+  UPrim_Global = UPrim
+#endif
+
+  IF(MPIroot) CALL ComputeEnergySpectra(UPrim_Global(2:4,:,:,:,:))
+END IF !doComputeSpectra
+#endif /* USE_FFTW*/
 
 END SUBROUTINE AnalyzeTestcase
 
+#if USE_MPI
+!==================================================================================================================================
+!> Gathers global colume data across all MPI ranks. THIS IS EXPENSIVE!!!
+!==================================================================================================================================
+SUBROUTINE GetGlobalSolution(RealArray,RealArrayGlobal)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Mesh_Vars,    ONLY: nElems,nGlobalElems
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)                :: RealArray(      PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nElems)        !< Real array to write
+REAL,INTENT(INOUT),OPTIONAL    :: RealArrayGlobal(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,ALLOCATABLE               :: RealArray_IN(:),RealArray_OUT(:)
+INTEGER                        :: i,nDOFLocal,nDOFGlobal
+INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+!==================================================================================================================================
+IF (MPIroot .AND. .NOT. PRESENT(RealArrayGlobal)) CALl ABORT(__STAMP__,"It is required to pass the global array on the root rank!")
+
+! First get amount of data on each proc
+nDOFLocal =PRODUCT(SHAPE(RealArray))
+CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
+nDOFGlobal=SUM(nDOFPerRank)
+
+! Flatten input array
+ALLOCATE(RealArray_IN(nDOFLocal))
+RealArray_IN = RESHAPE(RealArray,(/nDOFLocal/))
+
+offsetRank=0
+IF(MPIroot)THEN
+  DO i=2,nProcessors
+    offsetRank(i)=offsetRank(i-1)+nDOFPerRank(i-1)
+  END DO
+  ALLOCATE(RealArray_OUT(nDOFGlobal))
+ELSE
+  ALLOCATE(RealArray_OUT(1)) ! dummy array
+ENDIF
+
+CALL MPI_GATHERV(RealArray_IN ,nDOFLocal,MPI_DOUBLE_PRECISION,&
+                 RealArray_OUT,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+
+IF(MPIroot) RealArrayGlobal = RESHAPE(RealArray_OUT, SHAPE(RealArrayGlobal))
+
+DEALLOCATE(RealArray_IN )
+DEALLOCATE(RealArray_OUT)
+
+END SUBROUTINE GetGlobalSolution
+#endif /* USE_MPI */
 
 #if USE_FFTW
 !==================================================================================================================================
 !> Computes Energy Spectra for current U with FFTW library
 !==================================================================================================================================
-SUBROUTINE ComputeEnergySpectra()
+SUBROUTINE ComputeEnergySpectra(U_In)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_DG_Vars,            ONLY: UPrim
 USE MOD_FFT,                ONLY: Interpolate_DG2FFT,ComputeFFT_R2C
 USE MOD_FFT_Vars,           ONLY: N_FFT,Endw,kmax,Nc,localk
-USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_Mesh_Vars,          ONLY: nGlobalElems
 USE MOD_Interpolation_Vars, ONLY: NodeType
 USE MOD_Testcase_Vars,      ONLY: E_k
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT)          :: U_In(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER,PARAMETER :: nVar=3
@@ -591,7 +672,7 @@ REAL    :: U_Global(nVar,1:N_FFT  ,1:N_FFT  ,1:N_FFT  )  ! Real global DG soluti
 COMPLEX :: U_FFT(   nVar,1:Endw(1),1:Endw(2),1:Endw(3))  ! Complex FFT solution
 !==================================================================================================================================
 ! 1. Interpolate DG solution to equidistant points
-CALL Interpolate_DG2FFT(NodeType,nVar,UPrim(MOMV,:,:,:,:),U_Global)
+CALL Interpolate_DG2FFT(NodeType,nVar,U_In,U_Global)
 
 ! 2. Apply complex Fourier-Transform on solution
 CALL ComputeFFT_R2C(nVar,U_Global,U_FFT)

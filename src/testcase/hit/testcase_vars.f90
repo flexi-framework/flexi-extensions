@@ -44,6 +44,7 @@ REAL,ALLOCATABLE          :: UPrim_temp(:,:,:,:,:)    !< temporal derivative of 
 REAL                      :: HIT_tFilter              !< filter width of temporal filter
 REAL                      :: A_ILF                    !< forcing coefficient
 REAL,ALLOCATABLE          :: E_k(:)
+LOGICAL                   :: doComputeSpectra = .FALSE.
 !----------------------------------------------------------------------------------------------------------------------------------
 ! ANAYLZE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------

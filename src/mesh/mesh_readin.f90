@@ -61,10 +61,15 @@ INTERFACE ReadIJKSorting
   MODULE PROCEDURE ReadIJKSorting
 END INTERFACE
 
+INTERFACE ReadIJKSorting_Global
+  MODULE PROCEDURE ReadIJKSorting_Global
+END INTERFACE
+
 
 PUBLIC::ReadMesh
 PUBLIC::BuildPartition
 PUBLIC::ReadIJKSorting
+PUBLIC::ReadIJKSorting_Global
 !==================================================================================================================================
 
 CONTAINS
@@ -789,7 +794,7 @@ END FUNCTION ELEMIPROC
 
 !===================================================================================================================================
 !> Read arrays nElems_IJK (global number of elements in i,j,k direction) and Elem_IJK (mapping from global element to i,j,k index)
-!> for meshes thar are i,j,k sorted.
+!> for meshes that are i,j,k sorted.
 !===================================================================================================================================
 SUBROUTINE ReadIJKSorting()
 ! MODULES                                                                                                                          !
@@ -812,5 +817,32 @@ IF(dsExists)THEN
 END IF
 CALL CloseDataFile()
 END SUBROUTINE ReadIJKSorting
+
+!===================================================================================================================================
+!> Read arrays nElems_IJK (global number of elements in i,j,k direction) and Elem_IJK (mapping from global element to i,j,k index)
+!> for meshes that are i,j,k sorted. I contrast to the routine "ReadIJKSorting", the calling rank opens the file in single mode and
+!> reads the (whole global) arrays for itself.
+!===================================================================================================================================
+SUBROUTINE ReadIJKSorting_Global()
+! MODULES                                                                                                                          !
+!----------------------------------------------------------------------------------------------------------------------------------!
+USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,nGlobalElems,MeshFile
+!----------------------------------------------------------------------------------------------------------------------------------!
+IMPLICIT NONE
+! INPUT / OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+LOGICAL        :: dsExists
+!===================================================================================================================================
+
+CALL OpenDataFile(MeshFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
+CALL DatasetExists(File_ID,'nElems_IJK',dsExists)
+IF(dsExists)THEN
+  CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
+  ALLOCATE(Elem_IJK(3,nGlobalElems))
+  CALL ReadArray('Elem_IJK',2,(/3,nGlobalElems/),0,2,IntArray=Elem_IJK)
+END IF
+CALL CloseDataFile()
+END SUBROUTINE ReadIJKSorting_Global
 
 END MODULE MOD_Mesh_ReadIn
