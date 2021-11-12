@@ -197,6 +197,13 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars       ,ONLY: nElems,nGlobalElems
+#if USE_FFTW
+USE MOD_FFT_Vars,           ONLY: kmax
+USE MOD_Testcase_Vars,      ONLY: E_k
+#endif
+#if EDDYVISCOSITY
+USE MOD_EddyVisc_Vars,      ONLY: Cs
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -207,8 +214,7 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 CHARACTER(LEN=255)             :: Key
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-INTEGER,PARAMETER              :: tries    = HUGE(1) ! max. number of polling attempts before moving on
-REAL                           :: Cs(nElems)
+INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
 Dims = SHAPE(U)
@@ -218,16 +224,27 @@ Dims_Out(5) = nGlobalElems
 Key = TRIM(FlexiTag)//"U"
 CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
 
-! Indicate if FLEXI is about to finalize
 IF (MPIroot) THEN
+#if USE_FFTW
+  ! Put Energy Spectrum into DB for Reward
+  Key = TRIM(FlexiTag)//"Ekin"
+  CALL Client%put_tensor(TRIM(Key),E_k(1:kmax),(/kmax/))
+#endif
+
+  ! Indicate if FLEXI is about to finalize
   lastTimeStepInt = MERGE(-1,1,lastTimeStep)
   Key = TRIM(FlexiTag)//"step_type"
   CALL Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
 ENDIF
 
+#if EDDYVISCOSITY
 ! Get Cs from Redis Database and scatter across all MPI ranks
-Key = TRIM(FlexiTag)//"Cs"
-CALL GatheredReadSmartRedis(SIZE(SHAPE(Cs)), SHAPE(Cs), Cs, TRIM(Key))
+! Only necessary if we want to compute further, i.e. if not lastTimeStep
+IF (.NOT. lastTimeStep) THEN
+  Key = TRIM(FlexiTag)//"Cs"
+  CALL GatheredReadSmartRedis(SIZE(SHAPE(Cs)), SHAPE(Cs), Cs, TRIM(Key))
+END IF
+#endif /* EDDYVISCOSITY */
 
 END SUBROUTINE ExchangeDataSmartRedis
 
