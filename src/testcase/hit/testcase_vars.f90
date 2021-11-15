@@ -31,6 +31,7 @@ LOGICAL                   :: InitHITDone
 ! TESTCASE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL                   :: AnalyzeFile_InitDone=.FALSE.!< Flag to indicate whether testcase analyze file already initialized
+LOGICAL                   :: writeAnalyzeFile
 LOGICAL                   :: HIT_Forcing              !< Flag to perform HIT forcing
 LOGICAL                   :: HIT_Avg                  !< Flag to perform spatial averaging
 LOGICAL                   :: HIT_1st                  !< Flag to update forcing only in the 1st RK stage
@@ -44,7 +45,7 @@ REAL,ALLOCATABLE          :: UPrim_temp(:,:,:,:,:)    !< temporal derivative of 
 REAL                      :: HIT_tFilter              !< filter width of temporal filter
 REAL                      :: A_ILF                    !< forcing coefficient
 REAL,ALLOCATABLE          :: E_k(:)
-LOGICAL                   :: doComputeSpectra = .FALSE.
+LOGICAL                   :: doComputeSpectra
 !----------------------------------------------------------------------------------------------------------------------------------
 ! ANAYLZE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------

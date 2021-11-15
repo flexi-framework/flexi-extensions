@@ -105,6 +105,7 @@ CALL prms%SetSection("Testcase")
 CALL prms%CreateIntOption('nWriteStats'     , "Write testcase statistics to file at every n-th AnalyzeTestcase step.", '100')
 CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis routines every n-th timestep. "//&
                                               "(Note: always called at global analyze level)", '10')
+CALL prms%CreateLogicalOption('writeAnalyzeFile', 'Flag to write an analyze file for the testcase'               ,'T')
 
 ! Parameters for HIT forcing
 CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
@@ -222,6 +223,9 @@ END IF ! HIT_Forcing
 ! Length of Buffer for TGV output
 nWriteStats      = GETINT( 'nWriteStats'     ,'100')
 nAnalyzeTestCase = GETINT( 'nAnalyzeTestCase','10')
+
+! Check whether analyze data should be written to file
+writeAnalyzeFile = GETLOGICAL('writeAnalyzeFile','.TRUE.')
 
 IF(MPIRoot)THEN
   ALLOCATE(Time(nWriteStats))
@@ -436,7 +440,7 @@ CHARACTER(LEN=31)               :: varnames(nHITVars)
 !==================================================================================================================================
 
 ! Init file output if not already initialized
-IF(MPIRoot .AND. .NOT. AnalyzeFile_InitDone)THEN
+IF(MPIRoot .AND. writeAnalyzeFile .AND. (.NOT. AnalyzeFile_InitDone))THEN
   AnalyzeFile_InitDone = .TRUE.
   varnames(1) ="Dissipation Rate Incompressible"
   varnames(2) ="Dissipation Rate Compressible"
@@ -571,7 +575,7 @@ IF (MPIRoot) THEN
 
   ! Perform output
   IF(ioCounter.EQ.nWriteStats)THEN
-    CALL WriteStats()
+    IF(writeAnalyzeFile) CALL WriteStats()
     ioCounter = 0
   END IF
 END IF !MPIroot
