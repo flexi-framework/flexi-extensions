@@ -61,6 +61,7 @@ END SUBROUTINE DefineParametersSmartRedis
 !==================================================================================================================================
 SUBROUTINE InitSmartRedis()
 ! MODULES
+USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SmartRedis_Vars
 USE MOD_ReadInTools         ,ONLY:GETLOGICAL
@@ -73,9 +74,9 @@ IMPLICIT NONE
 !==================================================================================================================================
 
 dbIsClustered = GETLOGICAL("ClusteredDatabase")
-ALLOCATE(result_tensor(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 
-CALL Client%Initialize(dbIsClustered)
+! Currently only the MPI root communicates with the Database. Could be changing in the future.
+IF(MPIroot) CALL Client%Initialize(dbIsClustered)
 
 END SUBROUTINE InitSmartRedis
 
@@ -124,9 +125,9 @@ IF(MPIroot)THEN
   IF (PRESENT(Shape_Out)) THEN
     IF (PRODUCT(nValGather) .NE. PRODUCT(Shape_Out)) CALL ABORT(__STAMP__, &
                                                                 'Wrong output dimension in GatheredWrite to SmartRedis!')
-    CALL Client%put_tensor(TRIM(Key), RealArray_Global, Shape_Out)
+    CALL Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), Shape_Out)
   ELSE
-    CALL Client%put_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
+    CALL Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), SHAPE(RealArray_Global))
   ENDIF
 ENDIF
 
@@ -155,7 +156,7 @@ REAL,ALLOCATABLE               :: RealArray_Global(:)
 INTEGER                        :: i,nValGather(rank),nDOFLocal
 INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
+INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 LOGICAL                        :: found = .FALSE.
 !==================================================================================================================================
 
@@ -163,7 +164,7 @@ nDOFLocal=PRODUCT(nVal)
 CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
 
 offsetRank=0
-IF(MPIroot)THEN
+IF(MPIroot) THEN
   nValGather=nVal
   nValGather(rank)=SUM(nDOFPerRank)/PRODUCT(nVal(1:rank-1))
   DO i=2,nProcessors
@@ -174,8 +175,9 @@ ELSE
   ALLOCATE(RealArray_Global(1))
 ENDIF
 
-IF(MPIroot)THEN
+IF(MPIroot) THEN
   found = Client%poll_tensor(TRIM(Key), interval, tries)
+  !IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
   CALL Client%unpack_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
   CALL Client%delete_tensor(TRIM(Key))
 ENDIF
@@ -191,7 +193,7 @@ END SUBROUTINE GatheredReadSmartRedis
 !==================================================================================================================================
 !> 
 !==================================================================================================================================
-SUBROUTINE ExchangeDataSmartRedis(U, lastTimeStep)
+SUBROUTINE ExchangeDataSmartRedis(U, firstTimeStep, lastTimeStep)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -208,13 +210,14 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)             :: U(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+LOGICAL,INTENT(IN)          :: FirstTimeStep
 LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: Key
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-INTEGER,PARAMETER              :: tries    = 1000 ! max. number of polling attempts before moving on
+INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
 Dims = SHAPE(U)
@@ -224,7 +227,7 @@ Dims_Out(5) = nGlobalElems
 Key = TRIM(FlexiTag)//"U"
 CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
 
-IF (MPIroot) THEN
+IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
@@ -254,6 +257,7 @@ END SUBROUTINE ExchangeDataSmartRedis
 !==================================================================================================================================
 SUBROUTINE FinalizeSmartRedis()
 ! MODULES
+USE MOD_Globals
 USE MOD_SmartRedis_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -262,7 +266,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-CALL Client%destructor()
+IF(MPIroot) CALL Client%destructor()
 
 END SUBROUTINE FinalizeSmartRedis
 #endif

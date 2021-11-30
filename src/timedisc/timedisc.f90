@@ -297,7 +297,7 @@ IF(TimeDiscType.EQ.'ESDIRK') CALL FillInitPredictor(t)
 
 #if USE_SMARTREDIS
 ! Write initial data to SmartRedis
-CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),.FALSE.)
+CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
 #endif
 
 ! Run computation
@@ -430,7 +430,7 @@ DO
 
 #if USE_SMARTREDIS
     ! Write current state and indicate when FLEXI is about to finalize
-    CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),doFinalize)
+    CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.FALSE.,lastTimeStep=doFinalize)
 #endif
 
   END IF
