@@ -50,8 +50,9 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-CALL prms%SetSection("Relexi")
-CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", value=".false.")
+CALL prms%SetSection("SmartRedis")
+CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
+CALL prms%CreateLogicalOption("doSmartRedis", "Communicate via the SmartRedis Client", ".FALSE.")
 
 END SUBROUTINE DefineParametersSmartRedis
 
@@ -62,10 +63,8 @@ END SUBROUTINE DefineParametersSmartRedis
 SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
-USE MOD_PreProc
 USE MOD_SmartRedis_Vars
-USE MOD_ReadInTools         ,ONLY:GETLOGICAL
-USE MOD_Mesh_Vars           ,ONLY:nElems
+USE MOD_ReadInTools,     ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -73,10 +72,12 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-dbIsClustered = GETLOGICAL("ClusteredDatabase")
-
-! Currently only the MPI root communicates with the Database. Could be changing in the future.
-IF(MPIroot) CALL Client%Initialize(dbIsClustered)
+doSmartRedis  = GETLOGICAL("doSmartRedis")
+IF (doSmartRedis) THEN
+  dbIsClustered = GETLOGICAL("ClusteredDatabase")
+  ! Currently only the MPI root communicates with the Database. Could be changing in the future.
+  IF(MPIroot) CALL Client%Initialize(dbIsClustered)
+END IF
 
 END SUBROUTINE InitSmartRedis
 
@@ -177,7 +178,7 @@ ENDIF
 
 IF(MPIroot) THEN
   found = Client%poll_tensor(TRIM(Key), interval, tries)
-  !IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
+  IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
   CALL Client%unpack_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
   CALL Client%delete_tensor(TRIM(Key))
 ENDIF
@@ -266,7 +267,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-IF(MPIroot) CALL Client%destructor()
+IF(MPIroot .AND. doSmartRedis) CALL Client%destructor()
 
 END SUBROUTINE FinalizeSmartRedis
 #endif

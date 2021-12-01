@@ -182,6 +182,7 @@ USE MOD_FV
 use MOD_IO_HDF5
 #if USE_SMARTREDIS
 USE MOD_SmartRedis          ,ONLY: ExchangeDataSmartRedis
+USE MOD_SmartRedis_Vars     ,ONLY: doSmartRedis
 #endif
 
 IMPLICIT NONE
@@ -297,7 +298,7 @@ IF(TimeDiscType.EQ.'ESDIRK') CALL FillInitPredictor(t)
 
 #if USE_SMARTREDIS
 ! Write initial data to SmartRedis
-CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
+IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
 #endif
 
 ! Run computation
@@ -430,7 +431,7 @@ DO
 
 #if USE_SMARTREDIS
     ! Write current state and indicate when FLEXI is about to finalize
-    CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.FALSE.,lastTimeStep=doFinalize)
+    IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.FALSE.,lastTimeStep=doFinalize)
 #endif
 
   END IF
