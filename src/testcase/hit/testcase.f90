@@ -105,6 +105,7 @@ CALL prms%SetSection("Testcase")
 CALL prms%CreateIntOption('nWriteStats'     , "Write testcase statistics to file at every n-th AnalyzeTestcase step.", '100')
 CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis routines every n-th timestep. "//&
                                               "(Note: always called at global analyze level)", '10')
+CALL prms%CreateLogicalOption('writeAnalyzeFile', 'Flag to write an analyze file for the testcase'               ,'T')
 
 ! Parameters for HIT forcing
 CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
