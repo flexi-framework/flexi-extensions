@@ -145,7 +145,6 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! other file
     CALL DatasetExists(File_ID,"VarNames_"//TRIM(datasetNames(i)),varnames_found,attrib=.TRUE.)
     IF (varnames_found) THEN
       CALL GetVarNames("VarNames_"//TRIM(datasetNames(i)),varnames_tmp,VarNamesExist)
-          ! print*,varnames_tmp
     ELSE
       IF (STRICMP(datasetNames(i), "DG_Solution")) THEN
         IF (readDGsolutionVars) THEN
@@ -300,10 +299,11 @@ END IF
 
 ! read options from posti parameter file
 NVisu             = GETINT("NVisu",INTTOSTR(PP_N))
+HighOrder         = GETLOGICAL('HighOrder')
 
 ! again read MeshFile from posti prm file (this overwrites the MeshFile read from the state file)
 Meshfile          =  GETSTR("MeshFile",MeshFile_state)
-IF (.NOT.FILEEXISTS(MeshFile)) THEN
+IF (.NOT.FILEEXISTS(MeshFile) .OR. ((Meshfile(1:1) .NE. "/") .OR. (Meshfile(1:1) .NE. "~") .OR. (Meshfile(1:1) .NE. "."))) THEN
   !!!!!!
   ! WARNING: GETCWD is a GNU extension to the Fortran standard and will probably not work on other compilers
   CALL GETCWD(cwd)
@@ -559,6 +559,7 @@ CALL prms%CreateLogicalOption("Avg2DHDF5Output" , "Write averaged solution to HD
 CALL prms%CreateStringOption( "NodeTypeVisu"    , "NodeType for visualization. Visu, Gauss,Gauss-Lobatto,Visu_inner"    ,"VISU")
 CALL prms%CreateLogicalOption("DGonly"          , "Visualize FV elements as DG elements."    ,".FALSE.")
 CALL prms%CreateStringOption( "BoundaryName"    , "Names of boundaries for surfaces, which should be visualized.", multiple=.TRUE.)
+CALL prms%CreateLogicalOption("HighOrder"       , "Write high-order element representation",".FALSE.")
 
 IF (doPrintHelp.GT.0) THEN
   CALL PrintDefaultParameterFile(doPrintHelp.EQ.2,statefile) !statefile string conatains --help etc!
@@ -746,7 +747,9 @@ USE MOD_MPI                  ,ONLY: FinalizeMPI
 #endif /* USE_MPI */
 IMPLICIT NONE
 !===================================================================================================================================
+
 SWRITE (Unit_stdOut,'(A)') 'VISU FINALIZE'
+
 IF(MPIRoot)THEN
   IF(FILEEXISTS('.posti.ini'))THEN
     OPEN(UNIT=31, FILE='.posti.ini', STATUS='old')
