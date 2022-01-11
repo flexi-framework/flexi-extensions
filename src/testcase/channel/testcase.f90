@@ -102,6 +102,8 @@ CALL prms%CreateRealOption('ChannelMach', "Bulk mach number used in the channel 
 CALL prms%CreateIntOption('nWriteStats', "Write testcase statistics to file at every n-th AnalyzeTestcase step.", '100')
 CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis routines every n-th timestep. "//&
                                               "(Note: always called at global analyze level)", '1000')
+CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
+                                                 &ATTENTION: INCREDIBLY EXPENSIVE!!'                  ,'T')
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
@@ -114,12 +116,15 @@ SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_ReadInTools,        ONLY: GETINT,GETREAL
+USE MOD_ReadInTools,        ONLY: GETINT,GETREAL,GETLOGICAL
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState,RefStateCons
 USE MOD_EOS_Vars,           ONLY: kappa,mu0,R
 USE MOD_Output,             ONLY: InitOutputToFile
 USE MOD_Eos,                ONLY: PrimToCons
+#if USE_FFTW
+USE MOD_FFT,                ONLY: InitFFT
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -137,6 +142,9 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE CHANNEL...'
 CALL CollectiveStop(__STAMP__, &
   'The testcase has not been implemented for FV yet!')
 #endif
+
+! Compute global Reynolds stress profiles in analyze
+doComputeSpectra = GETLOGICAL('doComputeSpectra','.FALSE.')
 
 nWriteStats  = GETINT('nWriteStats','100')
 nAnalyzeTestCase = GETINT( 'nAnalyzeTestCase','1000')
@@ -167,6 +175,10 @@ IF(MPIRoot) THEN
   varnames(2) = 'bulkVel'
   CALL InitOutputToFile(Filename,'Statistics',2,varnames)
 END IF
+
+#if USE_FFTW
+CALL InitFFT()
+#endif
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE CHANNEL DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -317,20 +329,155 @@ END SUBROUTINE WriteStats
 !==================================================================================================================================
 SUBROUTINE AnalyzeTestcase(Time)
 ! MODULES
+USE MOD_PreProc
 USE MOD_Globals
+#if USE_FFTW
+USE MOD_FFT                  ,ONLY: Interpolate_DG2FFT
+USE MOD_FFT_Vars             ,ONLY: N_FFT
+USE MOD_Interpolation_Vars   ,ONLY: NodeType
+USE MOD_DG_Vars              ,ONLY: UPrim
+USE MOD_Mesh_Vars            ,ONLY: nGlobalElems
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                 :: Time                   !< simulation time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+#if USE_FFTW
+REAL          :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: UPrim_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: RS(9,N_FFT)
+INTEGER       :: i,j,k,jhat
+INTEGER       :: N_FFT_half
+INTEGER,PARAMETER :: U_MEAN = 1
+INTEGER,PARAMETER :: V_MEAN = 2
+INTEGER,PARAMETER :: W_MEAN = 3
+INTEGER,PARAMETER :: UU = 4
+INTEGER,PARAMETER :: VV = 5
+INTEGER,PARAMETER :: WW = 6
+INTEGER,PARAMETER :: UV = 7
+INTEGER,PARAMETER :: UW = 8
+INTEGER,PARAMETER :: VW = 9
+#endif
 !==================================================================================================================================
 IF(MPIRoot)THEN
   ioCounter=ioCounter+1
   writeBuf(:,ioCounter) = (/Time, dpdx, BulkVel/)
   IF(ioCounter.GE.nWriteStats) CALL WriteStats()
 END IF
+
+#if USE_FFTW
+IF (doComputeSpectra) THEN
+  N_FFT_half = N_FFT/2
+#if USE_MPI
+  ! 1. Get Global Solution!!!!
+  IF (MPIroot) THEN
+    CALL GetGlobalSolution(UPrim, UPrim_Global)
+  ELSE
+    CALL GetGlobalSolution(UPrim)
+  END IF
+#else
+  UPrim_Global = UPrim
+#endif
+
+  IF(MPIroot) THEN
+    ! 2. Get Fluctuations
+    ! TODO
+
+    ! 3. Interpolate to global equidistant basis
+    CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
+
+    ! 4. Compute Reynolds stresses and average over x- and z-direction
+    RS(:,:) = 0.
+    DO k=1,N_FFT ! z - spanwise
+      DO i=1,N_FFT ! x - streamwise
+        DO j=1,N_FFT ! y - channel width
+          jhat = j
+          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+
+          RS(U_MEAN,jhat) = RS(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
+          RS(V_MEAN,jhat) = RS(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
+          RS(W_MEAN,jhat) = RS(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
+          RS(    UU,jhat) = RS(    UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
+          RS(    VV,jhat) = RS(    VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(    WW,jhat) = RS(    WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(    UV,jhat) = RS(    UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(    UW,jhat) = RS(    UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(    VW,jhat) = RS(    VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
+        END DO
+      END DO
+    END DO
+    ! Normalize
+    RS = RS/REAL(N_FFT**2)
+    WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
+    WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
+    WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
+    WRITE(*,*) '    UU',RS(    UU,:)
+    WRITE(*,*) '    VV',RS(    VV,:)
+    WRITE(*,*) '    WW',RS(    WW,:)
+    WRITE(*,*) '    UV',RS(    UV,:)
+    WRITE(*,*) '    UW',RS(    UW,:)
+    WRITE(*,*) '    VW',RS(    VW,:)
+  END IF
+END IF
+#endif
+
 END SUBROUTINE AnalyzeTestCase
+
+
+#if USE_MPI
+!==================================================================================================================================
+!> Gathers global colume data across all MPI ranks. THIS IS EXPENSIVE!!!
+!==================================================================================================================================
+SUBROUTINE GetGlobalSolution(RealArray,RealArrayGlobal)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Mesh_Vars,    ONLY: nElems,nGlobalElems
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)                :: RealArray(      PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nElems)        !< Real array to write
+REAL,INTENT(INOUT),OPTIONAL    :: RealArrayGlobal(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,ALLOCATABLE               :: RealArray_IN(:),RealArray_OUT(:)
+INTEGER                        :: i,nDOFLocal,nDOFGlobal
+INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+!==================================================================================================================================
+IF (MPIroot .AND. .NOT. PRESENT(RealArrayGlobal)) CALl ABORT(__STAMP__,"It is required to pass the global array on the root rank!")
+
+! First get amount of data on each proc
+nDOFLocal =PRODUCT(SHAPE(RealArray))
+CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
+nDOFGlobal=SUM(nDOFPerRank)
+
+! Flatten input array
+ALLOCATE(RealArray_IN(nDOFLocal))
+RealArray_IN = RESHAPE(RealArray,(/nDOFLocal/))
+
+offsetRank=0
+IF(MPIroot)THEN
+  DO i=2,nProcessors
+    offsetRank(i)=offsetRank(i-1)+nDOFPerRank(i-1)
+  END DO
+  ALLOCATE(RealArray_OUT(nDOFGlobal))
+ELSE
+  ALLOCATE(RealArray_OUT(1)) ! dummy array
+ENDIF
+
+CALL MPI_GATHERV(RealArray_IN ,nDOFLocal,MPI_DOUBLE_PRECISION,&
+                 RealArray_OUT,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+
+IF(MPIroot) RealArrayGlobal = RESHAPE(RealArray_OUT, SHAPE(RealArrayGlobal))
+
+DEALLOCATE(RealArray_IN )
+DEALLOCATE(RealArray_OUT)
+
+END SUBROUTINE GetGlobalSolution
+#endif /* USE_MPI */
+
 
 !==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
