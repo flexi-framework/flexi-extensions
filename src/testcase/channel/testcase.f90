@@ -336,7 +336,7 @@ USE MOD_FFT                  ,ONLY: Interpolate_DG2FFT
 USE MOD_FFT_Vars             ,ONLY: N_FFT
 USE MOD_Interpolation_Vars   ,ONLY: NodeType
 USE MOD_DG_Vars              ,ONLY: UPrim
-USE MOD_Mesh_Vars            ,ONLY: nGlobalElems
+USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -347,9 +347,11 @@ REAL,INTENT(IN)                 :: Time                   !< simulation time
 #if USE_FFTW
 REAL          :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
 REAL          :: UPrim_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
-REAL          :: RS(9,N_FFT)
+REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: RS(0:9,N_FFT/2)
 INTEGER       :: i,j,k,jhat
-INTEGER       :: N_FFT_half
+INTEGER,PARAMETER :: Y = 0
 INTEGER,PARAMETER :: U_MEAN = 1
 INTEGER,PARAMETER :: V_MEAN = 2
 INTEGER,PARAMETER :: W_MEAN = 3
@@ -369,26 +371,24 @@ END IF
 
 #if USE_FFTW
 IF (doComputeSpectra) THEN
-  N_FFT_half = N_FFT/2
 #if USE_MPI
-  ! 1. Get Global Solution!!!!
+  ! 1. Get Global Solution and coordinates
   IF (MPIroot) THEN
-    CALL GetGlobalSolution(UPrim, UPrim_Global)
+    CALL GetGlobalSolution(PP_nVarPrim,UPrim, UPrim_Global)
+    CALL GetGlobalSolution(3,Elem_xGP, Elem_xGP_Global)
   ELSE
-    CALL GetGlobalSolution(UPrim)
+    CALL GetGlobalSolution(PP_nVarPrim,UPrim)
+    CALL GetGlobalSolution(3,Elem_xGP)
   END IF
 #else
   UPrim_Global = UPrim
 #endif
 
   IF(MPIroot) THEN
-    ! 2. Get Fluctuations
-    ! TODO
-
     ! 3. Interpolate to global equidistant basis
     CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
 
-    ! 4. Compute Reynolds stresses and average over x- and z-direction
+    ! 4. Compute means
     RS(:,:) = 0.
     DO k=1,N_FFT ! z - spanwise
       DO i=1,N_FFT ! x - streamwise
@@ -399,26 +399,53 @@ IF (doComputeSpectra) THEN
           RS(U_MEAN,jhat) = RS(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
           RS(V_MEAN,jhat) = RS(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
           RS(W_MEAN,jhat) = RS(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
-          RS(    UU,jhat) = RS(    UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
-          RS(    VV,jhat) = RS(    VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
-          RS(    WW,jhat) = RS(    WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
-          RS(    UV,jhat) = RS(    UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
-          RS(    UW,jhat) = RS(    UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
-          RS(    VW,jhat) = RS(    VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
         END DO
       END DO
     END DO
-    ! Normalize
-    RS = RS/REAL(N_FFT**2)
-    WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
-    WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
-    WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
-    WRITE(*,*) '    UU',RS(    UU,:)
-    WRITE(*,*) '    VV',RS(    VV,:)
-    WRITE(*,*) '    WW',RS(    WW,:)
-    WRITE(*,*) '    UV',RS(    UV,:)
-    WRITE(*,*) '    UW',RS(    UW,:)
-    WRITE(*,*) '    VW',RS(    VW,:)
+    RS = RS/REAL(N_FFT**2)/2 ! Normalize
+
+    ! 5. Compute Reynolds stresses and average over x- and z-direction
+    DO k=1,N_FFT ! z - spanwise
+      DO i=1,N_FFT ! x - streamwise
+        DO j=1,N_FFT ! y - channel width
+          jhat = j
+          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+
+          ! First compute fluctuations by removing the mean
+          UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - RS(U_MEAN,jhat)
+          UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - RS(V_MEAN,jhat)
+          UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - RS(W_MEAN,jhat)
+
+          ! Then Compute the Reynolds stresses
+          RS(UU,jhat) = RS(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
+          RS(VV,jhat) = RS(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(WW,jhat) = RS(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(UV,jhat) = RS(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(UW,jhat) = RS(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(VW,jhat) = RS(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
+        END DO
+      END DO
+    END DO
+    ! Normalize quadratic entries
+    RS(UU:VW,:) = RS(UU:VW,:)/REAL(N_FFT**2)/2
+
+    ! 6. Get coordinates of interpolation points
+    CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
+    !RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+    RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+
+
+    ! Debug writeout
+    !WRITE(*,*)      'Y',RS(     Y,:)
+    !WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
+    !WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
+    !WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
+    !WRITE(*,*)     'UU',RS(    UU,:)
+    !WRITE(*,*)     'VV',RS(    VV,:)
+    !WRITE(*,*)     'WW',RS(    WW,:)
+    !WRITE(*,*)     'UV',RS(    UV,:)
+    !WRITE(*,*)     'UW',RS(    UW,:)
+    !WRITE(*,*)     'VW',RS(    VW,:)
   END IF
 END IF
 #endif
@@ -430,7 +457,7 @@ END SUBROUTINE AnalyzeTestCase
 !==================================================================================================================================
 !> Gathers global colume data across all MPI ranks. THIS IS EXPENSIVE!!!
 !==================================================================================================================================
-SUBROUTINE GetGlobalSolution(RealArray,RealArrayGlobal)
+SUBROUTINE GetGlobalSolution(nVar,RealArray,RealArrayGlobal)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -438,8 +465,9 @@ USE MOD_Mesh_Vars,    ONLY: nElems,nGlobalElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)                :: RealArray(      PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nElems)        !< Real array to write
-REAL,INTENT(INOUT),OPTIONAL    :: RealArrayGlobal(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
+INTEGER,INTENT(IN)             :: nVar
+REAL,INTENT(IN)                :: RealArray(      nVar,0:PP_N,0:PP_N,0:PP_N,nElems)        !< Real array to write
+REAL,INTENT(INOUT),OPTIONAL    :: RealArrayGlobal(nVar,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,ALLOCATABLE               :: RealArray_IN(:),RealArray_OUT(:)
