@@ -33,6 +33,9 @@ REAL,PARAMETER     :: dpdx        = -1.    !< imposed pressure gradient: = Re_ta
 REAL               :: Re_tau               !< target friction Reynolds number: = 1/mu0
 REAL               :: bulkVel              !< bulk velocity in domain
 REAL,ALLOCATABLE   :: writeBuf(:,:)        !< buffer to store log testcase data
+#if USE_FFTW
+REAL,ALLOCATABLE   :: RS(:,:)
+#endif
 INTEGER            :: ioCounter   = 0      !< current number of buffer items
 INTEGER            :: nWriteStats = -999   !< Write testcase statistics to file at every n-th AnalyzeTestcase step
 CHARACTER(LEN=255) :: Filename             !< filename to store testcase log data
