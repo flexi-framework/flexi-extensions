@@ -124,6 +124,7 @@ USE MOD_Output,             ONLY: InitOutputToFile
 USE MOD_Eos,                ONLY: PrimToCons
 #if USE_FFTW
 USE MOD_FFT,                ONLY: InitFFT
+USE MOD_FFT_Vars,           ONLY: N_FFT
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -174,10 +175,13 @@ IF(MPIRoot) THEN
   varnames(1) = 'dpdx'
   varnames(2) = 'bulkVel'
   CALL InitOutputToFile(Filename,'Statistics',2,varnames)
+
 END IF
 
 #if USE_FFTW
 CALL InitFFT()
+! Allocate array for Reynolds stresses
+IF(MPIRoot) ALLOCATE(RS(0:9,N_FFT/2))
 #endif
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE CHANNEL DONE!'
@@ -337,6 +341,7 @@ USE MOD_FFT_Vars             ,ONLY: N_FFT
 USE MOD_Interpolation_Vars   ,ONLY: NodeType
 USE MOD_DG_Vars              ,ONLY: UPrim
 USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
+USE MOD_Testcase_Vars        ,ONLY: RS
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -349,7 +354,6 @@ REAL          :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
 REAL          :: UPrim_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
 REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
 REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
-REAL          :: RS(0:9,N_FFT/2)
 INTEGER       :: i,j,k,jhat
 INTEGER,PARAMETER :: Y = 0
 INTEGER,PARAMETER :: U_MEAN = 1
@@ -436,14 +440,14 @@ IF (doComputeSpectra) THEN
 
 
     ! Debug writeout
-    !WRITE(*,*)      'Y',RS(     Y,:)
-    !WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
-    !WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
-    !WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
-    !WRITE(*,*)     'UU',RS(    UU,:)
-    !WRITE(*,*)     'VV',RS(    VV,:)
-    !WRITE(*,*)     'WW',RS(    WW,:)
-    !WRITE(*,*)     'UV',RS(    UV,:)
+    WRITE(*,*)      'Y',RS(     Y,:)
+    WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
+    WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
+    WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
+    WRITE(*,*)     'UU',RS(    UU,:)
+    WRITE(*,*)     'VV',RS(    VV,:)
+    WRITE(*,*)     'WW',RS(    WW,:)
+    WRITE(*,*)     'UV',RS(    UV,:)
     !WRITE(*,*)     'UW',RS(    UW,:)
     !WRITE(*,*)     'VW',RS(    VW,:)
   END IF
@@ -517,6 +521,9 @@ IMPLICIT NONE
 !==================================================================================================================================
 IF(MPIRoot) CALL WriteStats()
 IF(MPIRoot) DEALLOCATE(writeBuf)
+#if USE_FFTW
+IF(MPIRoot) DEALLOCATE(RS)
+#endif
 END SUBROUTINE
 
 
