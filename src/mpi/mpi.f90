@@ -104,7 +104,9 @@ INTEGER,INTENT(IN),OPTIONAL      :: mpi_comm_IN !< MPI communicator
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if USE_MPI
-LOGICAL :: initDone
+LOGICAL :: initDone,foundAttr
+INTEGER :: color
+INTEGER (KIND=MPI_ADDRESS_KIND) :: myApp
 !==================================================================================================================================
 IF (PRESENT(mpi_comm_IN)) THEN
   MPI_COMM_FLEXI = mpi_comm_IN
@@ -114,7 +116,15 @@ ELSE
   IF(.NOT.initDone) CALL MPI_INIT(iError)
   IF(iError .NE. 0) &
     CALL Abort(__STAMP__,'Error in MPI_INIT',iError)
-  MPI_COMM_FLEXI = MPI_COMM_WORLD
+  ! Get number of my application if multiple apps have been launched in mpirun command
+  CALL MPI_COMM_GET_ATTR(MPI_COMM_WORLD,MPI_APPNUM,myApp,foundAttr,iError)
+  IF (foundAttr) THEN
+    ! Split communicator to obtain own MPI_COMM_FLEXI per executable
+    color = myApp
+    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,color,MPI_INFO_NULL,MPI_COMM_FLEXI,iError)
+  ELSE
+    MPI_COMM_FLEXI = MPI_COMM_WORLD
+  END IF
 END IF
 
 CALL MPI_COMM_RANK(MPI_COMM_FLEXI, myRank     , iError)
