@@ -52,8 +52,10 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 CALL prms%SetSection("SmartRedis")
-CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
 CALL prms%CreateLogicalOption("doSmartRedis", "Communicate via the SmartRedis Client", ".FALSE.")
+CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
+CALL prms%CreateLogicalOption("useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
+CALL prms%CreateRealOption("NormInvariants", "Normalizing factor multiplied with gradient invariants", "1.")
 
 END SUBROUTINE DefineParametersSmartRedis
 
@@ -65,7 +67,7 @@ SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
 USE MOD_SmartRedis_Vars
-USE MOD_ReadInTools,     ONLY: GETLOGICAL
+USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -73,12 +75,15 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-doSmartRedis  = GETLOGICAL("doSmartRedis")
+doSmartRedis  = GETLOGICAL("doSmartRedis",".FALSE.")
 IF (doSmartRedis) THEN
   dbIsClustered = GETLOGICAL("ClusteredDatabase")
   ! Currently only the MPI root communicates with the Database. Could be changing in the future.
   IF(MPIroot) CALL Client%Initialize(dbIsClustered)
 END IF
+
+useInvariants = GETLOGICAL("useInvariants",".FALSE.")
+IF (useInvariants) NormInvariants = GETREAL("NormInvariants","1.")
 
 END SUBROUTINE InitSmartRedis
 
@@ -224,14 +229,23 @@ INTEGER,PARAMETER              :: interval = 10   ! polling interval in millisec
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
-Dims = SHAPE(U)
-Dims_Out(:) = Dims(:)
-Dims_Out(5) = nGlobalElems
-
-CALL ComputeInvariants(gradUx,gradUy,gradUz,inv)
 Key = TRIM(FlexiTag)//"U"
-CALL GatheredWriteSmartRedis(5, Dims, inv, TRIM(Key), Shape_Out = Dims_Out)
-!CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
+IF (useInvariants) THEN
+  CALL ComputeInvariants(gradUx,gradUy,gradUz,inv)
+  inv = inv/NormInvariants ! Normalize
+
+  Dims = SHAPE(inv)
+  Dims_Out(:) = Dims(:)
+  Dims_Out(5) = nGlobalElems
+
+  CALL GatheredWriteSmartRedis(5, Dims, inv, TRIM(Key), Shape_Out = Dims_Out)
+ELSE
+  Dims = SHAPE(U)
+  Dims_Out(:) = Dims(:)
+  Dims_Out(5) = nGlobalElems
+
+  CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
+END IF
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW

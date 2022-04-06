@@ -25,9 +25,11 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-TYPE(client_type)   :: client           ! Client instance of SmartRedis to communicate with Redis Database
-LOGICAL             :: dbIsClustered    ! Indicate whether the Redis Database is clustered, i.e. distributed on different nodes
-LOGICAL             :: doSmartRedis     ! Flag whether communication with SmartRedis should be done
+TYPE(client_type)   :: client          ! Client instance of SmartRedis to communicate with Redis Database
+LOGICAL             :: dbIsClustered   ! Indicate whether the Redis Database is clustered, i.e. distributed on different nodes
+LOGICAL             :: doSmartRedis    ! Flag whether communication with SmartRedis should be done
+LOGICAL             :: useInvariants   ! If true, the invariants of the gradient tensor are used as state instead of the velocities
+REAL                :: NormInvariants  ! Normalizing factor to divide invariants by to map them nearer to a [-1,1] interval
 #endif
 
 END MODULE MOD_SmartRedis_Vars
