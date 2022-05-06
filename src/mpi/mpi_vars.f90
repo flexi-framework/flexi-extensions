@@ -28,6 +28,10 @@ INTEGER,ALLOCATABLE :: MPIRequest_Flux(:,:)     !< communication handle for the 
 #if FV_ENABLED
 INTEGER,ALLOCATABLE :: MPIRequest_FV_Elems(:,:) !< communication handle for the FV_Elems array
 INTEGER,ALLOCATABLE :: MPIRequest_FV_gradU(:,:) !< communication handle for the slopes of the FV reconstruction
+#if FV_RECONSTRUCT
+INTEGER,ALLOCATABLE :: MPIRequest_Rec_SM(:,:)   !< communication handle for extended primitive solution for preconditioner
+INTEGER,ALLOCATABLE :: MPIRequest_Rec_MS(:,:)   !< communication handle for extended primitive solution for preconditioner
+#endif
 #endif
 #if EDDYVISCOSITY
 INTEGER,ALLOCATABLE :: MPIRequest_SGS(:,:)      !< communication handle for the SGS Model Indicator
@@ -39,6 +43,7 @@ INTEGER             :: nSendVal                 !< number of values to be sent
 INTEGER             :: nRecVal                  !< number of values to be received
 INTEGER             :: DataSizeSide             !< datasize of one face, =PP_nVar*(PP_N+1)**2
 INTEGER             :: DataSizeSidePrim         !< datasize of one face for (primitive) gradients, =PP_nVarPrim*(PP_N+1)**2
+INTEGER             :: DataSizeSideGrad         !< datasize of one face for one value, =1*(PP_N+1)**2 (in case of less liftet)
 INTEGER             :: DataSizeSideSGS          !< datasize of one face for one value, =1*(PP_N+1)**2
 
 INTEGER             :: SideID_start,SideID_end

@@ -12,6 +12,7 @@
 ! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
 !=================================================================================================================================
 #include "flexi.h"
+#include "eos.h"
 
 !==================================================================================================================================
 !> \brief Contains the routines that set up communicators and control non-blocking communication
@@ -103,7 +104,9 @@ INTEGER,INTENT(IN),OPTIONAL      :: mpi_comm_IN !< MPI communicator
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if USE_MPI
-LOGICAL :: initDone
+LOGICAL :: initDone,foundAttr
+INTEGER :: color
+INTEGER (KIND=MPI_ADDRESS_KIND) :: myApp
 !==================================================================================================================================
 IF (PRESENT(mpi_comm_IN)) THEN
   MPI_COMM_FLEXI = mpi_comm_IN
@@ -113,7 +116,15 @@ ELSE
   IF(.NOT.initDone) CALL MPI_INIT(iError)
   IF(iError .NE. 0) &
     CALL Abort(__STAMP__,'Error in MPI_INIT',iError)
-  MPI_COMM_FLEXI = MPI_COMM_WORLD
+  ! Get number of my application if multiple apps have been launched in mpirun command
+  CALL MPI_COMM_GET_ATTR(MPI_COMM_WORLD,MPI_APPNUM,myApp,foundAttr,iError)
+  IF (foundAttr) THEN
+    ! Split communicator to obtain own MPI_COMM_FLEXI per executable
+    color = myApp
+    CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,color,MPI_INFO_NULL,MPI_COMM_FLEXI,iError)
+  ELSE
+    MPI_COMM_FLEXI = MPI_COMM_WORLD
+  END IF
 END IF
 
 CALL MPI_COMM_RANK(MPI_COMM_FLEXI, myRank     , iError)
@@ -165,6 +176,12 @@ ALLOCATE(MPIRequest_FV_Elems(nNbProcs,2) )
 ALLOCATE(MPIRequest_FV_gradU(nNbProcs,2) )
 MPIRequest_FV_Elems = MPI_REQUEST_NULL
 MPIRequest_FV_gradU = MPI_REQUEST_NULL
+#if FV_RECONSTRUCT
+ALLOCATE(MPIRequest_Rec_MS(nNbProcs,2))
+ALLOCATE(MPIRequest_Rec_SM(nNbProcs,2))
+MPIRequest_Rec_MS = MPI_REQUEST_NULL
+MPIRequest_Rec_SM = MPI_REQUEST_NULL
+#endif
 #endif
 #if EDDYVISCOSITY
 ALLOCATE(MPIRequest_SGS(nNbProcs,2) )
@@ -181,6 +198,7 @@ DataSizeSideSGS= (PP_N+1)*(PP_NZ+1)
 #endif
 DataSizeSide      =PP_nVar*(PP_N+1)*(PP_NZ+1)
 DataSizeSidePrim  =PP_nVarPrim*(PP_N+1)*(PP_NZ+1)
+DataSizeSideGrad  =PP_nVarLifting*(PP_N+1)*(PP_NZ+1)
 
 ! split communicator into smaller groups (e.g. for local nodes)
 GroupSize=GETINT('GroupSize','0')
@@ -352,7 +370,11 @@ INTEGER,INTENT(INOUT)       :: MPIRequest(nRequests) !< communication handles
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+#if LIBS_MPT
+CALL MPI_WaitAll(nRequests,MPIRequest,MPI_STATUS_IGNORE,iError)
+#else
 CALL MPI_WaitAll(nRequests,MPIRequest,MPI_STATUSES_IGNORE,iError)
+#endif
 END SUBROUTINE FinishExchangeMPIData
 
 !==================================================================================================================================
@@ -368,6 +390,10 @@ SDEALLOCATE(MPIRequest_Flux)
 #if FV_ENABLED
 SDEALLOCATE(MPIRequest_FV_Elems)
 SDEALLOCATE(MPIRequest_FV_gradU)
+#if FV_RECONSTRUCT
+SDEALLOCATE(MPIRequest_Rec_MS)
+SDEALLOCATE(MPIRequest_Rec_SM)
+#endif
 #endif
 #if EDDYVISCOSITY
 SDEALLOCATE(MPIRequest_SGS)

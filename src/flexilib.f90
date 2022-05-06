@@ -58,6 +58,8 @@ USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput
 USE MOD_Analyze,           ONLY:DefineParametersAnalyze,InitAnalyze
 USE MOD_RecordPoints,      ONLY:DefineParametersRecordPoints,InitRecordPoints
 USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,TimeDisc
+USE MOD_Implicit,          ONLY:DefineParametersImplicit,InitImplicit
+USE MOD_Precond,           ONLY:DefineParametersPrecond
 USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if USE_MPI
 USE MOD_MPI,               ONLY:InitMPIvars
@@ -69,8 +71,11 @@ USE MOD_FV_Basis,          ONLY:InitFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,ExtractParameterFile
-USE MOD_Restart_Vars      ,ONLY:RestartFile
-USE MOD_StringTools       ,ONLY:STRICMP, GetFileExtension
+USE MOD_StringTools,       ONLY:STRICMP, GetFileExtension
+USE MOD_Unittest,          ONLY:GenerateUnittestReferenceData
+#if USE_SMARTREDIS
+USE MOD_SmartRedis,        ONLY:DefineParametersSmartRedis,InitSmartRedis
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -81,6 +86,7 @@ INTEGER,INTENT(IN),OPTIONAL   :: mpi_comm_loc
 ! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
 LOGICAL                 :: userblockFound
+CHARACTER(LEN=255)      :: RestartFile_loc = ''
 !==================================================================================================================================
 CALL SetStackSizeUnlimited()
 IF(PRESENT(mpi_comm_loc))THEN
@@ -101,14 +107,14 @@ IF (nArgs.GT.2) THEN
 END IF
 ParameterFile = Args(1)
 IF (nArgs.GT.1) THEN
-  RestartFile = Args(2)
+  RestartFile_loc = Args(2)
 ELSE IF (STRICMP(GetFileExtension(ParameterFile), "h5")) THEN
   ParameterFile = ".flexi.ini"
   CALL ExtractParameterFile(Args(1), ParameterFile, userblockFound)
   IF (.NOT.userblockFound) THEN
     CALL CollectiveStop(__STAMP__, "No userblock found in state file '"//TRIM(Args(1))//"'")
   END IF
-  RestartFile = Args(1)
+  RestartFile_loc = Args(1)
 END IF
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
@@ -131,9 +137,13 @@ CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
 CALL DefineParametersSponge()
 CALL DefineParametersTimedisc()
+CALL DefineParametersImplicit()
+CALL DefineParametersPrecond()
 CALL DefineParametersAnalyze()
 CALL DefineParametersRecordPoints()
-
+#if USE_SMARTREDIS
+CALL DefineParametersSmartRedis()
+#endif
 ! check for command line argument --help or --markdown
 IF (doPrintHelp.GT.0) THEN
   CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, Args(1))
@@ -182,7 +192,7 @@ CALL InitFV_Basis()
 CALL InitMortar()
 CALL InitOutput()
 CALL InitMesh(meshMode=2)
-CALL InitRestart()
+CALL InitRestart(RestartFile_loc)
 CALL InitFilter()
 CALL InitOverintegration()
 CALL InitIndicator()
@@ -200,7 +210,11 @@ CALL InitLifting()
 CALL InitSponge()
 CALL InitTimeDisc()
 CALL InitAnalyze()
+CALL InitImplicit()
 CALL InitRecordpoints()
+#if USE_SMARTREDIS
+CALL InitSmartRedis()
+#endif
 CALL IgnoredParameters()
 CALL Restart()
 
@@ -209,6 +223,16 @@ Time=FLEXITIME()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
+
+! Generate Unittest Data
+IF (doGenerateUnittestReferenceData) THEN
+#if USE_MPI
+  CALL CollectiveStop(__STAMP__, "Can't generate Unittest Reference Data with MPI enabled.")
+#endif
+  CALL GenerateUnittestReferenceData()
+  CALL FinalizeFlexi()
+  CALL EXIT()
+END IF
 END SUBROUTINE InitFlexi
 
 !==================================================================================================================================
@@ -232,6 +256,7 @@ USE MOD_Overintegration,   ONLY:FinalizeOverintegration
 USE MOD_Output,            ONLY:FinalizeOutput
 USE MOD_Analyze,           ONLY:FinalizeAnalyze
 USE MOD_RecordPoints,      ONLY:FinalizeRecordPoints
+USE MOD_Implicit,          ONLY:FinalizeImplicit
 USE MOD_TimeDisc,          ONLY:FinalizeTimeDisc
 #if USE_MPI
 USE MOD_MPI,               ONLY:FinalizeMPI
@@ -243,12 +268,17 @@ USE MOD_FV_Basis,          ONLY:FinalizeFV_Basis
 #endif
 USE MOD_Indicator,         ONLY:FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:FinalizeParameters
+USE MOD_IO_HDF5,           ONLY:FinalizeIOHDF5
+#if USE_SMARTREDIS
+USE MOD_SmartRedis,        ONLY:FinalizeSmartRedis
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
 !==================================================================================================================================
 !Finalize
+CALL FinalizeIOHDF5()
 CALL FinalizeOutput()
 CALL FinalizeRecordPoints()
 CALL FinalizeAnalyze()
@@ -261,6 +291,7 @@ CALL FinalizeFV()
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeInterpolation()
+CALL FinalizeImplicit
 CALL FinalizeTimeDisc()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
@@ -272,6 +303,9 @@ CALL FinalizeFilter()
 CALL FinalizeFV_Basis()
 #endif
 CALL FinalizeIndicator()
+#if USE_SMARTREDIS
+CALL FinalizeSmartRedis()
+#endif
 ! Measure simulation duration
 Time=FLEXITIME()
 CALL FinalizeParameters()

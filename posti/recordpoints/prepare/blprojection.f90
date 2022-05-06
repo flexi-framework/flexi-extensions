@@ -119,7 +119,7 @@ DO i=1,nRP(1)
   CALL EvalSplineDeriv(3,nRP(1),s_mod(i),s_mod,coeff,dx_loc)
   !project it on the local surface
   tangVecRP(:,i)=dx_loc - SUM(dx_loc(1:3)*NormVecRP(1:3,i))*NormVecRP(:,i)
-  tangVecRP(:,i)=tangVecRP(:,i)/NORM2(tangVecRP(:,i))
+  tangVecRP(:,i)=tangVecRP(:,i)/SQRT(DOT_PRODUCT(tangVecRP(:,i),tangVecRP(:,i)))
 END DO
 
 ! extrapolation of the BL mesh along the boundary normals to height
@@ -242,8 +242,8 @@ DO SideID=1,nBCSides
     xWinner(:)=xBC_NSuper(:,iWinner,jWinner)
     NormVecWinner(:)=NormVec_NSuper(:,iWinner,jWinner)
     F=xRP-xWinner
-    NormVecWinner=NormVecWinner/NORM2(NormVecWinner)
-    F=(xRP-xWinner)/NORM2(xRP-xWinner)
+    NormVecWinner=NormVecWinner/SQRT(DOT_PRODUCT(NormVecWinner,NormVecWinner))
+    F=(xRP-xWinner)/SQRT(DOT_PRODUCT(xRP-xWinner,xRP-xWinner))
 
 
     ! Newton to find the minimum distance
@@ -283,7 +283,8 @@ DO SideID=1,nBCSides
         END DO !l=0,NSuper
       END DO! i=0,NSuper
     END DO! j=0,NSuper
-    ! get initial value of the functional G
+
+    ! Get initial value of the functional G
     CALL LagrangeInterpolationPolys(Xi2(1),NSuper,Xi_NSuper,wBary_NSuper,Lag_NSuper(1,:))
     CALL LagrangeInterpolationPolys(Xi2(2),NSuper,Xi_NSuper,wBary_NSuper,Lag_NSuper(2,:))
     G=0.
@@ -292,12 +293,14 @@ DO SideID=1,nBCSides
         G=G+Gmat(:,i,j)*Lag_NSuper(1,i)*Lag_NSuper(2,j)
       END DO! i=0,NSuper
     END DO! j=0,NSuper
+
+    ! Start Newton
     eps_F=1.E-10*(SUM(G*G))
     NewtonIter=0
     DO WHILE ((SUM(G*G).GT.eps_F).AND.(NewtonIter.LT.50))
       NewtonIter=NewtonIter+1
-      ! Compute G Jacobian dG/dXi
 
+      ! Compute G Jacobian dG/dXi
       Jac2=0.
       DO j=0,NSuper
         DO i=0,NSuper
@@ -317,6 +320,8 @@ DO SideID=1,nBCSides
       ! Compute function value
       CALL LagrangeInterpolationPolys(Xi2(1),NSuper,Xi_NSuper,wBary_NSuper,Lag_NSuper(1,:))
       CALL LagrangeInterpolationPolys(Xi2(2),NSuper,Xi_NSuper,wBary_NSuper,Lag_NSuper(2,:))
+      ! Exit if we are far enough outside of [-1,1] for the basis to reach 'Infinity' overflow
+      IF (ANY(ABS(Lag_NSuper(:,:)).GT.(HUGE(1.)))) EXIT
       G=0.
       DO j=0,NSuper
        DO i=0,NSuper

@@ -47,6 +47,7 @@ CONTAINS
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut is overwritten with the volume flux derivatives
 !==================================================================================================================================
+#ifndef SPLIT_DG
 SUBROUTINE VolInt_weakForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
@@ -74,6 +75,8 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ) :: fv,gv,hv  !< Volume viscous flu
 #endif
 !==================================================================================================================================
 ! Diffusive part
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,fv,gv,hv,f,g,h)
+!$OMP DO
 DO iElem=1,nElems
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.1) CYCLE ! FV Elem
@@ -116,7 +119,11 @@ DO iElem=1,nElems
     END DO ! l
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
+!$OMP END DO
+!$OMP END PARALLEL
+
 END SUBROUTINE VolInt_weakForm
+#endif
 
 #ifdef SPLIT_DG
 !==================================================================================================================================
@@ -135,10 +142,13 @@ SUBROUTINE VolInt_splitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars      ,ONLY: DVolSurf,nDOFElem,UPrim,U
-USE MOD_Mesh_Vars    ,ONLY: Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
+USE MOD_DG_Vars      ,ONLY: DVolSurf,UPrim,U
+USE MOD_Mesh_Vars    ,ONLY: Metrics_fTilde,Metrics_gTilde,nElems
+#if PP_dim==3 || PARABOLIC
+USE MOD_Mesh_Vars    ,ONLY: Metrics_hTilde
+#endif
 #if PARABOLIC
-USE MOD_DG_Vars      ,ONLY: D_Hat_T
+USE MOD_DG_Vars      ,ONLY: D_Hat_T,nDOFElem
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D  ! computes volume fluxes in local coordinates
 USE MOD_Lifting_Vars ,ONLY: gradUx,gradUy,gradUz
 #endif
@@ -158,6 +168,8 @@ REAL,DIMENSION(PP_nVar                     )  :: Flux         !< temp variable f
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ) :: fv,gv,hv     !< Parabolic fluxes at GP
 #endif /*PARABOLIC*/
 !==================================================================================================================================
+!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,fv,gv,hv,Flux)
+!$OMP DO
 DO iElem=1,nElems
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.1) CYCLE ! FV Elem
@@ -254,6 +266,9 @@ DO iElem=1,nElems
 
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
+!$OMP END DO
+!$OMP END PARALLEL
+
 END SUBROUTINE VolInt_splitForm
 #endif /*SPLIT_DG*/
 

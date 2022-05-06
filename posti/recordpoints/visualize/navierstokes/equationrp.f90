@@ -133,6 +133,7 @@ ALLOCATE(TransMap(3,INT(nVarVisu/2)))
 ALLOCATE(is2D(INT(nVarVisu/2)))
 is2D=.FALSE.
 TransMap=-1
+iVelocity=-1
 nVecTrans=0
 DO iVar=1,nVarVisu
   tmp255=TRIM(VarNameVisu(iVar))
@@ -157,11 +158,21 @@ WRITE(UNIT_StdOut,'(A)')' Quantities to transform to local coordinate system:'
 DO iVar=1,nVecTrans
   DO iVar2=1,3
     WRITE(UNIT_StdOut,'(A,A)')'  ',TRIM(VarNameVisu(TransMap(iVar2,iVar)))
+    IF("VelocityX".EQ.TRIM(VarNameVisu(TransMap(iVar2,iVar))))THEN
+      iVelocity = iVar
+    END IF
   END DO
 END DO
 
 IF(Plane_doBLProps) THEN
-  nBLProps=11
+  iPressure=-1
+  iPressure=GETMAPBYNAME('Pressure',VarNameVisu,nVarVisu)
+  IF(iPressure.GT.0) THEN
+    nBLProps=12
+  ELSE
+    nBLProps=11
+    WRITE(UNIT_stdOut,'(A)') '!!! No Pressure data provided, cp is not computed !!!'
+  END IF
   ALLOCATE(VarNames_BLProps(nBLProps))
   VarNames_BLProps(1)='delta99'
   VarNames_BLProps(2)='u_delta'
@@ -173,7 +184,8 @@ IF(Plane_doBLProps) THEN
   VarNames_BLProps(8)='u_reverse'
   VarNames_BLProps(9)='tau_w'
   VarNames_BLProps(10)='Re_tau'
-  VarNames_BLProps(11)='c_p'
+  VarNames_BLProps(11)='u_tau'
+  IF(iPressure.GT.0) VarNames_BLProps(12)='c_p'
 END IF
 
 WRITE(UNIT_stdOut,'(A)')' INIT EquationRP DONE!'
@@ -357,7 +369,7 @@ SUBROUTINE Plane_BLProps()
 USE MOD_Globals
 USE MOD_OutputRPVisu_Vars  ,ONLY: RPDataTimeAvg_out
 USE MOD_RPSetVisuVisu_Vars ,ONLY: nPlanes,Planes,tPlane
-USE MOD_EquationRP_Vars    ,ONLY: is2D,TransMap,nBLProps,pInf
+USE MOD_EquationRP_Vars    ,ONLY: is2D,TransMap,nBLProps,pInf,uInf,rhoInf,iPressure,iVelocity
 USE MOD_ParametersVisu     ,ONLY: Plane_BLvelScaling
 USE MOD_ParametersVisu     ,ONLY: Mu0
 IMPLICIT NONE
@@ -368,7 +380,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER              :: iPlane,i,j,jj,j_max,ndim
 REAL                 :: u_max,y_max,diffu1,diffu2,y1,y2,u1,u2,u3,rho1,rho2,rho_delta,dudy,dudy1
-REAL                 :: dy,dy2
+REAL                 :: dy,dy2,u_loc_bledge
 REAL                 :: u_delta,delta99,delta1,theta,u_r,tau_W,u_tau
 REAL,ALLOCATABLE     :: u_loc(:),y_loc(:),u_star(:)
 TYPE(tPlane),POINTER :: Plane
@@ -391,11 +403,11 @@ DO iPlane=1,nPlanes
     ALLOCATE(u_loc(Plane%nRP(2)),y_loc(Plane%nRP(2)),u_star(Plane%nRP(2)))
     DO i=1,Plane%nRP(1)
       ! get wall friction tau_W = mu*(du/dy+dv/dx)
-      dy=Plane%LocalCoord(2,i,2)-Plane%LocalCoord(2,i,1)
+      dy =Plane%LocalCoord(2,i,2)-Plane%LocalCoord(2,i,1)
       dy2=Plane%LocalCoord(2,i,3)-Plane%LocalCoord(2,i,2)
-      u1=RPDataTimeAvg_out(TransMap(1,1),Plane%IDlist(i,1))
-      u2=RPDataTimeAvg_out(TransMap(1,1),Plane%IDlist(i,2))
-      u3=RPDataTimeAvg_out(TransMap(1,1),Plane%IDlist(i,3))
+      u1=RPDataTimeAvg_out(TransMap(1,iVelocity),Plane%IDlist(i,1))
+      u2=RPDataTimeAvg_out(TransMap(1,iVelocity),Plane%IDlist(i,2))
+      u3=RPDataTimeAvg_out(TransMap(1,iVelocity),Plane%IDlist(i,3))
       dudy=(u2-u1)/dy- (dy*(u3-u2)-dy2*(u2-u1))/((dy+dy2)*dy2)
       tau_W = mu0*dudy
       ! get delta99
@@ -489,11 +501,21 @@ DO iPlane=1,nPlanes
       theta=0.
 !      j_max=jj
       DO j=2,j_max
-        dy=y_loc(j)-y_loc(j-1)
-        ! displacement thickness
-        delta1=delta1+ 0.5*dy*(1.-u_loc(j) +1.-u_loc(j-1))
-        ! momentum thickness
-        theta=theta+ 0.5*dy*(u_loc(j)*(1.-u_loc(j)) +u_loc(j-1)*(1.-u_loc(j-1)))
+        IF (j.LT.j_max) THEN
+          dy=y_loc(j)-y_loc(j-1)
+          ! displacement thickness
+          delta1=delta1+ 0.5*dy*(1.-u_loc(j) +1.-u_loc(j-1))
+          ! momentum thickness
+          theta=theta+ 0.5*dy*(u_loc(j)*(1.-u_loc(j)) +u_loc(j-1)*(1.-u_loc(j-1)))
+        ELSE !Interpolate y_loc and u_loc at at the boundarylayer edge to be consitents
+          !y_loc already scaled with delta99: y_loc at BL edge = 1
+          dy=1-y_loc(j-1)
+          u_loc_bledge=(u_loc(j)-u_loc(j-1))/(y_loc(j)-y_loc(j-1))*(1-y_loc(j-1))+u_loc(j-1)
+          ! displacement thickness
+          delta1=delta1+ 0.5*dy*(1.-u_loc_bledge +1.-u_loc(j-1))
+          ! momentum thickness
+          theta=theta+ 0.5*dy*(u_loc_bledge*(1.-u_loc_bledge) +u_loc(j-1)*(1.-u_loc(j-1)))
+        END IF !j.LT.j_max
       END DO
       ! get max. reverse flow if any
       u_r=MIN(MINVAL(u_loc(:)),0.)
@@ -510,7 +532,8 @@ DO iPlane=1,nPlanes
       Plane%BLProps(8,i)=ABS(u_r)                                      !u_reverse
       Plane%BLProps(9,i)=tau_W                                         !tau_W
       Plane%BLProps(10,i)=rho_delta*SQRT(ABS(tau_W)/rho_delta)*delta99/Mu0  !Re_tau
-      Plane%BLProps(11,i)=2.*(RPDataTimeAvg_out(5,Plane%IDlist(i,1))-pInf) !c_p
+      Plane%BLProps(11,i)=SQRT(ABS(tau_W)/rho_delta)                   !u_tau
+      IF(iPressure.GT.0)  Plane%BLProps(12,i)=(RPDataTimeAvg_out(iPressure,Plane%IDlist(i,1))-pInf)/(0.5*rhoInf*uInf**2) !c_p
       ! perform scaling if required
       SELECT CASE(Plane_BLvelScaling)
       CASE(0) ! do nothing
@@ -588,4 +611,3 @@ WRITE(UNIT_stdOut,'(A)') '  EquationRP FINALIZED'
 END SUBROUTINE FinalizeEquationRP
 
 END MODULE MOD_EquationRP
-

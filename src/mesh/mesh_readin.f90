@@ -1,5 +1,5 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2021  Prof. Claus-Dieter Munz
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
 ! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
 !
@@ -61,10 +61,15 @@ INTERFACE ReadIJKSorting
   MODULE PROCEDURE ReadIJKSorting
 END INTERFACE
 
+INTERFACE ReadIJKSorting_Global
+  MODULE PROCEDURE ReadIJKSorting_Global
+END INTERFACE
+
 
 PUBLIC::ReadMesh
 PUBLIC::BuildPartition
 PUBLIC::ReadIJKSorting
+PUBLIC::ReadIJKSorting_Global
 !==================================================================================================================================
 
 CONTAINS
@@ -187,7 +192,7 @@ USE MOD_Mesh_Vars,          ONLY:NodeCoords,TreeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,offsetTree,nElems,nTrees,nGlobalTrees
 USE MOD_Mesh_Vars,          ONLY:xiMinMax,ElemToTree
 USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
-USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
+USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh,meshHasMortars
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
 USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
@@ -662,9 +667,12 @@ ReduceData(8)=nAnalyzeSides
 ReduceData(9)=nMortarSides
 ReduceData(10)=nMPIPeriodics
 
+! Store information if mesh has mortars, independent of existence of trees
+meshHasMortars = MERGE(.TRUE.,.FALSE.,ReduceData(9).GT.0)
+
 #if USE_MPI
 CALL MPI_REDUCE(ReduceData,ReduceData_glob,10,MPI_INTEGER,MPI_SUM,0,MPI_COMM_FLEXI,iError)
-ReduceData=ReduceData_glob
+IF(MPIRoot) ReduceData=ReduceData_glob
 #endif /*USE_MPI*/
 
 IF(MPIRoot)THEN
@@ -786,7 +794,7 @@ END FUNCTION ELEMIPROC
 
 !===================================================================================================================================
 !> Read arrays nElems_IJK (global number of elements in i,j,k direction) and Elem_IJK (mapping from global element to i,j,k index)
-!> for meshes thar are i,j,k sorted.
+!> for meshes that are i,j,k sorted.
 !===================================================================================================================================
 SUBROUTINE ReadIJKSorting()
 ! MODULES                                                                                                                          !
@@ -809,5 +817,32 @@ IF(dsExists)THEN
 END IF
 CALL CloseDataFile()
 END SUBROUTINE ReadIJKSorting
+
+!===================================================================================================================================
+!> Read arrays nElems_IJK (global number of elements in i,j,k direction) and Elem_IJK (mapping from global element to i,j,k index)
+!> for meshes that are i,j,k sorted. I contrast to the routine "ReadIJKSorting", the calling rank opens the file in single mode and
+!> reads the (whole global) arrays for itself.
+!===================================================================================================================================
+SUBROUTINE ReadIJKSorting_Global()
+! MODULES                                                                                                                          !
+!----------------------------------------------------------------------------------------------------------------------------------!
+USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,nGlobalElems,MeshFile
+!----------------------------------------------------------------------------------------------------------------------------------!
+IMPLICIT NONE
+! INPUT / OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+LOGICAL        :: dsExists
+!===================================================================================================================================
+
+CALL OpenDataFile(MeshFile,create=.FALSE.,single=.TRUE.,readOnly=.TRUE.)
+CALL DatasetExists(File_ID,'nElems_IJK',dsExists)
+IF(dsExists)THEN
+  CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
+  ALLOCATE(Elem_IJK(3,nGlobalElems))
+  CALL ReadArray('Elem_IJK',2,(/3,nGlobalElems/),0,2,IntArray=Elem_IJK)
+END IF
+CALL CloseDataFile()
+END SUBROUTINE ReadIJKSorting_Global
 
 END MODULE MOD_Mesh_ReadIn

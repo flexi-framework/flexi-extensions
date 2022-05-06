@@ -19,7 +19,13 @@
 #endif
 
 !==================================================================================================================================
-!> The channel case is a setup according to the Moser channel
+!> The channel case is a setup according to the Moser channel:
+!>  - Moser, Robert D., John Kim, and Nagi N. Mansour. "Direct numerical simulation of turbulent channel flow up to Re_tau= 590."
+!>    Physics of fluids 11.4 (1999): 943-945.
+!>  - Lee, Myoungkyu, and Robert D. Moser. "Direct numerical simulation of turbulent channel flow up to Re_tau=5200."
+!>    Journal of Fluid Mechanics 774 (2015): 395-415.
+!> The channel halfwidth is set to 1 and the Reynolds number is thus set with mu0 = 1/Re_tau. Further, rho=1 and the pressure is
+!> computed to obtain the specified Bulk Mach number (Mach=0.1 for the Moser case). Hence, u_tau = tau = -dp/dx = 1 .
 !==================================================================================================================================
 MODULE MOD_Testcase
 ! MODULES
@@ -96,31 +102,39 @@ CALL prms%CreateRealOption('ChannelMach', "Bulk mach number used in the channel 
 CALL prms%CreateIntOption('nWriteStats', "Write testcase statistics to file at every n-th AnalyzeTestcase step.", '100')
 CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis routines every n-th timestep. "//&
                                               "(Note: always called at global analyze level)", '1000')
+CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
+                                                 &ATTENTION: INCREDIBLY EXPENSIVE!!'                  ,'T')
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
-!> Specifies all the initial conditions. The state in conservative variables is returned.
+!> Initializes the Channel testcase. The initial pressure is set to match the specified Bulk Mach number. For this, the initial
+!> Bulk Velocity has to be estimated. Here, an analytical approximation is used to estimate the bulk velocity depending on the
+!> specific Reynolds number.
+!> TODO: Find source of formula for bulk velocity.
 !==================================================================================================================================
 SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_ReadInTools,        ONLY: GETINT,GETREAL
+USE MOD_ReadInTools,        ONLY: GETINT,GETREAL,GETLOGICAL
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState,RefStateCons
 USE MOD_EOS_Vars,           ONLY: kappa,mu0,R
 USE MOD_Output,             ONLY: InitOutputToFile
 USE MOD_Eos,                ONLY: PrimToCons
+#if USE_FFTW
+USE MOD_FFT,                ONLY: InitFFT
+USE MOD_FFT_Vars,           ONLY: N_FFT
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                  :: ioUnit,openStat
-REAL                     :: c1
+REAL,PARAMETER           :: c1 = 2.4390244 ! Empirical parameter for estimation of bulkVel
 REAL                     :: bulkMach,pressure
-CHARACTER(LEN=7)         :: varnames(2)
 REAL                     :: UE(PP_2Var)
+CHARACTER(LEN=7)         :: varnames(2)
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE CHANNEL...'
@@ -130,39 +144,45 @@ CALL CollectiveStop(__STAMP__, &
   'The testcase has not been implemented for FV yet!')
 #endif
 
+! Compute global Reynolds stress profiles in analyze
+doComputeSpectra = GETLOGICAL('doComputeSpectra','.FALSE.')
+
 nWriteStats  = GETINT('nWriteStats','100')
 nAnalyzeTestCase = GETINT( 'nAnalyzeTestCase','1000')
-uBulkScale=1.
-Re_tau       = 1/mu0
-c1 = 2.4390244
-uBulk=c1 * ((Re_tau+c1)*LOG(Re_tau+c1) + 1.3064019*(Re_tau + 29.627395*EXP(-1./11.*Re_tau) + 0.66762137*(Re_tau+3)*EXP(-Re_tau/3.))) &
-      - 97.4857927165
-uBulk=uBulk/Re_tau
 
-! Set the background pressure according to choosen bulk Mach number
-bulkMach = GETREAL('ChannelMach','0.1')
-pressure = (uBulk/bulkMach)**2*RefStatePrim(1,IniRefState)/kappa
-RefStatePrim(5,IniRefState) = pressure
+! Compute initial guess for bulk velocity for given Re_tau to compute background pressure
+Re_tau  = 1./mu0
+bulkVel = (Re_tau+c1)*LOG(Re_tau+c1) + 1.3064019*(Re_tau + 29.627395*EXP(-1./11.*Re_tau) + 0.66762137*(Re_tau+3)*EXP(-Re_tau/3.))
+bulkVel = 1./Re_tau * (c1*bulkVel - 97.4857927165)
+
+! Set the background pressure according to chosen bulk Mach number
+bulkMach                       = GETREAL('ChannelMach','0.1')
+pressure                       = (bulkVel/bulkMach)**2*RefStatePrim(DENS,IniRefState)/kappa
+RefStatePrim(PRES,IniRefState) = pressure
 ! TODO: ATTENTION only sRho and Pressure of UE filled!!!
-UE(SRHO) = 1./RefStatePrim(1,IniRefState)
-UE(PRES) = RefStatePrim(5,IniRefState)
-RefStatePrim(6,IniRefState) = TEMPERATURE_HE(UE)
+UE(EXT_SRHO)                   = 1./RefStatePrim(DENS,IniRefState)
+UE(EXT_PRES)                   = RefStatePrim(PRES,IniRefState)
+RefStatePrim(TEMP,IniRefState) = TEMPERATURE_HE(UE)
 CALL PrimToCons(RefStatePrim(:,IniRefState),RefStateCons(:,IniRefState))
 
 IF(MPIRoot) THEN
-  WRITE(*,*) 'Bulk velocity based on initial velocity Profile =',uBulk
-  WRITE(*,*) 'Associated Pressure for Mach = ',bulkMach,' is', pressure
+  WRITE(UNIT_stdOut,*) 'Bulk velocity based on initial velocity Profile =',bulkVel
+  WRITE(UNIT_StdOut,*) 'Associated Pressure for Mach = ',bulkMach,' is', pressure
+
+  ! Initialize output of statistics to file
+  ALLOCATE(writeBuf(3,nWriteStats))
+  Filename = TRIM(ProjectName)//'_Stats'
+  varnames(1) = 'dpdx'
+  varnames(2) = 'bulkVel'
+  CALL InitOutputToFile(Filename,'Statistics',2,varnames)
+
 END IF
 
-dpdx = -1. ! Re_tau^2*rho*nu^2/delta^3
-
-IF(.NOT.MPIRoot) RETURN
-
-ALLOCATE(writeBuf(3,nWriteStats))
-Filename = TRIM(ProjectName)//'_Stats'
-varnames(1) = 'dpdx'
-varnames(2) = 'bulkVel'
-CALL InitOutputToFile(Filename,'Statistics',2,varnames)
+#if USE_FFTW
+CALL InitFFT()
+! Allocate array for Reynolds stresses
+IF(MPIRoot) ALLOCATE(RS(0:9,N_FFT/2))
+#endif
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE CHANNEL DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -171,12 +191,12 @@ END SUBROUTINE InitTestcase
 
 
 !==================================================================================================================================
-!> Specifies all the initial conditions. The state in conservative variables is returned.
+!> Initial conditions for the channel testcase. Initializes a velocity profile in the streamwise direction and superimposes
+!> velocity disturbances to accelerate the development of turbulence.
 !==================================================================================================================================
 SUBROUTINE ExactFuncTestcase(tIn,x,Resu,Resu_t,Resu_tt)
 ! MODULES
-USE MOD_Preproc,      ONLY: PP_Pi
-USE MOD_Globals,      ONLY: Abort
+USE MOD_PreProc,      ONLY: PP_PI
 USE MOD_Equation_Vars,ONLY: RefStatePrim,IniRefState
 USE MOD_EOS,          ONLY: PrimToCons
 IMPLICIT NONE
@@ -186,42 +206,43 @@ REAL,INTENT(IN)                 :: x(3),tIn
 REAL,INTENT(OUT)                :: Resu(PP_nVar),Resu_t(PP_nVar),Resu_tt(PP_nVar)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                            :: yplus,prim(PP_nVarPrim),amplitude
+REAL                            :: Prim(PP_nVarPrim)
+REAL                            :: yPlus,Amplitude
 !==================================================================================================================================
-!Channel Testcase: set mu0 = 1/Re_tau, rho=1, pressure adapted, Mach=0.1 according to Moser!!
-!and hence: u_tau=tau=-dp/dx=1, and t=t+=u_tau*t/delta
-Prim(:) = RefStatePrim(:,IniRefState) ! prim=(/1.,0.3,0.,0.,0.71428571/)
+Prim(:) = RefStatePrim(:,IniRefState)
+
+! Initialize mean turbulent velocity profile in x
 IF(x(2).LE.0) THEN
-  yPlus = (x(2)+1.)*Re_tau ! Re_tau=590
+  yPlus = (x(2)+1.)*Re_tau ! Lower half
 ELSE
-  yPlus = (1.-x(2))*Re_tau ! Re_tau=590
+  yPlus = (1.-x(2))*Re_tau ! Upper half
 END IF
-!Prim(2)=uPlus
-Prim(2) = uBulkScale*(1./0.41*log(1+0.41*yPlus)+7.8*(1-exp(-yPlus/11.)-yPlus/11.*exp(-yPlus/3.)))
-!Prim(5)=(uBulk*sqrt(kappa*Prim(5)/Prim(1)))**2*Prim(1)/kappa ! Pressure such that Ma=1/sqrt(kappa*p/rho)
-Amplitude = 0.1*Prim(2)
+Prim(VEL1) = 1./0.41*LOG(1+0.41*yPlus)+7.8*(1-EXP(-yPlus/11.)-yPlus/11.*EXP(-yPlus/3.))
+
+! Superimpose sinusoidal disturbances to accelerate development of turbulence
+Amplitude = 0.1*Prim(VEL1)
 #if EQNSYSNR == 2
-Prim(2)=Prim(2)+sin(20.0*PP_PI*(x(2)/(2.0)))*sin(20.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(2)=Prim(2)+sin(30.0*PP_PI*(x(2)/(2.0)))*sin(30.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(2)=Prim(2)+sin(35.0*PP_PI*(x(2)/(2.0)))*sin(35.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(2)=Prim(2)+sin(40.0*PP_PI*(x(2)/(2.0)))*sin(40.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(2)=Prim(2)+sin(45.0*PP_PI*(x(2)/(2.0)))*sin(45.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(2)=Prim(2)+sin(50.0*PP_PI*(x(2)/(2.0)))*sin(50.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(20.0*PP_PI*(x(2)/(2.0)))*SIN(20.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(30.0*PP_PI*(x(2)/(2.0)))*SIN(30.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(35.0*PP_PI*(x(2)/(2.0)))*SIN(35.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(40.0*PP_PI*(x(2)/(2.0)))*SIN(40.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(45.0*PP_PI*(x(2)/(2.0)))*SIN(45.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL1)=Prim(VEL1)+SIN(50.0*PP_PI*(x(2)/(2.0)))*SIN(50.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
 
-Prim(3)=Prim(3)+sin(30.0*PP_PI*(x(1)/(4*PP_PI)))*sin(30.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(3)=Prim(3)+sin(35.0*PP_PI*(x(1)/(4*PP_PI)))*sin(35.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(3)=Prim(3)+sin(40.0*PP_PI*(x(1)/(4*PP_PI)))*sin(40.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(3)=Prim(3)+sin(45.0*PP_PI*(x(1)/(4*PP_PI)))*sin(45.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
-Prim(3)=Prim(3)+sin(50.0*PP_PI*(x(1)/(4*PP_PI)))*sin(50.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL2)=Prim(VEL2)+SIN(30.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(30.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL2)=Prim(VEL2)+SIN(35.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(35.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL2)=Prim(VEL2)+SIN(40.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(40.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL2)=Prim(VEL2)+SIN(45.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(45.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
+Prim(VEL2)=Prim(VEL2)+SIN(50.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(50.0*PP_PI*(x(3)/(2*PP_PI)))*Amplitude
 
-Prim(4)=Prim(4)+sin(30.0*PP_PI*(x(1)/(4*PP_PI)))*sin(30.0*PP_PI*(x(2)/(2.0)))*Amplitude
-Prim(4)=Prim(4)+sin(35.0*PP_PI*(x(1)/(4*PP_PI)))*sin(35.0*PP_PI*(x(2)/(2.0)))*Amplitude
-Prim(4)=Prim(4)+sin(40.0*PP_PI*(x(1)/(4*PP_PI)))*sin(40.0*PP_PI*(x(2)/(2.0)))*Amplitude
-Prim(4)=Prim(4)+sin(45.0*PP_PI*(x(1)/(4*PP_PI)))*sin(45.0*PP_PI*(x(2)/(2.0)))*Amplitude
-Prim(4)=Prim(4)+sin(50.0*PP_PI*(x(1)/(4*PP_PI)))*sin(50.0*PP_PI*(x(2)/(2.0)))*Amplitude
+Prim(VEL3)=Prim(VEL3)+SIN(30.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(30.0*PP_PI*(x(2)/(2.0)))*Amplitude
+Prim(VEL3)=Prim(VEL3)+SIN(35.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(35.0*PP_PI*(x(2)/(2.0)))*Amplitude
+Prim(VEL3)=Prim(VEL3)+SIN(40.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(40.0*PP_PI*(x(2)/(2.0)))*Amplitude
+Prim(VEL3)=Prim(VEL3)+SIN(45.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(45.0*PP_PI*(x(2)/(2.0)))*Amplitude
+Prim(VEL3)=Prim(VEL3)+SIN(50.0*PP_PI*(x(1)/(4*PP_PI)))*SIN(50.0*PP_PI*(x(2)/(2.0)))*Amplitude
 #endif
 
-Prim(6) = 0. ! T does not matter for prim to cons
+Prim(TEMP) = 0. ! T does not matter for prim to cons
 CALL PrimToCons(prim,Resu)
 
 Resu_t =0.
@@ -236,8 +257,8 @@ END SUBROUTINE ExactFuncTestcase
 !==================================================================================================================================
 SUBROUTINE CalcForcing(t,dt)
 ! MODULES
-USE MOD_PreProc
 USE MOD_Globals
+USE MOD_PreProc
 USE MOD_DG_Vars,        ONLY: U
 USE MOD_Mesh_Vars,      ONLY: sJ
 USE MOD_Analyze_Vars,   ONLY: wGPVol,Vol
@@ -256,7 +277,7 @@ INTEGER                         :: i,j,k,iElem
 BulkVel =0.
 DO iElem=1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-    BulkVel = BulkVel+U(2,i,j,k,iElem)/U(1,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem,0)
+    BulkVel = BulkVel+U(MOM1,i,j,k,iElem)/U(DENS,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem,0)
   END DO; END DO; END DO
 END DO
 
@@ -273,12 +294,11 @@ END SUBROUTINE CalcForcing
 SUBROUTINE TestcaseSource(Ut)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Globals
 USE MOD_Mesh_Vars, ONLY:sJ,nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) !< solution time derivative
+REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) !< solution time derivative
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                         :: i,j,k,iElem
@@ -286,54 +306,210 @@ INTEGER                         :: i,j,k,iElem
 ! Apply forcing with the pressure gradient
 DO iElem=1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-    Ut(2,i,j,k,iElem)=Ut(2,i,j,k,iElem) -dpdx/sJ(i,j,k,iElem,0)
-    Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem) -dpdx*BulkVel/sJ(i,j,k,iElem,0)
+    Ut(MOM1,i,j,k,iElem) = Ut(MOM1,i,j,k,iElem) - dpdx/sJ(i,j,k,iElem,0)
+    Ut(ENER,i,j,k,iElem) = Ut(ENER,i,j,k,iElem) - dpdx/sJ(i,j,k,iElem,0)*BulkVel
   END DO; END DO; END DO
 END DO
 END SUBROUTINE TestcaseSource
-
 
 !==================================================================================================================================
 !> Output testcase statistics
 !==================================================================================================================================
 SUBROUTINE WriteStats()
 ! MODULES
-USE MOD_PreProc
-USE MOD_Globals
 USE MOD_Output,       ONLY:OutputToFile
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                  :: ioUnit,openStat,i
 !==================================================================================================================================
 CALL OutputToFile(FileName,writeBuf(1,1:ioCounter),(/2,ioCounter/),RESHAPE(writeBuf(2:3,1:ioCounter),(/2*ioCounter/)))
 ioCounter=0
-
 END SUBROUTINE WriteStats
-
-
 
 !==================================================================================================================================
 !> Specifies periodic hill testcase
 !==================================================================================================================================
 SUBROUTINE AnalyzeTestcase(Time)
 ! MODULES
+USE MOD_PreProc
 USE MOD_Globals
+#if USE_FFTW
+USE MOD_FFT                  ,ONLY: Interpolate_DG2FFT
+USE MOD_FFT_Vars             ,ONLY: N_FFT
+USE MOD_Interpolation_Vars   ,ONLY: NodeType
+USE MOD_DG_Vars              ,ONLY: UPrim
+USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
+USE MOD_Testcase_Vars        ,ONLY: RS
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                 :: Time                   !< simulation time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+#if USE_FFTW
+REAL          :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: UPrim_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+INTEGER       :: i,j,k,jhat
+INTEGER,PARAMETER :: Y = 0
+INTEGER,PARAMETER :: U_MEAN = 1
+INTEGER,PARAMETER :: V_MEAN = 2
+INTEGER,PARAMETER :: W_MEAN = 3
+INTEGER,PARAMETER :: UU = 4
+INTEGER,PARAMETER :: VV = 5
+INTEGER,PARAMETER :: WW = 6
+INTEGER,PARAMETER :: UV = 7
+INTEGER,PARAMETER :: UW = 8
+INTEGER,PARAMETER :: VW = 9
+#endif
 !==================================================================================================================================
 IF(MPIRoot)THEN
   ioCounter=ioCounter+1
   writeBuf(:,ioCounter) = (/Time, dpdx, BulkVel/)
   IF(ioCounter.GE.nWriteStats) CALL WriteStats()
 END IF
+
+#if USE_FFTW
+IF (doComputeSpectra) THEN
+#if USE_MPI
+  ! 1. Get Global Solution and coordinates
+  IF (MPIroot) THEN
+    CALL GetGlobalSolution(PP_nVarPrim,UPrim, UPrim_Global)
+    CALL GetGlobalSolution(3,Elem_xGP, Elem_xGP_Global)
+  ELSE
+    CALL GetGlobalSolution(PP_nVarPrim,UPrim)
+    CALL GetGlobalSolution(3,Elem_xGP)
+  END IF
+#else
+  UPrim_Global = UPrim
+#endif
+
+  IF(MPIroot) THEN
+    ! 3. Interpolate to global equidistant basis
+    CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
+
+    ! 4. Compute means
+    RS(:,:) = 0.
+    DO k=1,N_FFT ! z - spanwise
+      DO i=1,N_FFT ! x - streamwise
+        DO j=1,N_FFT ! y - channel width
+          jhat = j
+          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+
+          RS(U_MEAN,jhat) = RS(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
+          RS(V_MEAN,jhat) = RS(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
+          RS(W_MEAN,jhat) = RS(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
+        END DO
+      END DO
+    END DO
+    RS = RS/REAL(N_FFT**2)/2 ! Normalize
+
+    ! 5. Compute Reynolds stresses and average over x- and z-direction
+    DO k=1,N_FFT ! z - spanwise
+      DO i=1,N_FFT ! x - streamwise
+        DO j=1,N_FFT ! y - channel width
+          jhat = j
+          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+
+          ! First compute fluctuations by removing the mean
+          UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - RS(U_MEAN,jhat)
+          UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - RS(V_MEAN,jhat)
+          UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - RS(W_MEAN,jhat)
+
+          ! Then Compute the Reynolds stresses
+          RS(UU,jhat) = RS(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
+          RS(VV,jhat) = RS(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(WW,jhat) = RS(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(UV,jhat) = RS(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
+          RS(UW,jhat) = RS(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
+          RS(VW,jhat) = RS(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
+        END DO
+      END DO
+    END DO
+    ! Normalize quadratic entries
+    RS(UU:VW,:) = RS(UU:VW,:)/REAL(N_FFT**2)/2
+
+    ! 6. Get coordinates of interpolation points
+    CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
+    !RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+    RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+
+
+    ! Debug writeout
+    WRITE(*,*)      'Y',RS(     Y,:)
+    WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
+    WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
+    WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
+    WRITE(*,*)     'UU',RS(    UU,:)
+    WRITE(*,*)     'VV',RS(    VV,:)
+    WRITE(*,*)     'WW',RS(    WW,:)
+    WRITE(*,*)     'UV',RS(    UV,:)
+    !WRITE(*,*)     'UW',RS(    UW,:)
+    !WRITE(*,*)     'VW',RS(    VW,:)
+  END IF
+END IF
+#endif
+
 END SUBROUTINE AnalyzeTestCase
+
+
+#if USE_MPI
+!==================================================================================================================================
+!> Gathers global colume data across all MPI ranks. THIS IS EXPENSIVE!!!
+!==================================================================================================================================
+SUBROUTINE GetGlobalSolution(nVar,RealArray,RealArrayGlobal)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Mesh_Vars,    ONLY: nElems,nGlobalElems
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)             :: nVar
+REAL,INTENT(IN)                :: RealArray(      nVar,0:PP_N,0:PP_N,0:PP_N,nElems)        !< Real array to write
+REAL,INTENT(INOUT),OPTIONAL    :: RealArrayGlobal(nVar,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)  !< Real array to write
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,ALLOCATABLE               :: RealArray_IN(:),RealArray_OUT(:)
+INTEGER                        :: i,nDOFLocal,nDOFGlobal
+INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+!==================================================================================================================================
+IF (MPIroot .AND. .NOT. PRESENT(RealArrayGlobal)) CALl ABORT(__STAMP__,"It is required to pass the global array on the root rank!")
+
+! First get amount of data on each proc
+nDOFLocal =PRODUCT(SHAPE(RealArray))
+CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
+nDOFGlobal=SUM(nDOFPerRank)
+
+! Flatten input array
+ALLOCATE(RealArray_IN(nDOFLocal))
+RealArray_IN = RESHAPE(RealArray,(/nDOFLocal/))
+
+offsetRank=0
+IF(MPIroot)THEN
+  DO i=2,nProcessors
+    offsetRank(i)=offsetRank(i-1)+nDOFPerRank(i-1)
+  END DO
+  ALLOCATE(RealArray_OUT(nDOFGlobal))
+ELSE
+  ALLOCATE(RealArray_OUT(1)) ! dummy array
+ENDIF
+
+CALL MPI_GATHERV(RealArray_IN ,nDOFLocal,MPI_DOUBLE_PRECISION,&
+                 RealArray_OUT,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+
+IF(MPIroot) RealArrayGlobal = RESHAPE(RealArray_OUT, SHAPE(RealArrayGlobal))
+
+DEALLOCATE(RealArray_IN )
+DEALLOCATE(RealArray_OUT)
+
+END SUBROUTINE GetGlobalSolution
+#endif /* USE_MPI */
+
 
 !==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
@@ -345,6 +521,9 @@ IMPLICIT NONE
 !==================================================================================================================================
 IF(MPIRoot) CALL WriteStats()
 IF(MPIRoot) DEALLOCATE(writeBuf)
+#if USE_FFTW
+IF(MPIRoot) DEALLOCATE(RS)
+#endif
 END SUBROUTINE
 
 
@@ -357,22 +536,20 @@ SUBROUTINE GetBoundaryFluxTestcase(SideID,t,Nloc,Flux,UPrim_master,             
 ! MODULES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-INTEGER,INTENT(IN)   :: SideID
+INTEGER,INTENT(IN)   :: SideID  !< ID of current side
 REAL,INTENT(IN)      :: t       !< current time (provided by time integration scheme)
 INTEGER,INTENT(IN)   :: Nloc    !< polynomial degree
-REAL,INTENT(IN)      :: UPrim_master( PP_nVarPrim,0:Nloc,0:Nloc) !< inner surface solution
+REAL,INTENT(IN)      :: UPrim_master( PP_nVarPrim,0:Nloc,0:ZDIM(Nloc))    !< inner surface solution
 #if PARABOLIC
-                                                           !> inner surface solution gradients in x/y/z-direction
-REAL,INTENT(IN)      :: gradUx_master(PP_nVarPrim,0:Nloc,0:Nloc)
-REAL,INTENT(IN)      :: gradUy_master(PP_nVarPrim,0:Nloc,0:Nloc)
-REAL,INTENT(IN)      :: gradUz_master(PP_nVarPrim,0:Nloc,0:Nloc)
+REAL,INTENT(IN)      :: gradUx_master(PP_nVarLifting,0:Nloc,0:ZDIM(Nloc)) !> inner surface solution gradients in x-direction
+REAL,INTENT(IN)      :: gradUy_master(PP_nVarLifting,0:Nloc,0:ZDIM(Nloc)) !> inner surface solution gradients in y-direction
+REAL,INTENT(IN)      :: gradUz_master(PP_nVarLifting,0:Nloc,0:ZDIM(Nloc)) !> inner surface solution gradients in z-direction
 #endif /*PARABOLIC*/
-                                                           !> normal and tangential vectors on surfaces
-REAL,INTENT(IN)      :: NormVec (3,0:Nloc,0:Nloc)
-REAL,INTENT(IN)      :: TangVec1(3,0:Nloc,0:Nloc)
-REAL,INTENT(IN)      :: TangVec2(3,0:Nloc,0:Nloc)
-REAL,INTENT(IN)      :: Face_xGP(3,0:Nloc,0:Nloc)    !< positions of surface flux points
-REAL,INTENT(OUT)     :: Flux(PP_nVar,0:Nloc,0:Nloc)  !< resulting boundary fluxes
+REAL,INTENT(IN)      :: NormVec (  3,0:Nloc,0:ZDIM(Nloc))  !< normal vectors on surfaces
+REAL,INTENT(IN)      :: TangVec1(  3,0:Nloc,0:ZDIM(Nloc))  !< tangential1 vectors on surfaces
+REAL,INTENT(IN)      :: TangVec2(  3,0:Nloc,0:ZDIM(Nloc))  !< tangential2 vectors on surfaces
+REAL,INTENT(IN)      :: Face_xGP(  3,0:Nloc,0:ZDIM(Nloc))  !< positions of surface flux points
+REAL,INTENT(OUT)     :: Flux(PP_nVar,0:Nloc,0:ZDIM(Nloc))  !< resulting boundary fluxes
 !==================================================================================================================================
 END SUBROUTINE GetBoundaryFluxTestcase
 
@@ -381,10 +558,10 @@ SUBROUTINE GetBoundaryFVgradientTestcase(SideID,t,gradU,UPrim_master)
 USE MOD_PreProc
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-INTEGER,INTENT(IN) :: SideID
-REAL,INTENT(IN)    :: t                                       !< current time (provided by time integration scheme)
-REAL,INTENT(IN)    :: UPrim_master(PP_nVarPrim,0:PP_N,0:PP_N) !< primitive solution from the inside
-REAL,INTENT(OUT)   :: gradU       (PP_nVarPrim,0:PP_N,0:PP_N) !< FV boundary gradient
+INTEGER,INTENT(IN) :: SideID                                   !< ID of current side
+REAL,INTENT(IN)    :: t                                        !< current time (provided by time integration scheme)
+REAL,INTENT(IN)    :: UPrim_master(PP_nVarPrim,0:PP_N,0:PP_NZ) !< primitive solution from the inside
+REAL,INTENT(OUT)   :: gradU       (PP_nVarPrim,0:PP_N,0:PP_NZ) !< FV boundary gradient
 !==================================================================================================================================
 END SUBROUTINE GetBoundaryFVgradientTestcase
 
@@ -393,10 +570,10 @@ SUBROUTINE Lifting_GetBoundaryFluxTestcase(SideID,t,UPrim_master,Flux)
 USE MOD_PreProc
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-INTEGER,INTENT(IN) :: SideID
-REAL,INTENT(IN)    :: t                                       !< current time (provided by time integration scheme)
-REAL,INTENT(IN)    :: UPrim_master(PP_nVarPrim,0:PP_N,0:PP_N) !< primitive solution from the inside
-REAL,INTENT(OUT)   :: Flux(        PP_nVarPrim,0:PP_N,0:PP_N) !< lifting boundary flux
+INTEGER,INTENT(IN) :: SideID                                   !< ID of current side
+REAL,INTENT(IN)    :: t                                        !< current time (provided by time integration scheme)
+REAL,INTENT(IN)    :: UPrim_master(PP_nVarPrim,0:PP_N,0:PP_NZ) !< primitive solution from the inside
+REAL,INTENT(OUT)   :: Flux(     PP_nVarLifting,0:PP_N,0:PP_NZ) !< lifting boundary flux
 !==================================================================================================================================
 END SUBROUTINE Lifting_GetBoundaryFluxTestcase
 
