@@ -31,20 +31,6 @@ ELSE()
 ENDIF()
 
 # =========================================================================
-# SplitDG
-# =========================================================================
-OPTION(FLEXI_SPLIT_DG "Use split DG formulation" OFF)
-IF(FLEXI_SPLIT_DG)
-  ADD_DEFINITIONS(-DSPLIT_DG)
-  IF(FLEXI_NODETYPE STREQUAL "GAUSS")
-    MESSAGE(SEND_ERROR "FLEXI_SPLIT_DG only works on FLEXI_NODETYPE==GAUSS-LOBATTO points.")
-  ENDIF()
-  IF(NOT FLEXI_EQNSYSNAME STREQUAL "navierstokes")
-    MESSAGE(SEND_ERROR "FLEXI_SPLIT_DG only works for FLEXI_EQNSYSNAME==navierstokes.")
-  ENDIF()
-ENDIF()
-
-# =========================================================================
 # Equation system
 # =========================================================================
 SET(FLEXI_EQNSYSNAME "navierstokes" CACHE STRING
@@ -67,6 +53,20 @@ IF(WITHEOS GREATER 0)
   SET(FLEXI_EOS "idealgas" CACHE STRING "Used equation of state (idealgas/table)")
   SET_PROPERTY(CACHE FLEXI_EOS PROPERTY STRINGS idealgas)
   MARK_AS_ADVANCED(FORCE FLEXI_EOS)
+ENDIF()
+
+# =========================================================================
+# SplitDG
+# =========================================================================
+OPTION(FLEXI_SPLIT_DG "Use split DG formulation" OFF)
+IF(FLEXI_SPLIT_DG)
+  ADD_DEFINITIONS(-DSPLIT_DG)
+  IF(FLEXI_NODETYPE STREQUAL "GAUSS")
+    MESSAGE(SEND_ERROR "FLEXI_SPLIT_DG only works on FLEXI_NODETYPE==GAUSS-LOBATTO points.")
+  ENDIF()
+  IF(NOT FLEXI_EQNSYSNAME STREQUAL "navierstokes")
+    MESSAGE(SEND_ERROR "FLEXI_SPLIT_DG only works for FLEXI_EQNSYSNAME==navierstokes.")
+  ENDIF()
 ENDIF()
 
 # =========================================================================
@@ -298,6 +298,15 @@ IF (LIBS_USE_FFTW)
   ADD_DEFINITIONS(-DUSE_FFTW=1)
 ELSE()
   ADD_DEFINITIONS(-DUSE_FFTW=0)
+ENDIF()
+
+# collect sources from SmartRedis Client
+IF (LIBS_USE_SMARTREDIS)
+  FILE(GLOB smartredisF90 ${LIBS_SMARTREDIS_FORTRAN_INCLUDE}/*.F90)
+  LIST(APPEND flexiF90 ${smartredisF90})
+  ADD_DEFINITIONS(-DUSE_SMARTREDIS=1)
+ELSE()
+  ADD_DEFINITIONS(-DUSE_SMARTREDIS=0)
 ENDIF()
 
 # define libs
