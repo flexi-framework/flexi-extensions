@@ -449,14 +449,33 @@ ENDIF()
 # =========================================================================
 OPTION(LIBS_USE_SMARTREDIS "Use SmartRedis Library" OFF)
 IF(LIBS_USE_SMARTREDIS)
-  FIND_LIBRARY(SR_LIB smartredis PATH SR_LIB-NOTFOUND)
-  FIND_LIBRARY(SR_LIB_FORTRAN smartredis_fortran PATH SR_LIB_FORTRAN-NOTFOUND)
-  LIST(APPEND linkedlibs ${SR_LIB})
-  LIST(APPEND linkedlibs ${SR_LIB_FORTRAN})
-  FIND_PATH(SR_INCLUDE smartredis_client PATH SR_INCLUDE-NOTFOUND)
-  INCLUDE_DIRECTORIES(${SR_INCLUDE})
-  ADD_DEFINITIONS(-DUSE_SMARTREDIS=1)
   MESSAGE(STATUS "Building Flexi with SmartRedis")
-ELSE()
-  ADD_DEFINITIONS(-DUSE_SMARTREDIS=0)
+
+  OPTION(LIBS_BUILD_SMARTREDIS "Build SmartRedis Library during Compilation" OFF)
+  IF (LIBS_BUILD_SMARTREDIS)
+    SET (LIBS_SMARTREDIS_DOWNLOAD https://github.com/CrayLabs/SmartRedis.git )
+    SET(LIBS_SMARTREDIS_TAG "v0.2.0" CACHE STRING "SmartRedis version tag")
+    SET(LIBS_SMARTREDIS_DIR ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis)
+
+    # Check if already built
+    IF (NOT EXISTS "${LIBS_SMARTREDIS_DIR}/src/smartredis/install/lib/libsmartredis.so")
+      MESSAGE(STATUS "Build SmartRedis from source.")
+      ExternalProject_Add(smartredis
+        GIT_REPOSITORY ${LIBS_SMARTREDIS_DOWNLOAD}
+        GIT_TAG ${LIBS_SMARTREDIS_TAG}
+        ${${GITSHALLOW}}
+        PREFIX  ${LIBS_SMARTREDIS_DIR}
+        UPDATE_COMMAND ""
+        CONFIGURE_COMMAND make lib
+        BUILD_IN_SOURCE 1
+      )
+      LIST(APPEND SELFBUILTEXTERNALS smartredis)
+    ENDIF()
+  ENDIF()
+  FIND_LIBRARY(LIBS_SMARTREDIS_LIB              smartredis  HINTS $ENV{SMARTREDIS_DIR}/install/lib     ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/lib     )
+  FIND_PATH(   LIBS_SMARTREDIS_INCLUDE          client.h    HINTS $ENV{SMARTREDIS_DIR}/install/include ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/include )
+  FIND_PATH(   LIBS_SMARTREDIS_FORTRAN_INCLUDE  client.F90  HINTS $ENV{SMARTREDIS_DIR}/src/fortran     ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/src/fortran     )
+
+  LIST(APPEND linkedlibs ${LIBS_SMARTREDIS_LIB})
+  INCLUDE_DIRECTORIES(${LIBS_SMARTREDIS_INCLUDE})
 ENDIF()
