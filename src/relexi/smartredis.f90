@@ -106,10 +106,13 @@ INTEGER,INTENT(IN),OPTIONAL    :: Shape_Out(rank)           !< shape of output a
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,ALLOCATABLE               :: RealArray_Global(:)
-INTEGER                        :: i,nValGather(rank),nDOFLocal
+INTEGER                        :: nValGather(rank)
+#if USE_MPI
+INTEGER                        :: i,nDOFLocal
 INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+#endif
 !==================================================================================================================================
-
+#if USE_MPI
 nDOFLocal=PRODUCT(nVal)
 CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
 
@@ -127,6 +130,11 @@ ENDIF
 
 CALL MPI_GATHERV(RealArray,nDOFLocal,MPI_DOUBLE_PRECISION,&
                  RealArray_Global,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+#else
+nValGather = nVal
+ALLOCATE(RealArray_Global(PRODUCT(nValGather)))
+RealArray_Global = RealArray
+#endif /*USE_MPI*/
 
 IF(MPIroot)THEN
   IF (PRESENT(Shape_Out)) THEN
@@ -160,13 +168,15 @@ CHARACTER(LEN=*),INTENT(IN)    :: Key                       !< array name to wri
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,ALLOCATABLE               :: RealArray_Global(:)
+#if USE_MPI
 INTEGER                        :: i,nValGather(rank),nDOFLocal
 INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
+#endif
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 LOGICAL                        :: found = .FALSE.
 !==================================================================================================================================
-
+#if USE_MPI
 nDOFLocal=PRODUCT(nVal)
 CALL MPI_GATHER(nDOFLocal,1,MPI_INTEGER,nDOFPerRank,1,MPI_INTEGER,0,MPI_COMM_FLEXI,iError)
 
@@ -181,6 +191,9 @@ IF(MPIroot) THEN
 ELSE
   ALLOCATE(RealArray_Global(1))
 ENDIF
+#else
+ALLOCATE(RealArray_Global(PRODUCT(nVal)))
+#endif /*USE_MPI*/
 
 IF(MPIroot) THEN
   found = Client%poll_tensor(TRIM(Key), interval, tries)
@@ -189,9 +202,12 @@ IF(MPIroot) THEN
   CALL Client%delete_tensor(TRIM(Key))
 ENDIF
 
+#if USE_MPI
 CALL MPI_ScatterV(RealArray_Global,nDOFPerRank,offsetRank,MPI_DOUBLE_PRECISION,&
                   RealArray,nDOFLocal,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
-
+#else
+RealArray = RealArray_Global
+#endif
 DEALLOCATE(RealArray_Global)
 
 END SUBROUTINE GatheredReadSmartRedis
