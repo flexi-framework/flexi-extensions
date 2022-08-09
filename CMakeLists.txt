@@ -1,8 +1,8 @@
 # =========================================================================
 # Flexi CMake configuration
 # =========================================================================
-# NOTE: use minimum CMake version required by tools/libs (Paraview, HDF5, FFTW)
-CMAKE_MINIMUM_REQUIRED(VERSION 3.5.1)
+# NOTE: use minimum CMake version required
+CMAKE_MINIMUM_REQUIRED(VERSION 3.6.3)
 # Policies (see https://cmake.org/cmake/help/v3.13/manual/cmake-policies.7.html)
 # VERSION_GREATER_EQUAL is incompatible with CMAKE versions < 3.7
 IF(NOT(${CMAKE_VERSION} VERSION_LESS "3.6.0"))
@@ -14,6 +14,39 @@ ENDIF()
 # Required to link visulib against visuReader
 IF(NOT(${CMAKE_VERSION} VERSION_LESS "3.13.0"))
   CMAKE_POLICY(SET CMP0079 NEW)
+ENDIF()
+
+# =========================================================================
+# Git configuration
+# =========================================================================
+# Check where the code originates
+EXECUTE_PROCESS(COMMAND git ls-remote --get-url OUTPUT_VARIABLE GIT_ORIGIN)
+
+# Setup git hooks
+SET(PRECOMMIT_FILE ".githooks/pre-commit")
+
+# Perform checks only if origin points to IAG, other origins can't commit
+IF("${GIT_ORIGIN}" MATCHES ".iag.uni-stuttgart.de")
+  # Check if the pre-commit hooks exits
+  IF (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git/hooks/pre-commit)
+    # Create otherwise
+    EXECUTE_PROCESS(COMMAND mkdir -p ${CMAKE_CURRENT_SOURCE_DIR}/.git/hooks)
+    EXECUTE_PROCESS(COMMAND ln -s ${CMAKE_CURRENT_SOURCE_DIR}/${PRECOMMIT_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/.git/hooks/pre-commit)
+  ELSE()
+    # Check if the hook is the correct symlink and warn otherwise
+    EXECUTE_PROCESS(COMMAND readlink ${CMAKE_CURRENT_SOURCE_DIR}/.git/hooks/pre-commit OUTPUT_VARIABLE PRECOMMIT_LINK OUTPUT_STRIP_TRAILING_WHITESPACE)
+    IF (NOT ${PRECOMMIT_LINK} MATCHES "${CMAKE_CURRENT_SOURCE_DIR}/${PRECOMMIT_FILE}")
+      MESSAGE (WARNING "Custom git pre-commit hook detected. Please ensure to call ${PRECOMMIT_FILE} manually.")
+    ENDIF()
+  ENDIF()
+
+  # Check if the hook actually gets loaded
+  EXECUTE_PROCESS(COMMAND git config --get core.hooksPath OUTPUT_VARIABLE HOOKSPATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+  IF (DEFINED HOOKSPATH  AND NOT "${HOOKSPATH}" STREQUAL "" AND NOT "${HOOKSPATH}" STREQUAL ".git/hooks")
+    # STRING(ASCII 27 ESCAPE)
+    # MESSAGE (STATUS "${ESCAPE}[34mCustom hooks path detected. Please ensure to call ${PRECOMMIT_FILE} manually.${ESCAPE}[0m")
+    MESSAGE (WARNING "Custom git hooks path detected. Please ensure to call ${PRECOMMIT_FILE} manually.")
+  ENDIF()
 ENDIF()
 
 # =========================================================================
@@ -211,12 +244,6 @@ FOREACH (_var IN LISTS flexiVars)
 ENDFOREACH()
 
 # =========================================================================
-# POSTI
-# =========================================================================
-# Determine if FLEXI files for POSTI are needed
-OPTION(POSTI "Build POSTI toolset" ON)
-
-# =========================================================================
 # ADD LIBRARIES
 # =========================================================================
 INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/CMakeListsLib.txt)
@@ -229,6 +256,7 @@ INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt)
 # =========================================================================
 # POSTI
 # =========================================================================
+OPTION(POSTI "Build POSTI toolset" OFF)
 IF(POSTI)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/posti/CMakeLists.txt)
 ELSE()

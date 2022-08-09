@@ -14,9 +14,9 @@
 #include "flexi.h"
 #include "eos.h"
 
-#if FV_ENABLED
-#error "This testcase is not tested with FV"
-#endif
+!#if FV_ENABLED
+!#error "This testcase is not tested with FV"
+!#endif
 
 !==================================================================================================================================
 !> Subroutines defining homogenenous isotropic turbulence with linear forcing

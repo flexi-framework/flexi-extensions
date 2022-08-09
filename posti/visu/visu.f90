@@ -64,7 +64,7 @@ USE MOD_HDF5_Input     ,ONLY: DatasetExists,HSize,nDims,ReadArray
 USE MOD_StringTools    ,ONLY: STRICMP
 USE MOD_Restart        ,ONLY: InitRestartFile
 USE MOD_Restart_Vars   ,ONLY: RestartMode
-USE MOD_Visu_Vars      ,ONLY: FileType,VarNamesHDF5,nBCNamesAll,nVarIni
+USE MOD_Visu_Vars      ,ONLY: FileType,VarNamesHDF5,nBCNamesAll,nVarIni,nVar_State
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 CHARACTER(LEN=255),INTENT(IN)                       :: statefile
@@ -117,13 +117,20 @@ ELSE IF (ISVALIDHDF5FILE(statefile)) THEN ! other file
         ! This routine requires the file to be closed
         CALL InitRestartFile(statefile)
         CALL OpenDataFile(statefile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-        IF (RestartMode.EQ.2 .OR. RestartMode.EQ.3) THEN
-          SDEALLOCATE(VarNamesHDF5)
-          CALL GetVarNames("VarNames_Mean",VarNamesHDF5,VarNamesExist)
-          FileType = 'State'
-        ELSE
-          FileType = 'Generic'
-        END IF
+        SELECT CASE(RestartMode)
+          CASE(0)
+            SDEALLOCATE(VarNamesHDF5)
+            CALL GetVarNames("VarNames_Mean",VarNamesHDF5,VarNamesExist)
+            FileType = 'Generic'
+          CASE(2,3)
+            SDEALLOCATE(VarNamesHDF5)
+            CALL GetVarNames("VarNames_Mean",VarNamesHDF5,VarNamesExist)
+            FileType = 'State'
+            ! When restarting from a time-averaged file, we convert to U array to PP_nVar
+            nVar_State = PP_nVar
+          CASE DEFAULT
+            FileType = 'Generic'
+        END SELECT
       END IF
   END SELECT
 
@@ -292,8 +299,6 @@ ELSE
 #else
   CALL GetDataProps(nVar_State,N_State,nElems_State,NodeType_State,'Mean')
 #endif /* PP_N==N */
-  ! When restarting from a time-averaged file, we convert to U array to PP_nVar
-  nVar_State = PP_nVar
 END IF
 #endif /* EQNSYSNR != 1 */
 
@@ -449,6 +454,7 @@ USE MOD_Posti_Mappings      ,ONLY: Build_mapBCSides
 USE MOD_Visu_Avg2D          ,ONLY: Average2D,WriteAverageToHDF5
 USE MOD_Interpolation_Vars  ,ONLY: NodeType,NodeTypeVISUFVEqui
 USE MOD_IO_HDF5             ,ONLY: InitMPIInfo
+USE MOD_Restart_Vars        ,ONLY: RestartMode
 IMPLICIT NONE
 ! INPUT / OUTPUT VARIABLES
 INTEGER,INTENT(IN)               :: mpi_comm_IN
@@ -710,10 +716,11 @@ DGonly_old            = DGonly
 Avg2D_old             = Avg2D
 NodeTypeVisuPosti_old = NodeTypeVisuPosti
 NState_old            = PP_N
+RestartMode           = -1
 
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(*,*) "Visu finished for state file: ", TRIM(statefile)
-SWRITE(UNIT_StdOut,'(132("="))')
+SWRITE(UNIT_stdOut,'(132("="))')
 END SUBROUTINE visu
 
 !===================================================================================================================================
@@ -726,7 +733,6 @@ USE MOD_DG                   ,ONLY: FinalizeDG
 USE MOD_DG_Vars
 USE MOD_Equation             ,ONLY: FinalizeEquation
 USE MOD_Filter               ,ONLY: FinalizeFilter
-USE MOD_Indicator            ,ONLY: FinalizeIndicator
 USE MOD_Interpolation        ,ONLY: FinalizeInterpolation
 USE MOD_IO_HDF5              ,ONLY: FinalizeIOHDF5
 USE MOD_Mesh                 ,ONLY: FinalizeMesh
@@ -740,6 +746,7 @@ USE MOD_Visu_Vars
 USE MOD_Lifting              ,ONLY: FinalizeLifting
 #endif
 #if FV_ENABLED
+USE MOD_Indicator            ,ONLY: FinalizeIndicator
 USE MOD_FV_Basis             ,ONLY: FinalizeFV_Basis
 #endif /* FV_ENABLED */
 #if USE_MPI
@@ -748,7 +755,7 @@ USE MOD_MPI                  ,ONLY: FinalizeMPI
 IMPLICIT NONE
 !===================================================================================================================================
 
-SWRITE (Unit_stdOut,'(A)') 'VISU FINALIZE'
+SWRITE (UNIT_stdOut,'(A)') 'VISU FINALIZE'
 
 IF(MPIRoot)THEN
   IF(FILEEXISTS('.posti.ini'))THEN
@@ -797,7 +804,6 @@ SDEALLOCATE(U)
 SDEALLOCATE(Elem_xGP)
 
 CALL FinalizeRestart()
-CALL FinalizeIndicator()
 CALL FinalizeEquation()
 CALL FinalizeDG()
 CALL FinalizeOverintegration()
@@ -808,6 +814,7 @@ CALL FinalizeInterpolation()
 CALL FinalizeMesh()
 CALL FinalizeIOHDF5()
 #if FV_ENABLED
+CALL FinalizeIndicator()
 CALL FinalizeFV_Basis()
 #endif /* FV_ENABLED */
 CALL FinalizeMortar()

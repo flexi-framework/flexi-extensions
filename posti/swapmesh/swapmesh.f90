@@ -227,7 +227,7 @@ CALL ReadAttribute(File_ID,'Ngeo',1,IntScalar=NGeo)
 ! Get the number of elements in the mesh file by reading the size of the ElemInfo array
 CALL GetDataSize(File_ID,'ElemInfo',nDims,HSize)
 IF(HSize(1).NE.6) THEN
-  CALL abort(__STAMP__,&
+  CALL Abort(__STAMP__,&
     'ERROR: Wrong size of ElemInfo, should be 6')
 END IF
 CHECKSAFEINT(HSize(2),4)
@@ -257,7 +257,7 @@ END IF
 
 #if (PP_dim == 2)
 ! If this is a two dimensional calculation, all subsequent operations are performed on the reduced mesh.
-SWRITE(UNIT_StdOut,'(A)') " RUNNING A 2D SIMULATION! "
+SWRITE(UNIT_stdOut,'(A)') " RUNNING A 2D SIMULATION! "
 ! The mesh coordinates read in by the readMesh routine are therefore reduced by one dimension.
 CALL to2D_rank5((/1,0,0,0,1/),(/3,NGeo,NGeo,NGeo,nElems/),4,NodeCoords)
 NodeCoords(3,:,:,:,:) = 0.
@@ -279,7 +279,7 @@ IF (PRESENT(Elem_IJK)) THEN
     ALLOCATE(Elem_IJK(3,nElems))
     CALL ReadArray('Elem_IJK',2,(/3,nElems/),0,2,IntArray=Elem_IJK)
   ELSE
-  CALL abort(__STAMP__,&
+  CALL Abort(__STAMP__,&
     'ERROR: Not a IJK sorted mesh!')
   END IF
 END IF
@@ -343,8 +343,9 @@ END SUBROUTINE prepareVandermonde
 !===================================================================================================================================
 SUBROUTINE ReadOldStateFile(StateFile)
 ! MODULES                                                                                                                          !
-USE MOD_Globals,       ONLY: abort
-USE MOD_HDF5_Input,    ONLY: OpenDataFile,CloseDataFile,ReadArray,ReadAttribute,GetDataSize
+USE MOD_Globals,       ONLY: Abort,PrintWarning
+USE MOD_StringTools,   ONLY: STRICMP
+USE MOD_HDF5_Input,    ONLY: OpenDataFile,CloseDataFile,ReadArray,ReadAttribute,GetDataSize,GetVarNames
 USE MOD_IO_HDF5,       ONLY: File_ID,HSize
 USE MOD_Swapmesh_Vars, ONLY: nVar_State,NState,nElemsOld,Time_State,UOld,NNew,nElemsNew
 USE MOD_ReadInTools,   ONLY: ExtractParameterFile,ModifyParameterFile
@@ -360,10 +361,11 @@ IMPLICIT NONE
 CHARACTER(LEN=255),INTENT(IN)      :: StateFile !< State file to be read
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-LOGICAL                          :: userblockFound
+LOGICAL                          :: userblockFound,VarNamesExist
 CHARACTER(LEN=255)               :: prmfile=".parameter.ini"
 CHARACTER(LEN=255)               :: FileType
-CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_TimeAvg(:)     !< List of varnames in TimeAvg-File
+CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_TimeAvg( :)     !< List of varnames in TimeAvg-File
+CHARACTER(LEN=255),ALLOCATABLE   :: VarNames_ElemData(:)     !< List of varnames for element-wise data
 REAL,ALLOCATABLE                 :: UMean(  :,:,:,:,:)      !< Mean solution from old TimeAvg state
 REAL,ALLOCATABLE                 :: U_local(:,:,:,:,:)
 INTEGER                          :: iVar,nVarsFound,nDims
@@ -399,7 +401,7 @@ CASE('TimeAvg')
       U_local(nVarsFound,:,:,:,:)=UMean(iVar,:,:,:,:)
     END IF
   END DO
-  IF(nVarsFound .NE. SIZE(StrVarNames) ) CALL abort(__STAMP__,&
+  IF(nVarsFound .NE. SIZE(StrVarNames) ) CALL Abort(__STAMP__,&
     'TimeAvg file does not contain all necessary variables for converting to state')
 END SELECT
 
@@ -433,9 +435,21 @@ CALL ModifyParameterFile(TRIM(prmfile),'N',NNew,userblockFound)
 CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(prmfile)//C_NULL_CHAR)
 INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
 
+! Check for FV in solution
+CALL GetVarNames('VarNamesAdd',VarNames_ElemData,VarNamesExist)
+IF (VarNamesExist) THEN
+  nVarsFound =  SIZE(VarNames_ElemData)
+  DO iVar=1,nVarsFound
+    IF (STRICMP(TRIM(VarNames_ElemData(iVar)),'FV_Elems')) &
+      CALL PrintWarning('The Swapmesh tool does not support FV subcells at the moment!\n&
+                        &FV cells are interpreted as DG cells, which might cause interpolation errors or even invalid solutions!')
+  END DO
+END IF
+
 ! Close the data file
 CALL CloseDataFile()
 SDEALLOCATE(VarNames_TimeAvg)
+SDEALLOCATE(VarNames_ElemData)
 SDEALLOCATE(UMean)
 DEALLOCATE(U_local)
 END SUBROUTINE ReadOldStateFile

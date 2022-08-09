@@ -109,9 +109,9 @@ RestartFile = RestartFile_in
 ! Check if we want to perform a restart
 IF (LEN_TRIM(RestartFile).LE.0) RETURN
 
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' CHECK RESTART FILE...'
-SWRITE(UNIT_StdOut,'(A,A,A)')' | Checking restart from file "',TRIM(RestartFile),'":'
+SWRITE(UNIT_stdOut,'(A,A,A)')' | Checking restart from file "',TRIM(RestartFile),'":'
 ! Check if restart file is a valid state. This routine requires the file to be closed.
 validHDF5 = ISVALIDHDF5FILE(RestartFile)
 IF(.NOT.validHDF5) &
@@ -127,7 +127,7 @@ IF (.NOT.RestartMean) THEN
 #endif /* EQNSYSNR != 1 */
   CALL GetDataProps(nVar_Restart,N_Restart,nElems_Restart,NodeType_Restart)
   RestartMode = 1
-  SWRITE(UNIT_StdOut,'(A)') ' | Restarting from state file ...'
+  SWRITE(UNIT_stdOut,'(A)') ' | Restarting from state file ...'
 #if EQNSYSNR != 1
 ELSE
   CALL GetDataProps(nVar_Restart,N_Restart,nElems_Restart,NodeType_Restart,'Mean')
@@ -173,10 +173,10 @@ ELSE
   ! Use conservative variables available
   IF (ALL(RestartCons.NE.-1)) THEN
     RestartMode = 2
-    SWRITE(UNIT_StdOut,'(A)') ' | Restarting from time-averaged file using conservative variables ...'
+    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using conservative variables ...'
   ELSE IF (ALL(RestartPrim.NE.-1)) THEN
     RestartMode = 3
-    SWRITE(UNIT_StdOut,'(A)') ' | Restarting from time-averaged file using primitive variables ...'
+    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using primitive variables ...'
   ELSE
     RestartMode = 0
   END IF
@@ -186,7 +186,7 @@ END IF
 CALL CloseDataFile()
 
 SWRITE(UNIT_stdOut,'(A)') ' CHECK RESTART FILE DONE'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 
 END SUBROUTINE InitRestartFile
 
@@ -199,7 +199,7 @@ END SUBROUTINE InitRestartFile
 !> - In the restart case, it is checked if the restart file exists at all. If so, the properties of the restart file will be
 !>   read (polynomial degree and node type are needed) and stored to use later.The flag DoRestart indicating the restart is set
 !>   to be used by other routines. Also the simulation time of the restart is read.
-!>   A optional parameter ResetTime can be used to set the restart time to 0.
+!>   An optional parameter ResetTime can be used to set the restart time to 0.
 !> - If no restart is performed, the RestartTime is set to 0.
 !>
 !> The routine also checks if the node type and polynomial degree of the restart file is the same than in the current simulation.
@@ -234,7 +234,7 @@ END IF
 ! If not done previously, check the restart file
 IF (RestartMode.EQ.-1) CALL InitRestartFile(RestartFile_in)
 
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT RESTART...'
 
 ! Check if we want to perform a restart
@@ -242,7 +242,7 @@ IF (LEN_TRIM(RestartFile).GT.0) THEN
   ! Restart not possible, some variables might be missing
   IF (RestartMode.LT. 1) CALL CollectiveStop(__STAMP__,'Provided file for restart has not all conservative/primitive variables available!')
 
-  SWRITE(UNIT_StdOut,'(A,A,A)')' | Restarting from file "',TRIM(RestartFile),'":'
+  SWRITE(UNIT_stdOut,'(A,A,A)')' | Restarting from file "',TRIM(RestartFile),'":'
   ! Check if restart file is a valid state
   validHDF5 = ISVALIDHDF5FILE(RestartFile)
   IF(.NOT.validHDF5) CALL CollectiveStop(__STAMP__,'ERROR - Restart file not a valid state file.')
@@ -264,7 +264,7 @@ IF (LEN_TRIM(RestartFile).GT.0) THEN
 ! No restart
 ELSE
   RestartTime = 0.
-  SWRITE(UNIT_StdOut,'(A)')' | No restart wanted, doing a fresh computation!'
+  SWRITE(UNIT_stdOut,'(A)')' | No restart wanted, doing a fresh computation!'
 END IF
 
 ! Check if we need to interpolate the restart file to our current polynomial degree and node type
@@ -281,7 +281,7 @@ END IF
 
 RestartInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT RESTART DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 
 END SUBROUTINE InitRestart
 
@@ -319,11 +319,13 @@ USE MOD_Mesh_Vars,          ONLY: offsetElem,detJac_Ref,Ngeo
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems
 USE MOD_Restart_Vars
 #if FV_ENABLED
-USE MOD_FV,                 ONLY: FV_ProlongFVElemsToFace
 USE MOD_FV_Vars,            ONLY: FV_Elems
+#endif
+#if FV_ENABLED == 1
+USE MOD_FV_Switching,       ONLY: FV_ProlongFVElemsToFace
 USE MOD_Indicator_Vars,     ONLY: IndValue
 USE MOD_StringTools,        ONLY: STRICMP
-#endif
+#endif /*FV_ENABLED==1*/
 #if PP_dim == 3
 USE MOD_2D,                 ONLY: ExpandArrayTo3D
 #else
@@ -345,21 +347,21 @@ REAL,ALLOCATABLE   :: JNR(:,:,:,:)
 REAL               :: Vdm_NRestart_N(0:PP_N,0:N_Restart)
 REAL               :: Vdm_3Ngeo_NRestart(0:N_Restart,0:3*NGeo)
 LOGICAL            :: doFlushFiles_loc
-#if FV_ENABLED
+#if FV_ENABLED == 1
 INTEGER             :: nVal(15)
 REAL,ALLOCATABLE    :: ElemData(:,:),tmp(:)
 CHARACTER(LEN=255),ALLOCATABLE :: VarNamesElemData(:)
-#endif
+#endif /*FV_ENABLED==1*/
 !==================================================================================================================================
 
 doFlushFiles_loc = MERGE(doFlushFiles,.TRUE.,PRESENT(doFlushFiles))
 
 IF (DoRestart) THEN
-  SWRITE(UNIT_StdOut,'(132("-"))')
+  SWRITE(UNIT_stdOut,'(132("-"))')
   SWRITE(UNIT_stdOut,'(A)') ' PERFORMING RESTART...'
 
   CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-#if FV_ENABLED
+#if FV_ENABLED == 1
   ! Read FV element distribution and indicator values from elem data array if possible
   CALL GetArrayAndName('ElemData','VarNamesAdd',nVal,tmp,VarNamesElemData)
   IF (ALLOCATED(VarNamesElemData)) THEN
@@ -376,12 +378,15 @@ IF (DoRestart) THEN
         IndValue = ElemData(iVar,:)
       END IF
     END DO
+  ELSE
+    IndValue=0.
+    FV_Elems=0.
   END IF
   SDEALLOCATE(ElemData)
   SDEALLOCATE(VarNamesElemData)
   SDEALLOCATE(tmp)
   CALL FV_ProlongFVElemsToFace()
-#endif
+#endif /*FV_ENABLED==1*/
 
   ! Mean files only have a dummy DG_Solution, we have to pick the "Mean" array in this case
   IF (RestartMode.GT.1) THEN

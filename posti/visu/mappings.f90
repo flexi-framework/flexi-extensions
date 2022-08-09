@@ -142,7 +142,11 @@ ELSE
   nElems_DG = nElems
   nElems_FV = 0
   NVisu_FV = 1
+#if FV_RECONSTRUCT
+  NCalc_FV = NVisu_FV
+#else
   NCalc_FV = 0
+#endif
 
   ! build the mapping, that holds the global indices of all DG elements
   SDEALLOCATE(mapDGElemsToAllElems)
@@ -258,6 +262,13 @@ DO iVar=1,nVarIni
     END IF
   END DO
 END DO
+
+! Warn the user when restarting from a time-averaged file and no mapping was found
+IF (nVarVisu.EQ.0 .AND. RestartMode.EQ.0) THEN
+  CALL PrintWarning('Trying to visualize a time-averaged file but no corresponding variable was found.\n'//&
+                    'Derived quantities are not available if file is missing conservative/primite variables.\n'//&
+                    'To access mean quantites, please prepend VarName with "Mean:VarName", "MeanSquare:VarName" or "Fluc:VarName"!')
+END IF
 
 ! check whether gradients are needed for any quantity
 DO iVar=1,nVarDep

@@ -136,7 +136,7 @@ IF((.NOT.InterpolationInitIsDone).OR.MeshInitIsDone) THEN
     'InitMesh not ready to be called or already called.')
 END IF
 
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A,I1,A)') ' INIT MESH IN MODE ',meshMode,'...'
 
 ! prepare pointer structure (get nElems, etc.)
@@ -163,7 +163,7 @@ CALL readMesh(MeshFile) !set nElems
 
 #if (PP_dim == 2)
 ! If this is a two dimensional calculation, all subsequent operations are performed on the reduced mesh.
-SWRITE(UNIT_StdOut,'(A)') " RUNNING A 2D SIMULATION! "
+SWRITE(UNIT_stdOut,'(A)') " RUNNING A 2D SIMULATION! "
 ! The mesh coordinates read in by the readMesh routine are therefore reduced by one dimension.
 CALL to2D_rank5((/1,0,0,0,1/),(/3,NGeo,NGeo,NGeo,nElems/),4,NodeCoords)
 NodeCoords(3,:,:,:,:) = 0.
@@ -208,7 +208,7 @@ IF(NGeoOverride.GT.0)THEN
   DEALLOCATE(CoordsTmp, Vdm_EQNGeo_EQNGeoOverride)
 END IF
 
-SWRITE(UNIT_StdOut,'(a3,a30,a3,i0)')' | ','Ngeo',' | ', Ngeo
+SWRITE(UNIT_stdOut,'(a3,a30,a3,i0)')' | ','Ngeo',' | ', Ngeo
 
 ! scale and deform mesh if desired (warning: no mesh output!)
 meshScale=GETREAL('meshScale','1.0')
@@ -335,26 +335,26 @@ IF (meshMode.GT.1) THEN
 
   ! volume data
   ALLOCATE(      dXCL_N(3,3,0:PP_N,0:PP_N,0:PP_NZ,nElems)) ! temp
-  ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
-  ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
-  ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
-  ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_ENABLED))
+  ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_SIZE))
+  ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_SIZE))
+  ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_SIZE))
+  ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_NZ,nElems,0:FV_SIZE))
   ALLOCATE(     scaledJac(  0:PP_N,0:PP_N,0:PP_NZ,nElems))
   NGeoRef=3*NGeo ! build jacobian at higher degree
-  ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:ZDIM(NGeoRef),nElems))
+  ALLOCATE(    DetJac_Ref(1,0:NGeoRef,0:NGeoRef,0:ZDIM(NGeoRef),nElems))
 
   ! surface data
-  ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
-  ALLOCATE(       NormVec(3,0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
-  ALLOCATE(      TangVec1(3,0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
-  ALLOCATE(      TangVec2(3,0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
-  ALLOCATE(      SurfElem(  0:PP_N,0:PP_NZ,0:FV_ENABLED,1:nSides))
-  ALLOCATE(     Ja_Face(3,3,0:PP_N,0:PP_NZ,             1:nSides)) ! temp
+  ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_NZ,0:FV_SIZE,1:nSides))
+  ALLOCATE(       NormVec(3,0:PP_N,0:PP_NZ,0:FV_SIZE,1:nSides))
+  ALLOCATE(      TangVec1(3,0:PP_N,0:PP_NZ,0:FV_SIZE,1:nSides))
+  ALLOCATE(      TangVec2(3,0:PP_N,0:PP_NZ,0:FV_SIZE,1:nSides))
+  ALLOCATE(      SurfElem(  0:PP_N,0:PP_NZ,0:FV_SIZE,1:nSides))
+  ALLOCATE(     Ja_Face(3,3,0:PP_N,0:PP_NZ,          1:nSides)) ! temp
 
 #if FV_ENABLED
   ! NOTE: initialize with 1 and not with 0
-  ALLOCATE(sJ_master(1,0:PP_N,0:PP_NZ,1:nSides,0:FV_ENABLED))
-  ALLOCATE(sJ_slave( 1,0:PP_N,0:PP_NZ,1:nSides,0:FV_ENABLED))
+  ALLOCATE(sJ_master(1,0:PP_N,0:PP_NZ,1:nSides,0:FV_SIZE))
+  ALLOCATE(sJ_slave( 1,0:PP_N,0:PP_NZ,1:nSides,0:FV_SIZE))
   sJ_master = 1.
   sJ_slave  = 1.
 #endif
@@ -402,7 +402,7 @@ CALL AddToElemData(ElementOut,'myRank',IntScalar=myRank)
 
 MeshInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MESH DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 END SUBROUTINE InitMesh
 
 !============================================================================================================================
@@ -428,12 +428,10 @@ SDEALLOCATE(AnalyzeSide)
 SDEALLOCATE(MortarType)
 SDEALLOCATE(MortarInfo)
 
-
 ! allocated during ReadMesh
 SDEALLOCATE(NodeCoords)
 SDEALLOCATE(BoundaryName)
 SDEALLOCATE(BoundaryType)
-
 
 ! Volume
 SDEALLOCATE(Elem_xGP)

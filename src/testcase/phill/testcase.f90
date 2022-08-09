@@ -19,10 +19,10 @@
 #endif
 
 !==================================================================================================================================
-!> Ercoftac periodic hill testcase 
+!> Ercoftac periodic hill testcase
 !> http://www.kbwiki.ercoftac.org/w/index.php/Abstr:2D_Periodic_Hill_Flow
 !==================================================================================================================================
-MODULE MOD_Testcase
+MODULE MOD_TestCase
 ! MODULES
 IMPLICIT NONE
 PRIVATE
@@ -53,8 +53,8 @@ INTERFACE TestcaseSource
   MODULE PROCEDURE TestcaseSource
 END INTERFACE
 
-INTERFACE AnalyzeTestCase
-  MODULE PROCEDURE DO_NOTHING
+INTERFACE AnalyzeTestcase
+  MODULE PROCEDURE DO_NOTHING_LOG
 END INTERFACE
 
 INTERFACE GetBoundaryFluxTestcase
@@ -75,7 +75,7 @@ PUBLIC:: FinalizeTestcase
 PUBLIC:: ExactFuncTestcase
 PUBLIC:: TestcaseSource
 PUBLIC:: CalcForcing
-PUBLIC:: AnalyzeTestCase
+PUBLIC:: AnalyzeTestcase
 PUBLIC:: GetBoundaryFluxTestcase
 PUBLIC:: GetBoundaryFVgradientTestcase
 PUBLIC:: Lifting_GetBoundaryFluxTestcase
@@ -121,7 +121,7 @@ INTEGER                  :: ioUnit,openStat,i
 REAL                     :: maxMemory
 CHARACTER(LEN=20)        :: varnames(4)
 !==================================================================================================================================
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE PERIODIC HILL...'
 
 #if FV_ENABLED
@@ -139,7 +139,7 @@ massFlowBC=-1
 DO i=1,nBCs
   IF(TRIM(BoundaryName(i)).EQ.TRIM(massFlowBCName)) massFlowBC=i
 END DO
-IF(massFlowBC.EQ.-1) CALL abort(__STAMP__,'No inflow BC found.')
+IF(massFlowBC.EQ.-1) CALL Abort(__STAMP__,'No inflow BC found.')
 
 IF(.NOT.MPIRoot) RETURN
 
@@ -151,7 +151,7 @@ varnames(4) = 'massFlowRatePeriodic'
 CALL InitOutputToFile(Filename,'Statistics',4,varnames)
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE PERIODIC HILL DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 END SUBROUTINE InitTestcase
 
 
@@ -213,7 +213,7 @@ h=max(0.,&
 ELSEIF(xloc.GT.54.)THEN
 h=  0.
 ELSE
-  CALL abort(__STAMP__,&
+  CALL Abort(__STAMP__,&
              'Wrong hill geometry')
 END IF
 h=h/28.
@@ -375,14 +375,21 @@ USE MOD_Globals      ,ONLY:MPIRoot
 USE MOD_TestCase_Vars,ONLY:writeBuf
 IMPLICIT NONE
 !==================================================================================================================================
-IF(MPIRoot) CALL WriteStats()
 IF(MPIRoot) DEALLOCATE(writeBuf)
 END SUBROUTINE
 
 
-SUBROUTINE DO_NOTHING(optionalREAL,optionalREAL2)
-REAL, OPTIONAL  :: optionalREAL,optionalREAL2
-END SUBROUTINE DO_NOTHING
+! SUBROUTINE DO_NOTHING(optionalREAL,optionalREAL2)
+! IMPLICIT NONE
+! REAL,OPTIONAL,INTENT(IN)    :: optionalREAL,optionalREAL2
+! END SUBROUTINE DO_NOTHING
+
+
+SUBROUTINE DO_NOTHING_LOG(optionalREAL,optionalLOG)
+IMPLICIT NONE
+REAL,OPTIONAL,INTENT(IN)    :: optionalREAL
+LOGICAL,OPTIONAL,INTENT(IN) :: optionalLOG
+END SUBROUTINE DO_NOTHING_LOG
 
 
 SUBROUTINE GetBoundaryFluxTestcase(SideID,t,Nloc,Flux,UPrim_master,                   &
@@ -434,4 +441,4 @@ REAL,INTENT(OUT)   :: Flux(     PP_nVarLifting,0:PP_N,0:PP_NZ) !< lifting bounda
 !==================================================================================================================================
 END SUBROUTINE Lifting_GetBoundaryFluxTestcase
 
-END MODULE MOD_Testcase
+END MODULE MOD_TestCase

@@ -43,6 +43,9 @@ USE MOD_MPI,                     ONLY: InitMPIvars,FinalizeMPI
 #endif
 USE MOD_SwapMesh,                ONLY: InitSwapmesh,ReadOldStateFile,WriteNewStateFile,FinalizeSwapMesh
 USE MOD_InterpolateSolution,     ONLY: InterpolateSolution
+#if FV_ENABLED
+USE MOD_FV_Basis,                ONLY: InitFV_Basis,FinalizeFV_Basis
+#endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -68,7 +71,7 @@ CALL prms%CreateLogicalOption(  "useCurvedsOld"      , "Controls usage of high-o
 CALL prms%CreateLogicalOption(  "useCurvedsNew"      , "Controls usage of high-order information in new mesh. Turn off to discard "//&
                                                        "high-order data and treat curved meshes as linear meshes.", '.TRUE.')
 CALL prms%CreateIntOption(      "NInter"             , "Polynomial degree used for interpolation on new mesh (should be equal or  "//&
-                                                       "higher than NNew) - the state will be interpolated to this degree and then "//& 
+                                                       "higher than NNew) - the state will be interpolated to this degree and then "//&
                                                        "projected down to NNew")
 CALL prms%CreateIntOption(      "NNew"               , "Polynomial degree used in new state files")
 CALL prms%CreateIntOption(      "NSuper"             , "Polynomial degree used for supersampling on the old mesh, used to get an "//&
@@ -120,6 +123,11 @@ CALL InitSwapmesh()
 CALL InitMPIvars()
 #endif
 
+#if FV_ENABLED
+! Required since it allocates some quantities written as HDF5 attributes to state file
+CALL InitFV_Basis()
+#endif
+
 ! Evaluate solution at new solution nodes
 DO iArg=2,nArgs
   ! Check if a .h5 file has been given to the swapmesh tool
@@ -143,14 +151,17 @@ DO iArg=2,nArgs
 END DO
 
 CALL FinalizeSwapMesh()
-#if USE_MPI
-CALL MPI_FINALIZE(iError)
-IF(iError .NE. 0) &
-  CALL abort(__STAMP__,'MPI finalize error',iError)
-CALL FinalizeMPI()
+#if FV_ENABLED
+CALL FinalizeFV_Basis()
 #endif
-WRITE(UNIT_stdOut,'(132("="))')
-WRITE(UNIT_stdOut,'(A)') ' SWAPMESH TOOL FINISHED! '
-WRITE(UNIT_stdOut,'(132("="))')
+#if USE_MPI
+CALL FinalizeMPI()
+CALL MPI_FINALIZE(iError)
+IF(iError .NE. 0) STOP 'MPI finalize error'
+#endif
+
+SWRITE(UNIT_stdOut,'(132("="))')
+SWRITE(UNIT_stdOut,'(A)') ' SWAPMESH TOOL FINISHED! '
+SWRITE(UNIT_stdOut,'(132("="))')
 
 END PROGRAM swapMesh
