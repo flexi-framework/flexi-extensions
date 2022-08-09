@@ -155,9 +155,9 @@ REAL,ALLOCATABLE         :: HIT_local(:,:,:,:,:)
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
 
-#if FV_ENABLED
-CALL CollectiveStop(__STAMP__,'The testcase has not been implemented for FV yet!')
-#endif
+!#if FV_ENABLED
+!CALL CollectiveStop(__STAMP__,'The testcase has not been implemented for FV yet!')
+!#endif
 
 ! Read only rho from IniRefState for initial condition
 HIT_rho = RefStatePrim(1,IniRefState)
@@ -389,7 +389,7 @@ END SUBROUTINE TestcaseSource
 !==================================================================================================================================
 !> Perform HIT-specific analysis: compute dissipation rates, kinetic energy and Reynolds number
 !==================================================================================================================================
-SUBROUTINE AnalyzeTestcase(t)
+SUBROUTINE AnalyzeTestcase(t,doFlush)
 ! MODULES
 USE MOD_Globals
 #if PP_N==N
@@ -413,6 +413,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                 :: t                      !< simulation time
+LOGICAL,INTENT(IN)              :: doFlush                !< indicate that data has to be written
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                         :: i,j,k,p,q,iElem
@@ -577,7 +578,7 @@ IF (MPIRoot) THEN
   writeBuf(1:nHITVars,ioCounter) = (/DR_S,DR_Sd+DR_p,Ekin,Ekin_comp,uRMS,Reynolds,A_ILF_Glob/)
 
   ! Perform output
-  IF(ioCounter.EQ.nWriteStats)THEN
+  IF(ioCounter.EQ.nWriteStats .OR. doFlush)THEN
     IF(writeAnalyzeFile) CALL WriteStats()
     ioCounter = 0
   END IF

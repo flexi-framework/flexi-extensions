@@ -230,6 +230,9 @@ USE MOD_Testcase_Vars,      ONLY: E_k
 #if EDDYVISCOSITY
 USE MOD_EddyVisc_Vars,      ONLY: Cs
 #endif
+#if FV_ENABLED == 2
+USE MOD_FV_Vars,            ONLY: FV_alpha
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -284,6 +287,16 @@ IF (.NOT. lastTimeStep) THEN
   CALL GatheredReadSmartRedis(SIZE(SHAPE(Cs)), SHAPE(Cs), Cs, TRIM(Key))
 END IF
 #endif /* EDDYVISCOSITY */
+
+#if FV_ENABLED == 2
+! Get Cs from Redis Database and scatter across all MPI ranks
+! Only necessary if we want to compute further, i.e. if not lastTimeStep
+IF (.NOT. lastTimeStep) THEN
+  Key = TRIM(FlexiTag)//"Cs"
+  CALL GatheredReadSmartRedis(SIZE(SHAPE(FV_alpha)), SHAPE(FV_alpha), FV_alpha, TRIM(Key))
+  FV_alpha = 0.
+END IF
+#endif /* FV_ENABLED == 2 */
 
 END SUBROUTINE ExchangeDataSmartRedis
 

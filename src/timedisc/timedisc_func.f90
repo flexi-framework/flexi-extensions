@@ -390,7 +390,7 @@ IF(doAnalyze)THEN
 
 #if USE_SMARTREDIS
   ! Write current state and indicate when FLEXI is about to finalize
-  IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(MOMV,:,:,:,:),firstTimeStep=.FALSE.,lastTimeStep=doFinalize)
+  IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.FALSE.,lastTimeStep=doFinalize)
 #endif
 
   iter_analyze  = 0
