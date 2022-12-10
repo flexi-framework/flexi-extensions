@@ -118,6 +118,11 @@ SELECT CASE(OverintegrationType)
     CALL Overintegration(U)
 END SELECT
 
+#if USE_SMARTREDIS
+! Write initial data to SmartRedis before first call of DG operator
+IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
+#endif
+
 #if FV_ENABLED == 2
 ! FV Blending requires the indicator before the DG operator
 CALL CalcIndicator(U,t)
@@ -175,11 +180,6 @@ CALL PPLimiter_Info(1_8)
 SWRITE(UNIT_stdOut,'(A)') ' CALCULATION RUNNING...'
 
 IF(TimeDiscType.EQ.'ESDIRK') CALL FillInitPredictor(t)
-
-#if USE_SMARTREDIS
-! Write initial data to SmartRedis
-IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
-#endif
 
 ! Run computation
 DO
