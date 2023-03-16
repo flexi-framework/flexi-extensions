@@ -22,13 +22,13 @@
 !> In the non conservative form of the volume integral in BR1/2 we first differentiate the flux (which is the solution in BR1) and
 !> then apply the metric terms. This is the fastest implementation of the volume integral and only available in strong form.
 !==================================================================================================================================
-SUBROUTINE Lifting_VolInt_Nonconservative(UPrim,gradUx,gradUy,gradUz)
+PPURE SUBROUTINE Lifting_VolInt_Nonconservative(UPrim,gradUx,gradUy,gradUz)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars      ,ONLY: D_T
 USE MOD_Mesh_Vars    ,ONLY: Metrics_fTilde,Metrics_gTilde
 #if (PP_dim==3)
-USE MOD_Mesh_Vars    ,ONLY: Metrics_hTilde
+USE MOD_Mesh_Vars    ,ONLY: Metrics_hTilde 
 #endif
 USE MOD_Mesh_Vars    ,ONLY: nElems
 #if FV_ENABLED
@@ -56,8 +56,6 @@ REAL,DIMENSION(PP_nVarLifting) :: gradUzeta
 INTEGER                        :: iElem,i,j,k,l
 !==================================================================================================================================
 ! volume integral
-!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,gradUxi,gradUeta,gradUzeta)
-!$OMP DO
 DO iElem=1,nElems
 #if FV_ENABLED
   IF (FV_Elems(iElem).EQ.0) THEN ! DG element
@@ -115,8 +113,6 @@ DO iElem=1,nElems
   END IF
 #endif /*FV_ENABLED*/
 END DO ! iElem=1,nElems
-!$OMP END DO
-!$OMP END PARALLEL
 
 END SUBROUTINE Lifting_VolInt_Nonconservative
 
@@ -169,8 +165,6 @@ ELSE
   DMat=D_T
 END IF
 
-!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,l,iElem,UE_f,UE_g,UE_h)
-!$OMP DO
 ! volume integral
 DO iElem=1,nElems
 #if FV_ENABLED
@@ -209,9 +203,6 @@ DO iElem=1,nElems
 #endif /*FV_ENABLED*/
 
 END DO ! iElem=1,nElems
-!$OMP END DO
-!$OMP END PARALLEL
-
 END SUBROUTINE Lifting_VolInt_Conservative
 
 !==================================================================================================================================
