@@ -170,8 +170,12 @@ CASE(INDTYPE_DUCROSTIMESJST)
 #endif /* EQNSYSNR != 2 */
 CASE(INDTYPE_PERSSON)
   ! number of modes to be checked by Persson indicator
-  nModes = GETINT('nModes','2')
-  nModes = MAX(1,nModes+PP_N-MIN(NUnder,NFilter))-1 ! increase by number of empty modes in case of overintegration
+  nModes = GETINT('nModes')
+  ! For overintegration, the last PP_N-Nunder modes are empty. Add them to nModes, so we check non-empty ones
+  nModes = nModes+PP_N-MIN(NUnder,NFilter)
+  ! Safety checks: At least one mode must be left and only values >0 make sense
+  nModes = MAX(1,MIN(PP_N-1,nModes))
+  SWRITE(UNIT_stdOut,'(A,I0)') ' | nModes = ', nModes
 #if FV_ENABLED == 2
   T_FV   = 0.5*10**(-1.8*(PP_N+1)**.25) ! Eq.(42) in: S. Hennemann et al., J.Comp.Phy., 2021
   sdT_FV = s_FV/T_FV
@@ -189,10 +193,10 @@ ALLOCATE(IndValue(nElems))
 IndValue=0.
 CALL AddToElemData(ElementOut,'IndValue',RealArray=IndValue)
 
-IndVar = GETINT('IndVar','1')
+IndVar = GETINT('IndVar')
 
 ! FV element at boundaries
-FVBoundaries    = GETLOGICAL('FVBoundaries','F')
+FVBoundaries    = GETLOGICAL('FVBoundaries')
 nFVBoundaryType = CountOption('FVBoundaryType')
 ALLOCATE(FVBoundaryType(nFVBoundaryType))
 DO iBC=1,nFVBoundaryType
@@ -376,7 +380,7 @@ END DO ; END DO ; END DO ; END DO
 
 ! Adapted Persson indicator
 IndValue=TINY(0.)
-DO iDeg=0,nModes
+DO iDeg=0,nModes-1
   ! Build maximum of 1D indicators
   ! Xi
   IndValue=MAX(IndValue,SUM(U_Modal(PP_N-iDeg:PP_N-iDeg,:,:)**2) /  &
@@ -660,16 +664,16 @@ END DO; END DO; END DO! i,j,k=0,PP_N
 CALL ChangeBasisVolume(PP_N,PP_N,sVdm_Leg,U_loc,U_Modal)
 
 IndValue=TINY(0.)
-DO iDeg=0,nModes
+DO iDeg=0,nModes-1
   iDeg2=iDeg+1
 #if PP_dim == 3
   IndValue=MAX(IndValue,(SUM(U_Modal(0:PP_N-iDeg,0:PP_N-iDeg,0:PP_N-iDeg)**2) - &
                          SUM(U_Modal(0:PP_N-iDeg2,0:PP_N-iDeg2,0:PP_N-iDeg2)**2))/&
-                         SUM(U_Modal(0:PP_N,0:PP_N,0:PP_N)**2))
+                         SUM(U_Modal(0:PP_N-iDeg,0:PP_N-iDeg,0:PP_N-iDeg)**2))
 #else
   IndValue=MAX(IndValue,(SUM(U_Modal(0:PP_N-iDeg,0:PP_N-iDeg,0)**2) - &
                          SUM(U_Modal(0:PP_N-iDeg2,0:PP_N-iDeg2,0)**2))/&
-                         SUM(U_Modal(0:PP_N,0:PP_N,0)**2))
+                         SUM(U_Modal(0:PP_N-iDeg,0:PP_N-iDeg,0)**2))
 #endif
 END DO
 IF (IndValue .LT. EPSILON(1.)) IndValue = EPSILON(IndValue)

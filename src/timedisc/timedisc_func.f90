@@ -129,13 +129,13 @@ SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TIMEDISC...'
 
 ! Read max number of iterations to perform
-maxIter = GETINT('maxIter','-1')
+maxIter = GETINT('maxIter')
 
 ! Get nCalcTimeStepMax: check if advanced settings should be used!
-nCalcTimeStepMax = GETINT('nCalcTimeStepMax','1')
+nCalcTimeStepMax = GETINT('nCalcTimeStepMax')
 
 ! Get TimeDisc Method
-TimeDiscMethod = GETSTR('TimeDiscMethod','Carpenter RK4-5')
+TimeDiscMethod = GETSTR('TimeDiscMethod')
 CALL StripSpaces(TimeDiscMethod)
 CALL LowCase(TimeDiscMethod)
 CALL SetTimeDiscCoefs(TimeDiscMethod)
@@ -373,7 +373,7 @@ IF(doAnalyze)THEN
     ! Write various derived data
     IF(doCalcTimeAverage) CALL CalcTimeAverage(.TRUE.,dt,t)
     IF(RP_onProc)         CALL WriteRP(PP_nVar,StrVarNames,t,.TRUE.)
-    IF(CalcPruettDamping) CALL WriteBaseFlow(TRIM(MeshFile),t)
+    IF(CalcPruettDamping) CALL WriteBaseFlow(TRIM(MeshFile),t,tWriteData)
     ! Write state file
     ! NOTE: this should be last in the series, so we know all previous data
     ! has been written correctly when the state file is present

@@ -78,7 +78,7 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT SMAGORINSKY...'
 ! Smagorinsky model
 !CS        = GETREAL('CS')
 ! Do Van Driest style damping or not (only for channel!)
-VanDriest = GETLOGICAL('VanDriest','.FALSE.')
+VanDriest = GETLOGICAL('VanDriest')
 
 ALLOCATE(damp(1,0:PP_N,0:PP_N,0:PP_NZ,nElems))
 damp = 1.

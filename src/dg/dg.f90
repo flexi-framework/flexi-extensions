@@ -148,7 +148,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,L_Minus,L_Plus,D,D_T,D_Hat,D_Hat_T,L_HatMinu
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Interpolation,    ONLY: GetNodesAndWeights
-USE MOD_Basis,            ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
+USE MOD_Basis,            ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys,PolynomialMassMatrix
 #ifdef SPLIT_DG
 USE MOD_DG_Vars,          ONLY: DVolSurf ! Transpose of differentiation matrix used for calculating the strong form
 #endif /*SPLIT_DG*/
@@ -172,7 +172,6 @@ REAL,ALLOCATABLE,DIMENSION(:)  ,INTENT(OUT)    :: L_HatPlus              !< Valu
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(0:N_in,0:N_in)              :: M,Minv
-INTEGER                                    :: iMass
 !==================================================================================================================================
 
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
@@ -182,15 +181,12 @@ ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
 CALL PolynomialDerivativeMatrix(N_in,xGP,D)
 D_T=TRANSPOSE(D)
 
+!Build Mass Matrix
+CALL PolynomialMassMatrix(N_in,xGP,wGP,M,Minv)
+
 ! Build D_Hat matrix. D^ = - (M^(-1) * D^T * M)
-M=0.
-Minv=0.
-DO iMass=0,N_in
-  M(iMass,iMass)=wGP(iMass)
-  Minv(iMass,iMass)=1./wGP(iMass)
-END DO
 D_Hat  = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
-D_Hat_T= TRANSPOSE(D_hat)
+D_Hat_T= TRANSPOSE(D_Hat)
 
 #ifdef SPLIT_DG
 ! Use a modified D matrix for the strong form volume integral, that incorporates the inner fluxes that are subtracted from the
@@ -199,8 +195,9 @@ ALLOCATE(DVolSurf(0:N_in,0:N_in))
 DVolSurf = D_T
 ! Modify the D matrix here, the integral over the inner fluxes at the boundaries will then be automatically done in the volume
 ! integral. The factor 1/2 is needed since we incorporate a factor of 2 in the split fluxes themselves!
-DVolSurf(0,0) = DVolSurf(0,0) + 1.0/(2.0 * wGP(0))
-DVolSurf(N_in,N_in) = DVolSurf(N_in,N_in) - 1.0/(2.0 * wGP(N_in))
+! For Gauss-Lobatto points, these inner flux contributions cancel exactly with entries in the DVolSurf matrix, resulting in zeros.
+DVolSurf(   0,   0) = DVolSurf(   0   ,0) + 1.0/(2.0 * wGP(   0))  ! = 0. (for LGL)
+DVolSurf(N_in,N_in) = DVolSurf(N_in,N_in) - 1.0/(2.0 * wGP(N_in))  ! = 0. (for LGL)
 #endif /*SPLIT_DG*/
 
 ! interpolate to left and right face (1 and -1 in reference space) and pre-divide by mass matrix
@@ -261,7 +258,7 @@ USE MOD_Mesh_Vars,           ONLY: nSides
 #if FV_ENABLED
 USE MOD_FV_Vars             ,ONLY: FV_Elems_master,FV_Elems_slave,FV_Elems_Sum
 USE MOD_FV_Mortar           ,ONLY: FV_Elems_Mortar
-USE MOD_FV                  ,ONLY: FV_DGtoFV
+USE MOD_FV                  ,ONLY: FV_DGtoFV,FV_ConsToPrim
 USE MOD_FV_VolInt           ,ONLY: FV_VolInt
 #if USE_MPI
 USE MOD_MPI                 ,ONLY: StartExchange_FV_Elems
@@ -522,10 +519,11 @@ CALL FV_DGtoFV(PP_nVarLifting,gradUz_master,gradUz_slave)
 #endif
 
 CALL FV_DGtoFV(PP_nVar    ,U_master     ,U_slave     )
-CALL FV_DGtoFV(PP_nVarPrim,UPrim_master ,UPrim_slave )
-
-! 11.2)
+CALL FV_ConsToPrim(PP_nVarPrim,PP_nVar,UPrim_master,UPrim_slave,U_master,U_slave)
+#if FV_RECONSTRUCT
+! 10.2)
 CALL GetConservativeStateSurface(UPrim_master, UPrim_slave, U_master, U_slave, FV_Elems_master, FV_Elems_slave, 1)
+#endif /*FV_RECONSTRUCT*/
 #endif /*FV_ENABLED*/
 
 #if USE_MPI

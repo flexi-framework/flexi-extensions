@@ -14,9 +14,13 @@
 #include "flexi.h"
 #include "eos.h"
 
-!#if FV_ENABLED
-!#error "This testcase is not tested with FV"
-!#endif
+#if FV_ENABLED
+#error "HIT testcase is not tested with FV"
+#endif
+
+#if !(PP_dim == 3)
+#error "HIT testcase is only implemented for 3D"
+#endif
 
 !==================================================================================================================================
 !> Subroutines defining homogenenous isotropic turbulence with linear forcing
@@ -137,6 +141,7 @@ USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 USE MOD_HDF5_Input,         ONLY: File_ID,OpenDataFile,CloseDataFile,ReadArray,DatasetExists,GetDataSize
 USE MOD_IO_HDF5,            ONLY: AddToFieldData,FieldOut,HSIZE,nDims
 USE MOD_Mesh_Vars,          ONLY: nElems,offsetElem
+USE MOD_Output,             ONLY: InitOutputToFile
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_ReadInTools,        ONLY: GETINT,GETREAL,GETLOGICAL
 USE MOD_Restart_Vars,       ONLY: doRestart,restartFile,interpolateSolution
@@ -151,6 +156,7 @@ IMPLICIT NONE
 LOGICAL                  :: HITDataExists
 INTEGER                  :: HSize_proc(5)
 REAL,ALLOCATABLE         :: HIT_local(:,:,:,:,:)
+CHARACTER(LEN=31)        :: varnames(nHITVars)
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
@@ -159,16 +165,17 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
 !CALL CollectiveStop(__STAMP__,'The testcase has not been implemented for FV yet!')
 !#endif
 
-! Read only rho from IniRefState for initial condition
-HIT_rho = RefStatePrim(1,IniRefState)
-
 ! Compute global energy spectra in analyze
 doComputeSpectra = GETLOGICAL('doComputeSpectra','.FALSE.')
 
 HIT_Forcing = GETLOGICAL('HIT_Forcing','.TRUE.')
+
 IF(HIT_Forcing) THEN
   ! Initialize HIT filter
   HIT_tFilter = GETREAL('HIT_tFilter','0.')
+
+  ! Read only rho from IniRefState
+  HIT_rho = RefStatePrim(1,IniRefState)
 
   ! Read target turbulent kinetic energy and relaxation time
   HIT_k      = GETREAL('HIT_k'     ,'0.')
@@ -325,15 +332,14 @@ IF (.NOT.HIT_Forcing) RETURN
 
 ! Initialize HIT_RMS with initial solution if it was not read from the restart file
 IF (.NOT. HIT_RMS_InitDone) THEN
-  HIT_RMS = UPrim(2:4,:,:,:,:)**2
+  HIT_RMS = UPrim(VELV,:,:,:,:)**2
   HIT_RMS_InitDone = .TRUE.
 END IF
 
 ! Time-average the solution to obtain RMS
 ! TODO: PROUD FILTER
-! TODO: Correct Macros for UPrim
 fac = dt/HIT_tFilter
-HIT_RMS(1:3,:,:,:,:) = HIT_RMS(1:3,:,:,:,:) + ((UPrim(2:4,:,:,:,:))**2 - HIT_RMS(1:3,:,:,:,:)) * fac
+HIT_RMS(1:3,:,:,:,:) = HIT_RMS(1:3,:,:,:,:) + ((UPrim(VELV,:,:,:,:))**2 - HIT_RMS(1:3,:,:,:,:)) * fac
 
 ! Calculate scalar kinetic Energy TKE either globally or elementwise by Gaussian integration.
 ! Then apply computed forcing coefficient to Ut.

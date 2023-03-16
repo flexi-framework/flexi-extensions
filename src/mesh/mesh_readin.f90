@@ -24,6 +24,7 @@
 MODULE MOD_Mesh_Readin
 ! MODULES
 USE MOD_HDF5_Input
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 !> @defgroup eleminfo ElemInfo parameters
@@ -84,6 +85,7 @@ SUBROUTINE ReadBCs()
 USE MOD_Globals
 USE MOD_Mesh_Vars  ,ONLY:BoundaryName,BoundaryType,nBCs,nUserBCs
 USE MOD_ReadInTools,ONLY:GETINTARRAY,CountOption,GETSTR
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -221,6 +223,7 @@ USE MOD_Mesh_Vars,          ONLY:ElemInfo,SideInfo
 #if USE_MPI
 USE MOD_MPI_Vars,           ONLY:nMPISides_Proc,nNbProcs,NbProc
 #endif
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -735,8 +738,9 @@ USE MOD_Mesh_Vars, ONLY:nElems,nGlobalElems,offsetElem
 #if USE_MPI
 USE MOD_MPI_Vars,  ONLY:offsetElemMPI
 #endif
-!----------------------------------------------------------------------------------------------------------------------------------!
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------!
 ! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -790,6 +794,7 @@ FUNCTION ELEMIPROC(ElemID)
 ! MODULES
 USE MOD_Globals,   ONLY:nProcessors
 USE MOD_MPI_vars,  ONLY:offsetElemMPI
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -830,10 +835,10 @@ END FUNCTION ELEMIPROC
 !===================================================================================================================================
 SUBROUTINE ReadIJKSorting()
 ! MODULES                                                                                                                          !
-!----------------------------------------------------------------------------------------------------------------------------------!
 USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,offsetElem,nElems,MeshFile
-!----------------------------------------------------------------------------------------------------------------------------------!
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------!
 ! INPUT / OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES

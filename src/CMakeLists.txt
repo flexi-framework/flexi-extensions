@@ -84,6 +84,18 @@ IF(FLEXI_PP_LIMITER)
 ENDIF()
 
 # =========================================================================
+# ExactMM
+# =========================================================================
+# exact mass matrix
+OPTION(FLEXI_EXACT_MASSMATRIX "Build and invert exact mass Matrix" OFF)
+IF(FLEXI_EXACT_MASSMATRIX)
+  ADD_DEFINITIONS(-DEXACT_MM)
+  IF(FLEXI_NODETYPE STREQUAL "GAUSS")
+    MESSAGE(SEND_ERROR "FLEXI_EXACT_MASSMATRIX only works on FLEXI_NODETYPE==GAUSS-LOBATTO points.")
+  ENDIF()
+ENDIF()
+
+# =========================================================================
 # Polynomial degree
 # =========================================================================
 SET(FLEXI_POLYNOMIAL_DEGREE "N" CACHE STRING "N: compile with variable polynomial degree. 1,2,3,...: compile with fixed polynomial degree for performance (untested).")
@@ -266,7 +278,7 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/precond/*.f90
                            ./src/implicit/*.f90
                            ./src/testcase/${FLEXI_TESTCASE}/*.f90
-                           ./src/flexilib.f90
+                           # ./src/flexilib.f90
                            ./unitTests/unittest.f90
                            ./unitTests/unittest_vars.f90)
 
@@ -351,7 +363,7 @@ ENDIF()
 
 ADD_LIBRARY(userblocklib STATIC ./src/output/read_userblock.c)
 ADD_LIBRARY(stacksizelib STATIC ./src/globals/stacksize.c)
-SET_TARGET_PROPERTIES(stacksizelib userblocklib PROPERTIES LINKER_LANGUAGE C
+SET_TARGET_PROPERTIES(stacksizelib userblocklib PROPERTIES LANGUAGE C LINKER_LANGUAGE C
                                                            COMPILE_FLAGS "-fPIC")
 
 # we link the statically built libs

@@ -127,7 +127,7 @@ IF (.NOT.RestartMean) THEN
 #endif /* EQNSYSNR != 1 */
   CALL GetDataProps(nVar_Restart,N_Restart,nElems_Restart,NodeType_Restart)
   RestartMode = 1
-  SWRITE(UNIT_stdOut,'(A)') ' | Restarting from state file ...'
+  SWRITE(UNIT_stdOut,'(A)') ' | Restarting from state file...'
 #if EQNSYSNR != 1
 ELSE
   CALL GetDataProps(nVar_Restart,N_Restart,nElems_Restart,NodeType_Restart,'Mean')
@@ -173,10 +173,10 @@ ELSE
   ! Use conservative variables available
   IF (ALL(RestartCons.NE.-1)) THEN
     RestartMode = 2
-    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using conservative variables ...'
+    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using conservative variables...'
   ELSE IF (ALL(RestartPrim.NE.-1)) THEN
     RestartMode = 3
-    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using primitive variables ...'
+    SWRITE(UNIT_stdOut,'(A)') ' | Restarting from time-averaged file using primitive variables...'
   ELSE
     RestartMode = 0
   END IF
@@ -253,7 +253,7 @@ IF (LEN_TRIM(RestartFile).GT.0) THEN
   ! Read in time from restart file
   CALL ReadAttribute(File_ID,'Time',1,RealScalar=RestartTime)
   ! Option to set the calculation time to 0 even tho performing a restart
-  ResetTime = GETLOGICAL('ResetTime','.FALSE.')
+  ResetTime = GETLOGICAL('ResetTime')
   IF(ResetTime) RestartTime=0.
   CALL CloseDataFile()
 
