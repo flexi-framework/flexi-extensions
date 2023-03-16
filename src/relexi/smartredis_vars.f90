@@ -30,6 +30,7 @@ LOGICAL             :: dbIsClustered   ! Indicate whether the Redis Database is 
 LOGICAL             :: doSmartRedis    ! Flag whether communication with SmartRedis should be done
 LOGICAL             :: useInvariants   ! If true, the invariants of the gradient tensor are used as state instead of the velocities
 REAL                :: NormInvariants  ! Normalizing factor to divide invariants by to map them nearer to a [-1,1] interval
+INTEGER             :: SR_nVarAction   ! Number/Dimension of actions received by agent per element
 #endif
 
 END MODULE MOD_SmartRedis_Vars

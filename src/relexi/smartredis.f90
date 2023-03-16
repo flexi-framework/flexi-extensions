@@ -33,7 +33,6 @@ END INTERFACE
 PUBLIC :: DefineParametersSmartRedis
 PUBLIC :: InitSmartRedis
 PUBLIC :: FinalizeSmartRedis
-PUBLIC :: GatheredWriteSmartRedis
 PUBLIC :: ExchangeDataSmartRedis
 !==================================================================================================================================
 
@@ -56,6 +55,7 @@ CALL prms%CreateLogicalOption("doSmartRedis", "Communicate via the SmartRedis Cl
 CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
 CALL prms%CreateLogicalOption("useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
 CALL prms%CreateRealOption("NormInvariants", "Normalizing factor multiplied with gradient invariants", "1.")
+CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
 
 END SUBROUTINE DefineParametersSmartRedis
 
@@ -67,7 +67,7 @@ SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
 USE MOD_SmartRedis_Vars
-USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL
+USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -84,6 +84,8 @@ END IF
 
 useInvariants = GETLOGICAL("useInvariants",".FALSE.")
 IF (useInvariants) NormInvariants = GETREAL("NormInvariants","1.")
+
+SR_nVarAction  = GETINT("SR_nVarAction")
 
 END SUBROUTINE InitSmartRedis
 
@@ -221,7 +223,9 @@ SUBROUTINE ExchangeDataSmartRedis(U, firstTimeStep, lastTimeStep)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SmartRedis_Vars
-USE MOD_Mesh_Vars       ,ONLY: nElems,nGlobalElems
+USE MOD_ChangeBasisByDim,   ONLY: ChangeBasisVolume
+USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
+USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems
 USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
 #if USE_FFTW
 USE MOD_FFT_Vars,           ONLY: kmax
@@ -243,12 +247,16 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: Key
 REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL                           :: actions(SR_nVarAction,nElems)
+REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL                           :: actions_nodal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
+REAL                           :: Vdm(0:PP_N,0:PP_N)
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
-Key = TRIM(FlexiTag)//"U"
+Key = TRIM(FlexiTag)//"state"
 IF (useInvariants) THEN
   CALL ComputeInvariants(gradUx,gradUy,gradUz,inv)
   inv = inv/NormInvariants ! Normalize
@@ -279,24 +287,33 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   CALL Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
 ENDIF
 
-#if EDDYVISCOSITY
 ! Get Cs from Redis Database and scatter across all MPI ranks
 ! Only necessary if we want to compute further, i.e. if not lastTimeStep
 IF (.NOT. lastTimeStep) THEN
-  Key = TRIM(FlexiTag)//"Cs"
-  CALL GatheredReadSmartRedis(SIZE(SHAPE(Cs)), SHAPE(Cs), Cs, TRIM(Key))
-END IF
-#endif /* EDDYVISCOSITY */
+  Key = TRIM(FlexiTag)//"actions"
+  CALL GatheredReadSmartRedis(SIZE(SHAPE(actions)), SHAPE(actions), actions, TRIM(Key))
 
-#if FV_ENABLED == 2
-! Get Cs from Redis Database and scatter across all MPI ranks
-! Only necessary if we want to compute further, i.e. if not lastTimeStep
-IF (.NOT. lastTimeStep) THEN
-  Key = TRIM(FlexiTag)//"Cs"
-  CALL GatheredReadSmartRedis(SIZE(SHAPE(FV_alpha)), SHAPE(FV_alpha), FV_alpha, TRIM(Key))
-  FV_alpha = 0.
-END IF
-#endif /* FV_ENABLED == 2 */
+  ! Construct field data from obtained modes
+  actions_modal = 0.
+  actions_modal(1,0,0,0,:) = actions(1,:) ! constant
+  IF (SR_nVarAction.EQ.2) THEN
+    actions_modal(1,2,0,0,:) = actions(2,:) ! quad. x-direction
+    actions_modal(1,0,2,0,:) = actions(2,:) ! quad. y-direction
+    actions_modal(1,0,0,2,:) = actions(2,:) ! quad. z-direction
+  END IF
+  ! Build the non-normalized VDM from modal to nodal
+  ! Means all Legendre-Polynomials fulfill P(1) = 1 (makes coefficients more interpretable)
+  DO i=0,PP_N
+    Vdm(:,i) = Vdm_Leg(:,i)/SQRT(REAL(i)+0.5)
+  END DO
+  CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),actions_nodal(1,:,:,:,iElem))
+
+#if EDDYVISCOSITY
+  Cs(:,:,:,:,:) = actions_nodal(:,:,:,:,:)
+#elif FV_ENABLED == 2
+  FV_alpha(:,:,:,:,:) = actions_nodal(:,:,:,:,:)
+#endif
+END IF !.NOT.lastTimeStep
 
 END SUBROUTINE ExchangeDataSmartRedis
 

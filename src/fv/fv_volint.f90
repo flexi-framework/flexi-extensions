@@ -249,7 +249,9 @@ DO iElem=1,nElems
 
 #if FV_ENABLED == 2
   ! Blend the solutions together
-  Ut(:,:,:,:,iElem) = (1 - FV_alpha(iElem)) * Ut(:,:,:,:,iElem) + FV_alpha(iElem)*Ut_FV
+  DO k=0,PP_NZ; DO j=0,PP_N; DO j=0,PP_N
+    Ut(:,i,j,k,iElem) = (1 - FV_alpha(1,i,j,k,iElem))*Ut(:,i,j,k,iElem) + FV_alpha(1,i,j,k,iElem)*Ut_FV
+  END DO; END DO; END DO
 #else
   Ut(:,:,:,:,iElem) = Ut_FV
 #endif /*FV_BLENDING*/

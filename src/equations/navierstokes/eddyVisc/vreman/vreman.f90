@@ -53,6 +53,8 @@ USE MOD_EddyVisc_Vars
 USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_Interpolation_Vars ,ONLY: InterpolationInitIsDone,wGP
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone,nElems,sJ
+!USE MOD_IO_HDF5            ,ONLY:AddToElemData,ElementOut
+USE MOD_IO_HDF5            ,ONLY:AddToFieldData,FieldOut
  IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -71,10 +73,12 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT VREMAN...'
 ! Read model coefficient
 ! Vreman model, paper CS=Smagorinsky constant: 0.18
 ! Vreman model, paper CS=Smagorinsky constant for FLEXI: 0.11
-CS        = GETREAL('CS')
+!CS        = GETREAL('CS')
+ALLOCATE(CS(1,0:PP_N,0:PP_N,0:PP_N,nElems))
+CS = GETREAL('CS')
 
 ! Allocate precomputed (model constant*filter width)**2
-ALLOCATE(CSdeltaS2(nElems))
+!ALLOCATE(CSdeltaS2(nElems))
 
 ! Vreman: (CS*deltaS)**2 * SQRT(B/A) * dens
 ! Precompute first term and store in damp
@@ -85,8 +89,11 @@ DO iElem=1,nElems
     CellVol = CellVol + wGP(i)*wGP(j)*wGP(k)/sJ(i,j,k,iElem,0)
   END DO; END DO; END DO
   DeltaS(iElem)    = CellVol**(1./3.)  / (REAL(PP_N)+1.)
-  CSdeltaS2(iElem) = 2.5*(CS * DeltaS(iElem))**2
+  !CSdeltaS2(iElem) = 2.5*(CS * DeltaS(iElem))**2
 END DO
+
+!CALL AddToElemData(ElementOut,'CS',RealArray=CS)
+CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray=Cs)
 
 VremanInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT VREMAN DONE!'
@@ -96,7 +103,8 @@ END SUBROUTINE InitVreman
 !===================================================================================================================================
 !> Compute Vreman Eddy-Visosity
 !===================================================================================================================================
-PPURE SUBROUTINE Vreman_Point(gradUx,gradUy,gradUz,dens,CSdeltaS2,muSGS)
+!PPURE SUBROUTINE Vreman_Point(gradUx,gradUy,gradUz,dens,CSdeltaS2,muSGS)
+PPURE SUBROUTINE Vreman_Point(gradUx,gradUy,gradUz,dens,deltaS,CS,muSGS)
 ! MODULES
 USE MOD_EddyVisc_Vars,     ONLY:CS
 IMPLICIT NONE
@@ -104,7 +112,9 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVarLifting),INTENT(IN)  :: gradUx, gradUy, gradUz   !> Gradients in x,y,z directions
 REAL                          ,INTENT(IN)  :: dens       !> pointwise density
-REAL                          ,INTENT(IN)  :: CSdeltaS2  !> filter width
+!REAL                          ,INTENT(IN)  :: CSdeltaS2  !> filter width
+REAL                          ,INTENT(IN)  :: deltaS     !> filter width
+REAL                          ,INTENT(IN)  :: CS         !> model coefficient
 REAL                          ,INTENT(OUT) :: muSGS      !> pointwise eddyviscosity
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -132,7 +142,8 @@ END DO; END DO! i,j=1,3
 IF (B .LT. 1d-12 .OR. A .LT. 1d-5) THEN
   muSGS = 0.
 ELSE
-  muSGS = CSdeltaS2 * SQRT(B/A) * dens
+  !muSGS = CSdeltaS2 * SQRT(B/A) * dens
+  muSGS = 2.5*(CS*DeltaS)**2 * SQRT(B/A) * dens
 END IF
 END SUBROUTINE Vreman_Point
 
@@ -143,7 +154,8 @@ SUBROUTINE Vreman_Volume()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars,         ONLY: nElems
-USE MOD_EddyVisc_Vars,     ONLY: CSdeltaS2, muSGS
+!USE MOD_EddyVisc_Vars,     ONLY: CSdeltaS2, muSGS
+USE MOD_EddyVisc_Vars,     ONLY: CS,DeltaS, muSGS
 USE MOD_Lifting_Vars,      ONLY: gradUx, gradUy, gradUz
 USE MOD_DG_Vars,           ONLY: U
 IMPLICIT NONE
@@ -156,7 +168,8 @@ INTEGER             :: i,j,k,iElem
 DO iElem = 1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
     CALL Vreman_Point(gradUx(   :,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
-                           U(DENS,i,j,k,iElem),      CSdeltaS2(iElem),  muSGS(1,i,j,k,iElem))
+                           U(DENS,i,j,k,iElem), DeltaS(iElem), CS(iElem), muSGS(1,i,j,k,iElem))
+                           !U(DENS,i,j,k,iElem),      CSdeltaS2(iElem),  muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE Vreman_Volume

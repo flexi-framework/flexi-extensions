@@ -45,7 +45,7 @@ REAL,ALLOCATABLE  :: muSGS(:,:,:,:,:)      !< Sub-grid eddy viscosity
 REAL,ALLOCATABLE  :: muSGS_master(:,:,:,:) !< Sub-grid eddy viscosity on master sides
 REAL,ALLOCATABLE  :: muSGS_slave (:,:,:,:) !< Sub-grid eddy viscosity on slave sides
 REAL,ALLOCATABLE  :: muSGSmax(:)           !< maxmum eddy viscosity per element
-REAL,ALLOCATABLE  :: CS(:)                 !< Smagorinsky constant, LES
+REAL,ALLOCATABLE  :: CS(:,:,:,:,:)         !< Smagorinsky constant, LES
 REAL              :: PrSGS                 !< turbulent Prandtl number for the sub-grid scales
 
 LOGICAL           :: VanDriest=.FALSE.     !< Logical indicating if Van Driest damping is activated (only use for channel flow)

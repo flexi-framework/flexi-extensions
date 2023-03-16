@@ -53,6 +53,8 @@ USE MOD_EddyVisc_Vars
 USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_Interpolation_Vars ,ONLY: InterpolationInitIsDone,wGP
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone,nElems,sJ
+!USE MOD_IO_HDF5            ,ONLY:AddToElemData,ElementOut
+USE MOD_IO_HDF5            ,ONLY:AddToFieldData,FieldOut
  IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -69,7 +71,7 @@ SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SIGMA-MODEL...'
 
 ! Read model coefficient
-ALLOCATE(CS(nElems))
+ALLOCATE(CS(1,0:PP_N,0:PP_N,0:PP_N,nElems))
 CS = GETREAL('CS')
 
 ! Calculate the filter width deltaS: deltaS=( Cell volume )^(1/3) / ( PP_N+1 )
@@ -79,8 +81,11 @@ DO iElem=1,nElems
     CellVol = CellVol +wGP(i)*wGP(j)*wGP(k)/sJ(i,j,k,iElem,0)
   END DO; END DO; END DO
   DeltaS(iElem)    = CellVol**(1./3.)  / (REAL(PP_N)+1.)
-  CSdeltaS2(iElem) = (CS * deltaS(iElem))**2
+  !CSdeltaS2(iElem) = (CS * deltaS(iElem))**2
 END DO
+
+!CALL AddToElemData(ElementOut,'CS',RealArray=CS)
+CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray=Cs)
 
 SigmaModelInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SigmaModel DONE!'
@@ -152,8 +157,8 @@ INTEGER             :: i,j,k,iElem
 !===================================================================================================================================
 DO iElem = 1,nElems
   DO k = 0,PP_NZ; DO j = 0,PP_N; DO i = 0,PP_N
-    CALL SigmaModel_Point(gradUx(    :,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
-                               U(DENS,i,j,k,iElem), deltaS(iElem), CS(iElem), muSGS(1,i,j,k,iElem))
+    CALL SigmaModel_Point(gradUx(   :,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
+                               U(DENS,i,j,k,iElem), deltaS(iElem), CS(1,i,j,k,iElem), muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE SigmaModel_Volume
