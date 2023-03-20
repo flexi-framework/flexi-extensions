@@ -249,11 +249,11 @@ CHARACTER(LEN=255)             :: Key
 REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: actions(SR_nVarAction,nElems)
 REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
-REAL                           :: actions_nodal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
+INTEGER                        :: i,iElem
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
-REAL                           :: Vdm(0:PP_N,0:PP_N)
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
 Key = TRIM(FlexiTag)//"state"
@@ -306,13 +306,14 @@ IF (.NOT. lastTimeStep) THEN
   DO i=0,PP_N
     Vdm(:,i) = Vdm_Leg(:,i)/SQRT(REAL(i)+0.5)
   END DO
-  CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),actions_nodal(1,:,:,:,iElem))
-
+  DO iElem=1,nElems
 #if EDDYVISCOSITY
-  Cs(:,:,:,:,:) = actions_nodal(:,:,:,:,:)
+    CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),Cs(      1,:,:,:,iElem))
 #elif FV_ENABLED == 2
-  FV_alpha(:,:,:,:,:) = actions_nodal(:,:,:,:,:)
+    CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),FV_alpha(1,:,:,:,iElem))
 #endif
+  END DO
+
 END IF !.NOT.lastTimeStep
 
 END SUBROUTINE ExchangeDataSmartRedis
