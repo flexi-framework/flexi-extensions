@@ -111,6 +111,7 @@ END SUBROUTINE FV_ExtendAlpha
 !==================================================================================================================================
 SUBROUTINE FV_ProlongFValphaToFace()
 ! MODULES
+USE MOD_Globals
 USE MOD_FV_Vars         ,ONLY: FV_alpha,FV_alpha_master,FV_alpha_slave
 USE MOD_Mesh_Vars       ,ONLY: SideToElem,nSides
 ! IMPLICIT VARIABLE HANDLING
@@ -128,10 +129,11 @@ IF (.NOT.ALLOCATED(SideToElem)) RETURN
 DO iSide = 1,nSides
   ElemID    = SideToElem(S2E_ELEM_ID   ,iSide)
   nbElemID  = SideToElem(S2E_NB_ELEM_ID,iSide)
-  !master sides
-  IF(ElemID  .GT.0) FV_alpha_master(iSide) = FV_alpha(ElemID)
-  !slave side (ElemID,locSide and flip =-1 if not existing)
-  IF(nbElemID.GT.0) FV_alpha_slave( iSide) = FV_alpha(nbElemID)
+  !!master sides
+  !IF(ElemID  .GT.0) FV_alpha_master(iSide) = FV_alpha(ElemID)
+  !!slave side (ElemID,locSide and flip =-1 if not existing)
+  !IF(nbElemID.GT.0) FV_alpha_slave( iSide) = FV_alpha(nbElemID)
+  CALL ABORT(__STAMP__,"Extend not implemented yet for RL-based FV blending.")
 END DO
 END SUBROUTINE FV_ProlongFValphaToFace
 

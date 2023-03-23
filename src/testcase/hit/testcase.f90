@@ -15,7 +15,7 @@
 #include "eos.h"
 
 #if FV_ENABLED
-#error "HIT testcase is not tested with FV"
+!#error "HIT testcase is not tested with FV"
 #endif
 
 #if !(PP_dim == 3)
