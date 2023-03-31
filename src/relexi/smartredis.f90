@@ -235,7 +235,7 @@ USE MOD_Testcase_Vars,      ONLY: E_k
 USE MOD_EddyVisc_Vars,      ONLY: Cs
 #endif
 #if FV_ENABLED == 2
-USE MOD_FV_Vars,            ONLY: FV_alpha
+USE MOD_FV_Vars,            ONLY: FV_alpha,FV_alpha_min,FV_alpha_max
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -251,7 +251,7 @@ REAL                           :: actions(SR_nVarAction,nElems)
 REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
 REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
-INTEGER                        :: i,iElem
+INTEGER                        :: i,j,k,iElem
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 !==================================================================================================================================
@@ -297,10 +297,11 @@ IF (.NOT. lastTimeStep) THEN
   actions_modal = 0.
   actions_modal(1,0,0,0,:) = actions(1,:) ! constant
   IF (SR_nVarAction.EQ.2) THEN
-    actions_modal(1,2,0,0,:) = actions(2,:) ! quad. x-direction
-    actions_modal(1,0,2,0,:) = actions(2,:) ! quad. y-direction
-    actions_modal(1,0,0,2,:) = actions(2,:) ! quad. z-direction
+    actions_modal(1,2,0,0,:) = actions(2,:)-0.25 ! quad. x-direction
+    actions_modal(1,0,2,0,:) = actions(2,:)-0.25 ! quad. y-direction
+    actions_modal(1,0,0,2,:) = actions(2,:)-0.25 ! quad. z-direction
   END IF
+
   ! Build the non-normalized VDM from modal to nodal
   ! Means all Legendre-Polynomials fulfill P(1) = 1 (makes coefficients more interpretable)
   DO i=0,PP_N
@@ -309,8 +310,16 @@ IF (.NOT. lastTimeStep) THEN
   DO iElem=1,nElems
 #if EDDYVISCOSITY
     CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),Cs(      1,:,:,:,iElem))
+    ! Limit resulting Cs to specificed range
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      Cs(1,i,j,k,iElem) = MAX(0., MIN(0.5, Cs(1,i,j,k,iElem)))
+    END DO; END DO; END DO
 #elif FV_ENABLED == 2
     CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),FV_alpha(1,:,:,:,iElem))
+    ! Limit resulting alpha to specificed range
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      FV_alpha(1,i,j,k,iElem) = MAX(FV_alpha_min, MIN(FV_alpha_max, FV_alpha(1,i,j,k,iElem)))
+    END DO; END DO; END DO
 #endif
   END DO
 

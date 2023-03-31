@@ -187,6 +187,7 @@ END SUBROUTINE FV_ComputeExtendedAlpha
 SUBROUTINE FV_Info(iter)
 ! MODULES
 USE MOD_Globals
+USE MOD_DG_Vars      ,ONLY: nDOFElem
 USE MOD_Mesh_Vars    ,ONLY: nGlobalElems
 USE MOD_FV_Vars      ,ONLY: FV_alpha
 USE MOD_Analyze_Vars ,ONLY: FV_totalAlpha
@@ -214,7 +215,8 @@ ELSE
 END IF
 #endif /*USE_MPI*/
 SWRITE(UNIT_stdOut,'(A,F8.3,A,F5.3,A,ES18.9)') ' FV_alpha    : ',FV_alpha_range(1),' - ',FV_alpha_range(2),&
-                                              ', avg: '         ,FV_totalAlpha / REAL(nGlobalElems) / iter
+                                              ', avg: '         ,FV_totalAlpha / REAL(nDOFElem*nGlobalElems) / iter !TODO: Ugly! Replace with
+                                                                                                                    !      integral mean here!
 FV_totalAlpha   = 0.
 END SUBROUTINE FV_Info
 
