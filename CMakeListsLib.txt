@@ -27,7 +27,7 @@ MESSAGE(STATUS "Checking git origin: " ${GIT_ORIGIN})
   # Checked out using HTTPS
   # IF("${GIT_ORIGIN}" MATCHES "^https@")
   ELSE()
-    SET(LIBS_DLPATH "https://gitlabext.iag.uni-stuttgart.de/")
+    SET(LIBS_DLPATH "https://gitlab.iag.uni-stuttgart.de/")
   ENDIF()
 # Origin pointing to ILA
 ELSEIF("${GIT_ORIGIN}" MATCHES "ila.uni-stuttgart.de")
@@ -41,7 +41,7 @@ ELSEIF("${GIT_ORIGIN}" MATCHES "ila.uni-stuttgart.de")
   ENDIF()
 # Fallback to IAG libs
 ELSE()
-  SET(LIBS_DLPATH "https://gitlabext.iag.uni-stuttgart.de/")
+  SET(LIBS_DLPATH "https://gitlab.iag.uni-stuttgart.de/")
 ENDIF()
 
 
