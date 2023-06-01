@@ -62,4 +62,13 @@ LOGICAL           :: DynSmagorinskyInitIsDone=.FALSE. !< Logical indicating if S
 LOGICAL           :: VremanInitIsDone=.FALSE.         !< Logical indicating if Vreman model has been initialized
 LOGICAL           :: SigmaModelInitIsDone=.FALSE.     !< Logical indicating if sigma model has been initialized
 
+#if USE_TFFB
+CHARACTER(LEN=255)  :: TF_ModelPath    !< Path to folder containing the TensorFlow model in the *.pb format
+CHARACTER(LEN=255)  :: TF_ModelInput   !< Name of model's input  node for the 'serve' tag
+CHARACTER(LEN=255)  :: TF_ModelOutput  !< Name of model's output node for the 'serve' tag
+INTEGER             :: TF_nThreads     !< Number of threads used per rank to evaluate model. Default: 1
+REAL,ALLOCATABLE    :: CsElem(:)       !< Model coefficient for eddy viscosity models for each individual element
+LOGICAL             :: SmagorinskyMLInitIsDone=.FALSE.  !< Logical indicating if ML Smagorinsky model has been initialized
+#endif
+
 END MODULE MOD_EddyVisc_Vars

@@ -22,11 +22,12 @@ MODULE MOD_EddyVisc
 IMPLICIT NONE
 PRIVATE
 
-INTEGER,PARAMETER      :: EDDYVISCTYPE_NONE     = 0
-INTEGER,PARAMETER      :: EDDYVISCTYPE_SMAGO    = 1
-INTEGER,PARAMETER      :: EDDYVISCTYPE_VREMAN   = 2
-INTEGER,PARAMETER      :: EDDYVISCTYPE_SIGMA    = 3
-INTEGER,PARAMETER      :: EDDYVISCTYPE_DYNSMAGO = 4
+INTEGER,PARAMETER      :: EDDYVISCTYPE_NONE      = 0
+INTEGER,PARAMETER      :: EDDYVISCTYPE_SMAGO     = 1
+INTEGER,PARAMETER      :: EDDYVISCTYPE_VREMAN    = 2
+INTEGER,PARAMETER      :: EDDYVISCTYPE_SIGMA     = 3
+INTEGER,PARAMETER      :: EDDYVISCTYPE_DYNSMAGO  = 4
+INTEGER,PARAMETER      :: EDDYVISCTYPE_SMAGO_ML  = 5
 
 INTERFACE DefineParametersEddyVisc
   MODULE PROCEDURE DefineParametersEddyVisc
@@ -57,6 +58,7 @@ CALL prms%CreateIntFromStringOption('eddyViscType',  'Type of eddy viscosity. No
 CALL addStrListEntry(               'eddyViscType',  'none',          EDDYVISCTYPE_NONE    )
 CALL addStrListEntry(               'eddyViscType',  'smagorinsky',   EDDYVISCTYPE_SMAGO   )
 CALL addStrListEntry(               'eddyViscType',  'dynsmagorinsky',EDDYVISCTYPE_DYNSMAGO)
+CALL addStrListEntry(               'eddyViscType',  'smagorinsky_ml',EDDYVISCTYPE_SMAGO_ML)
 CALL addStrListEntry(               'eddyViscType',  'vreman',        EDDYVISCTYPE_VREMAN  )
 CALL addStrListEntry(               'eddyViscType',  'sigma',         EDDYVISCTYPE_SIGMA   )
 CALL prms%CreateIntOption(          'N_testFilter',  'Polynomial degree of test filter (modal cutoff filter).','-1')
@@ -66,6 +68,12 @@ CALL prms%CreateRealArrayOption(    'eddyViscLimits','Limits for the computed ed
                                                      &viscosity.','(/0.,100./)')
 CALL prms%CreateLogicalOption(      'VanDriest',     'Van Driest damping, only for channel flow!', '.FALSE.')
 CALL prms%CreateStringOption(       'WallDistFile',  'File containing the distances to the nearest walls in the domain.')
+#if USE_TFFB
+CALL prms%CreateStringOption( 'TF_ModelPath'  , "ModelPath")
+CALL prms%CreateStringOption( 'TF_ModelInput' , "")
+CALL prms%CreateStringOption( 'TF_ModelOutput', "ModelPath")
+CALL prms%CreateIntOption(    'TF_nThreads'   , "Number of executing TensorFlow threads per MPI rank. Use default for < 1.")
+#endif
 END SUBROUTINE DefineParametersEddyVisc
 
 !===================================================================================================================================
@@ -80,6 +88,9 @@ USE MOD_DefaultEddyVisc
 USE MOD_Smagorinsky
 USE MOD_DynSmagorinsky
 USE MOD_Vreman
+#if USE_TFFB
+USE MOD_SmagorinskyML
+#endif
 USE MOD_SigmaModel
 USE MOD_Mesh_Vars  ,ONLY: nElems,nSides
 USE MOD_ReadInTools,ONLY: GETINTFROMSTR, GETREAL
@@ -126,6 +137,12 @@ SELECT CASE(eddyViscType)
     CALL InitSigmaModel()
     ComputeEddyViscosity  => SigmaModel_Volume
     FinalizeEddyViscosity => FinalizeSigmaModel
+#if USE_TFFB
+  CASE(EDDYVISCTYPE_SMAGO_ML)  ! machine learning turbulence model (Kurz et al., 2023)
+    CALL InitSmagorinskyML()
+    ComputeEddyViscosity  => SmagorinskyML_Volume
+    FinalizeEddyViscosity => FinalizeSmagorinskyML
+#endif
   CASE DEFAULT
     CALL CollectiveStop(__STAMP__,&
       'Eddy Viscosity Type not specified!')
