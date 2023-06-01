@@ -458,11 +458,11 @@ IF(LIBS_USE_TFFB)
   MESSAGE(STATUS "Using TensorFlow and compiling FLEXI-TF-Binding")
   SET(TFFB_DOWNLOAD https://gitlab.iag.uni-stuttgart.de/flexi/Codes/tffb.git/)
   SET(TFFB_DIR ${LIBS_EXTERNAL_LIB_DIR}/src/tffb/)
-  FIND_LIBRARY(TFFB_LIBRARY NAMES libtffb.so HINTS    ${TFFB_DIR}/lib        ${TFFB_DIR}/build/lib
-		                                               $ENV{TFFB_DIR}/lib     $ENV{TFFB_DIR}/build/lib    )
-	FIND_PATH(   TFFB_INCLUDE NAMES tffb.mod   HINTS    ${TFFB_DIR}/include    ${TFFB_DIR}/build/include
-		                                               $ENV{TFFB_DIR}/include $ENV{TFFB_DIR}/build/include)
-	IF(TFFB_LIBRARY STREQUAL "TFFB_LIBRARY-NOTFOUND" OR TFFB_INCLUDE STREQUAL "TFFB_INCLUDE-NOTFOUND")
+  FIND_LIBRARY(TFFB_LIBRARY NAMES libtffb.so HINTS ${TFFB_DIR}/lib        ${TFFB_DIR}/build/lib
+                                                   $ENV{TFFB_DIR}/lib     $ENV{TFFB_DIR}/build/lib    )
+  FIND_PATH(   TFFB_INCLUDE NAMES tffb.mod   HINTS ${TFFB_DIR}/include    ${TFFB_DIR}/build/include
+                                                   $ENV{TFFB_DIR}/include $ENV{TFFB_DIR}/build/include)
+  IF(TFFB_LIBRARY STREQUAL "TFFB_LIBRARY-NOTFOUND" OR TFFB_INCLUDE STREQUAL "TFFB_INCLUDE-NOTFOUND")
     # Let CMake take care of download, configure and build
     EXTERNALPROJECT_ADD(tffb
       GIT_REPOSITORY ${TFFB_DOWNLOAD}
