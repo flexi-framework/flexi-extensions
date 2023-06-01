@@ -456,7 +456,7 @@ ENDIF()
 OPTION(LIBS_USE_TFFB "Compile with support for TensorFlow-Fortran-Binding" OFF)
 IF(LIBS_USE_TFFB)
   MESSAGE(STATUS "Using TensorFlow and compiling FLEXI-TF-Binding")
-  SET(TFFB_DOWNLOAD https://gitlab.iag.uni-stuttgart.de/flexi/Codes/tffb.git/)
+  SET(TFFB_DOWNLOAD https://github.com/flexi-framework/tffb.git)
   SET(TFFB_DIR ${LIBS_EXTERNAL_LIB_DIR}/src/tffb/)
   FIND_LIBRARY(TFFB_LIBRARY NAMES libtffb.so HINTS ${TFFB_DIR}/lib        ${TFFB_DIR}/build/lib
                                                    $ENV{TFFB_DIR}/lib     $ENV{TFFB_DIR}/build/lib    )
