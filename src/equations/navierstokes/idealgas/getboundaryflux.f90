@@ -27,6 +27,7 @@
 !>  * 22  : Similar to 2, but BCState specifies exact function to be used
 !>  WALL BCs:
 !>  * 3   : Adiabatic wall
+!>  * 31  : Adiabatic cylinder (x^2+y^2=0.5, radius 0.5 centered at origin) with suction/injection
 !>  * 4   : Isothermal wall (Temperature specified by refstate)
 !>  * 9   : Slip wall
 !>  * 91  : Slip wall with correct gradient calculation (expensive)
@@ -101,6 +102,7 @@ USE MOD_Equation_Vars     ,ONLY: nRefState,BCData,BCDataPrim,nBCByType,BCSideID
 USE MOD_Equation_Vars     ,ONLY: BCStateFile,RefStatePrim
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,BoundaryType,nBCs,Face_xGP
+USE MOD_Exactfunc_Vars    ,ONLY: jetWidth,jetStrength
 #if PARABOLIC
 USE MOD_Exactfunc_Vars    ,ONLY: delta99_in,x_in,BlasiusInitDone
 #endif
@@ -170,6 +172,15 @@ IF(MaxBCState.GT.nRefState)THEN
   CALL Abort(__STAMP__,&
     'ERROR: Boundary RefState not defined! (MaxBCState,nRefState):',MaxBCState,REAL(nRefState))
 END IF
+
+! Check for flow control jet BC
+DO i=1,nBCs
+  locType =BoundaryType(i,BC_TYPE)
+  IF (locType.EQ.31) THEN
+    jetWidth    = GETREAL('jetWidth','10')
+    jetStrength = GETREALARRAY('jetStrength',2,'(/0.,0./)')
+  END IF
+END DO
 
 #if PARABOLIC
 ! Check for Blasius BCs and read parameters if this has not happened in the equation init
@@ -261,6 +272,7 @@ USE MOD_EOS          ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_EOS          ,ONLY: PRESSURE_RIEMANN
 USE MOD_EOS_Vars     ,ONLY: sKappaM1,Kappa,KappaM1,R
 USE MOD_ExactFunc    ,ONLY: ExactFunc
+USE MOD_ExactFunc_Vars,ONLY: jetWidth,jetStrength
 USE MOD_Equation_Vars,ONLY: IniExactFunc,BCDataPrim,RefStatePrim
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -311,7 +323,7 @@ CASE(22)  ! Dirichlet-type: BCState specifies exactfunc to be used
     CALL ConsToPrim(UPrim_boundary(:,p,q),Cons)
   END DO; END DO
 
-CASE(3,4,9,91,23,24,25,27)
+CASE(3,31,4,9,91,23,24,25,27)
   ! Initialize boundary state with rotated inner state
   DO q=0,ZDIM(Nloc); DO p=0,Nloc
     ! transform state into normal system
@@ -324,7 +336,7 @@ CASE(3,4,9,91,23,24,25,27)
   END DO; END DO !p,q
 
   SELECT CASE(BCType)
-  CASE(3) ! Adiabatic wall
+  CASE(3,31) ! Adiabatic wall
     ! For adiabatic wall all gradients are 0
     ! We reconstruct the BC State, rho=rho_L, velocity=0, rhoE_wall = p_Riemann/(Kappa-1)
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
@@ -334,6 +346,20 @@ CASE(3,4,9,91,23,24,25,27)
       ! set density via ideal gas equation, consistent to pressure and temperature
       UPrim_boundary(DENS,p,q) = UPrim_boundary(PRES,p,q)/(UPrim_boundary(TEMP,p,q)*R)
     END DO; END DO ! q,p
+    IF (BCTYPE.EQ.31) THEN
+      ! Adiabatic wall with suction/blowing according to Rabault et al., 2019 (https://doi.org/10.1017/jfm.2019.62)
+      ! "Artificial neural networks trained through deep reinforcement learning discover control strategies for active flow control"
+      tmp1 = jetWidth/180.*PP_PI ! Jet area in rad
+      DO q=0,ZDIM(Nloc); DO p=0,Nloc
+        tmp2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+        ! if region of suction/blowing overwrite velocity at boundary
+        IF     (ABS(tmp2-0.5*PP_PI).LT.0.5*tmp1) THEN ! Upper jet at +PI/2
+          UPrim_boundary(VEL1,p,q)= jetStrength(1)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-0.5*PP_PI))
+        ELSE IF(ABS(tmp2+0.5*PP_PI).LT.0.5*tmp1) THEN ! Lower jet at -PI/2
+          UPrim_boundary(VEL1,p,q)= jetStrength(2)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-1.5*PP_PI))
+        ENDIF
+      END DO; END DO
+    END IF
 
   CASE(4) ! Isothermal wall
     ! For isothermal wall, all gradients are from interior
@@ -527,6 +553,7 @@ USE MOD_Globals      ,ONLY: Abort
 USE MOD_Mesh_Vars    ,ONLY: BoundaryType,BC
 USE MOD_EOS          ,ONLY: PrimToCons,ConsToPrim
 USE MOD_ExactFunc    ,ONLY: ExactFunc
+USE MOD_ExactFunc_Vars,ONLY: jetWidth
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 USE MOD_Riemann      ,ONLY: ViscousFlux
@@ -561,6 +588,7 @@ INTEGER                              :: p,q
 INTEGER                              :: BCType,BCState
 REAL                                 :: UCons_boundary(PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
 REAL                                 :: UCons_master  (PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
+REAL                                 :: ang1,ang2
 #if PARABOLIC
 INTEGER                              :: iVar
 REAL                                 :: nv(3),tv1(3),tv2(3)
@@ -611,6 +639,62 @@ ELSE
     )
     Flux = Flux + Fd_Face_loc
 #endif /*PARABOLIC*/
+
+  CASE(31) ! Wall or Blowing/Suction Jet
+    ang1 = jetWidth/180.*PP_PI ! area of jet in rad
+    DO q=0,ZDIM(Nloc); DO p=0,Nloc
+      ang2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+      ! region of suction/blowing
+      IF ((ABS(ang2-0.5*PP_PI).LT.0.5*ang1) .OR. &  ! Upper jet at +PI/2
+          (ABS(ang2+0.5*PP_PI).LT.0.5*ang1) ) THEN  ! Lower jet at -PI/2
+        CALL PrimToCons(UPrim_master(:,p,q),  UCons_master(:,p,q))
+        CALL PrimToCons(UPrim_boundary(:,p,q),UCons_boundary(:,p,q))
+        CALL Riemann(Flux(:,p,q),UCons_master(:,p,q),UCons_boundary(:,p,q), &
+                                 UPrim_master(:,p,q),UPrim_boundary(:,p,q), &
+                                 NormVec(:,p,q),TangVec1(:,p,q),TangVec2(:,p,q),doBC=.TRUE.)
+#if PARABOLIC
+        CALL ViscousFlux(&
+               Fd_Face_loc(:,p,q), UPrim_master(:,p,q),UPrim_boundary(:,p,q),&
+             gradUx_master(:,p,q),gradUy_master(:,p,q), gradUz_master(:,p,q),&
+             gradUx_master(:,p,q),gradUy_master(:,p,q), gradUz_master(:,p,q),&
+             NormVec(:,p,q)&
+#if EDDYVISCOSITY
+            ,muSGS_master(:,p,q,SideID),muSGS_master(:,p,q,SideID)&
+#endif
+        )
+        ! Sum up Euler and Diffusion Flux
+        Flux(:,p,q) = Flux(:,p,q) + Fd_Face_loc(:,p,q)
+#endif /* PARABOLIC */
+      ELSE ! Wall
+#if EDDYVISCOSITY
+        muSGS_master(:,p,q,SideID)=0.
+#endif
+        Flux(DENS,p,q) = 0.
+        Flux(MOMV,p,q) = UPrim_boundary(PRES,p,q)*NormVec(:,p,q)
+        Flux(ENER,p,q) = 0.
+#if PARABOLIC
+        ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
+        CALL EvalDiffFlux3D(UPrim_boundary(:,p,q),&
+                             gradUx_master(:,p,q), gradUy_master(:,p,q), gradUz_master(:,p,q), &
+                               Fd_Face_loc(:,p,q),   Gd_Face_loc(:,p,q),   Hd_Face_loc(:,p,q)  &
+#if EDDYVISCOSITY
+                             ,muSGS_master(:,p,q,SideID) &
+#endif
+                           )
+        ! Enforce energy flux is exactly zero at adiabatic wall
+        Fd_Face_loc(ENER,p,q)=0.
+        Gd_Face_loc(ENER,p,q)=0.
+        Hd_Face_loc(ENER,p,q)=0.
+        ! Sum up Euler and Diffusion Flux
+        DO iVar=2,PP_nVar
+          Flux(iVar,p,q) = Flux(iVar,p,q)        + &
+            NormVec(1,p,q)*Fd_Face_loc(iVar,p,q) + &
+            NormVec(2,p,q)*Gd_Face_loc(iVar,p,q) + &
+            NormVec(3,p,q)*Hd_Face_loc(iVar,p,q)
+        END DO ! iVar
+#endif /*PARABOLIC*/
+      ENDIF ! Jet/Wall
+    END DO; END DO !p,q
 
   CASE(3,4,9,91) ! Walls
 #if EDDYVISCOSITY
@@ -885,6 +969,7 @@ USE MOD_DG_Vars      ,ONLY: UPrim_Boundary
 USE MOD_Mesh_Vars    ,ONLY: BoundaryType,BC
 USE MOD_Lifting_Vars ,ONLY: doWeakLifting
 USE MOD_TestCase     ,ONLY: Lifting_GetBoundaryFluxTestcase
+USE MOD_ExactFunc_Vars ,ONLY: jetWidth
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -902,6 +987,7 @@ REAL,INTENT(IN)   :: SurfElem(                0:PP_N,0:PP_NZ) !< surface element
 ! LOCAL VARIABLES
 INTEGER           :: p,q
 INTEGER           :: BCType,BCState
+REAL              :: ang1,ang2
 !==================================================================================================================================
 BCType  = Boundarytype(BC(SideID),BC_TYPE)
 BCState = Boundarytype(BC(SideID),BC_STATE)
@@ -924,6 +1010,25 @@ ELSE
       Flux(LIFT_VELV,p,q) = 0.
       Flux(LIFT_TEMP,p,q) = UPrim_Boundary(TEMP,p,q)
 #endif
+    END DO; END DO !p,q
+  CASE(31) ! No-slip wall BCs
+    ang1 = jetWidth/180.*PP_PI ! opening of jet in rad
+    DO q=0,PP_NZ; DO p=0,PP_N
+      ang2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+      ! region of suction/blowing
+      IF ((ABS(ang2-0.5*PP_PI).LT.0.5*ang1) .OR. &  ! Upper jet at +0.5*PI
+          (ABS(ang2+0.5*PP_PI).LT.0.5*ang1) ) THEN  ! Lower jet at -0.5*PI
+        Flux=0.5*(UPrim_master(PRIM_LIFT,:,:)  + UPrim_boundary(PRIM_LIFT,:,:))
+      ELSE ! Wall
+#if PP_OPTLIFT == 0
+        Flux(LIFT_DENS,p,q) = UPrim_Boundary(DENS,p,q)
+        Flux(LIFT_VELV,p,q) = 0.
+        Flux(LIFT_TEMP,p,q) = UPrim_Boundary(TEMP,p,q)
+#else
+        Flux(LIFT_VELV,p,q) = 0.
+        Flux(LIFT_TEMP,p,q) = UPrim_Boundary(TEMP,p,q)
+#endif
+      ENDIF
     END DO; END DO !p,q
   CASE(9,91)
     ! Euler/(full-)slip wall, symmetry BC
