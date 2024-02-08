@@ -186,7 +186,7 @@ SET(FLEXI_FV "OFF" CACHE STRING "Enable Finite Volume subcell shock capturing")
 SET_PROPERTY(CACHE FLEXI_FV PROPERTY STRINGS OFF SWITCH BLEND)
 
 CMAKE_DEPENDENT_OPTION(FLEXI_FV_RECONSTRUCTION "Enable 2nd order reconstruction for FV" ON
-	                                             "FLEXI_FV" ON) # Everyhting except "OFF" is logically "ON"
+                                               "FLEXI_FV" ON) # Everyhting except "OFF" is logically "ON"
 
 IF(NOT (FLEXI_FV STREQUAL "OFF"))
   IF(    FLEXI_FV STREQUAL "SWITCH")
