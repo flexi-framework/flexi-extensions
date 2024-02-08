@@ -506,4 +506,28 @@ GETTIME(FlexiTime)
 END FUNCTION FLEXITIME
 
 
+!==================================================================================================================================
+!> Get unused file unit number
+!==================================================================================================================================
+FUNCTION GETFREEUNIT()
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER :: GetFreeUnit !< File unit number
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+LOGICAL :: connected
+!==================================================================================================================================
+GetFreeUnit=55
+INQUIRE(UNIT=GetFreeUnit, OPENED=connected)
+IF(connected)THEN
+  DO
+    GetFreeUnit=GetFreeUnit+1
+    INQUIRE(UNIT=GetFreeUnit, OPENED=connected)
+    IF(.NOT.connected)EXIT
+  END DO
+END IF
+END FUNCTION GETFREEUNIT
+
 END MODULE MOD_Globals

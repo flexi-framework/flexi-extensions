@@ -73,6 +73,9 @@ USE MOD_FV
 USE MOD_FV_Vars
 #endif
 USE MOD_EOS,             ONLY: PrimToCons
+#if EQNSYSNR==4 
+USE MOD_Baseflow_Vars,   ONLY: UBase_master,UBase_slave
+#endif /*EQNSYSNR*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -127,12 +130,21 @@ END DO
 ! 1. compute flux for non-BC sides
 DO SideID=firstSideID_wo_BC,lastSideID
   ! 1.1) advective part of flux
+#if EQNSYSNR!=4
   CALL Riemann(PP_N,Flux_master(:,:,:,SideID),&
       U_master    (:,:,:,SideID),U_slave    (:,:,:,SideID),       &
       UPrim_master(:,:,:,SideID),UPrim_slave(:,:,:,SideID),       &
       NormVec (:,:,:,FV_Elems_Max(SideID),SideID), &
       TangVec1(:,:,:,FV_Elems_Max(SideID),SideID), &
       TangVec2(:,:,:,FV_Elems_Max(SideID),SideID),doBC=.FALSE.)
+#elif EQNSYSNR==4
+  CALL Riemann(PP_N,Flux_master(:,:,:,SideID),&
+      U_master    (:,:,:,SideID),U_slave    (:,:,:,SideID),       &
+      UBase_master(:,:,:,SideID),UBase_slave(:,:,:,SideID),       &
+      NormVec (:,:,:,0,SideID), &
+      TangVec1(:,:,:,0,SideID), &
+      TangVec2(:,:,:,0,SideID),doBC=.FALSE.)
+#endif /*EQNSYSNR*/
 
 #if PARABOLIC
   ! 1.2) Fill viscous flux for non-BC sides
@@ -154,6 +166,7 @@ END DO ! SideID
 IF(.NOT.doMPISides)THEN
   DO SideID=1,nBCSides
     FVEM = FV_Elems_master(SideID)
+#if EQNSYSNR!=4
     CALL GetBoundaryFlux(SideID,t,PP_N,&
        Flux_master(  :,:,:,     SideID),&
        UPrim_master( :,:,:,     SideID),&
@@ -166,6 +179,10 @@ IF(.NOT.doMPISides)THEN
        TangVec1(     :,:,:,FVEM,SideID),&
        TangVec2(     :,:,:,FVEM,SideID),&
        Face_xGP(     :,:,:,FVEM,SideID))
+#elif EQNSYSNR==4
+    CALL GetBoundaryFlux(SideID,t,PP_N,Flux_master,U_master,UBase_master, &
+            NormVec,TangVec1,TangVec2,Face_xGP)
+#endif /*EQNSYSNR*/
   END DO
 END IF ! .NOT. MPISIDES
 

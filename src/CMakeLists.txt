@@ -45,14 +45,24 @@ ELSEIF(FLEXI_EQNSYSNAME STREQUAL "linearscalaradvection")
 ELSEIF(FLEXI_EQNSYSNAME STREQUAL "rans_sa")
   ADD_DEFINITIONS(-DPP_nVar=6 -DPP_nVarPrim=7 -DEQNSYSNR=3)
   SET(WITHEOS 1)
+ELSEIF(FLEXI_EQNSYSNAME STREQUAL "linearacoustic")
+  ADD_DEFINITIONS(-DPP_nVar=5 -DPP_nVarPrim=5 -DEQNSYSNR=4)
+  SET(WITHEOS 2)
 ELSE()
   MESSAGE(SEND_ERROR "Unknown equation system.")
 ENDIF()
 
 IF(WITHEOS GREATER 0)
-  SET(FLEXI_EOS "idealgas" CACHE STRING "Used equation of state (idealgas/table)")
-  SET_PROPERTY(CACHE FLEXI_EOS PROPERTY STRINGS idealgas)
-  MARK_AS_ADVANCED(FORCE FLEXI_EOS)
+  IF(WITHEOS EQUAL 1)
+    SET(FLEXI_EOS "idealgas" CACHE STRING "Used equation of state (idealgas/table)")
+    SET_PROPERTY(CACHE FLEXI_EOS PROPERTY STRINGS idealgas)
+    MARK_AS_ADVANCED(FORCE FLEXI_EOS)
+  ENDIF()
+  IF(WITHEOS EQUAL 2)
+    SET(FLEXI_EOS "dummy" CACHE STRING "dummy equation of state")
+    SET_PROPERTY(CACHE FLEXI_EOS PROPERTY STRINGS dummy)
+    MARK_AS_ADVANCED(FORCE FLEXI_EOS)
+  ENDIF()
 ENDIF()
 
 # =========================================================================
@@ -140,6 +150,9 @@ IF (FLEXI_PARABOLIC)
         MESSAGE(SEND_ERROR " FLEXI_EDDYVISCOSITY is enabled, please disable FLEXI_2D")
       ENDIF()
     ENDIF()
+  ENDIF()
+  IF(FLEXI_EQNSYSNAME STREQUAL "linearacoustic")
+    MESSAGE(SEND_ERROR "LEE does not support PARABOLIC, please turn off.")
   ENDIF()
 ELSE()
   ADD_DEFINITIONS(-DPARABOLIC=0)
@@ -274,8 +287,8 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/filter/*.f90
                            ./src/io_hdf5/*.f90
                            ./src/timedisc/*.f90
-                           ./src/precond/*.f90
-                           ./src/implicit/*.f90
+                           #./src/precond/*.f90
+                           #./src/implicit/*.f90
                            ./src/testcase/${FLEXI_TESTCASE}/*.f90
                            # ./src/flexilib.f90
                            ./unitTests/unittest.f90
@@ -283,6 +296,11 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
 
 # The following files/directories where excluded from the above global recursive search,
 # since some of the subdirectories should only be included if the respective feature is enabled.
+
+IF(NOT FLEXI_EQNSYSNAME STREQUAL "linearacoustic")
+  FILE(GLOB_RECURSE flexiF90 ./src/precond/*.f90
+                             ./src/implicit/*.f90)
+ENDIF()
 
 # >> collect F90 files of the equation system (non-recursive) in a new list 'eqnsysF90'
 FILE(GLOB eqnsysF90        ./src/equations/${FLEXI_EQNSYSNAME}/*.f90)

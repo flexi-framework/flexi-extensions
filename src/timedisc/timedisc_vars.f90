@@ -38,6 +38,9 @@ REAL             :: dt_Min(3)                          !< dt_Min(DT_MIN)       =
                                                        !< dt_Min(DT_ANALYZE)   = dt_Min(2) = tAnalyzeDiff
                                                        !< dt_Min(DT_END)       = dt_Min(3) = tEndDiff
 REAL             :: dt_minOld                          !< dt_min in last timestep
+#if EQNSYSNR==4
+REAL             :: TimeStep_global                    !< globale timesetp used in lee
+#endif /*EQNSYSNR==4*/
 REAL,ALLOCATABLE :: b_dt(:)                            !< timestep of each RK stage
 REAL             :: tStart                             !< Start time of simulation
 REAL             :: tEnd                               !< End time of simulation

@@ -33,9 +33,11 @@ INTERFACE TimeStepByLSERKK3
   MODULE PROCEDURE TimeStepByLSERKK3
 END INTERFACE
 
+#if EQNSYSNR!=4
 INTERFACE TimeStepByESDIRK
   MODULE PROCEDURE TimeStepByESDIRK
 END INTERFACE
+#endif /*EQNSYSNR*/
 
 ! > Dummy interface for time step function pointer
 ABSTRACT INTERFACE
@@ -74,8 +76,10 @@ SELECT CASE(TimeDiscType)
     TimeStep=>TimeStepByLSERKW2
   CASE('LSERKK3')
     TimeStep=>TimeStepByLSERKK3
+#if EQNSYSNR!=4
   CASE('ESDIRK')
     TimeStep=>TimeStepByESDIRK
+#endif /*EQNSYSNR*/
   CASE DEFAULT
     CALL Abort(__STAMP__, 'Unknown timestep routine!')
 END SELECT
@@ -237,6 +241,7 @@ END DO
 
 END SUBROUTINE TimeStepByLSERKK3
 
+#if EQNSYSNR!=4
 !===================================================================================================================================
 !> This procedure takes the current time t, the time step dt and the solution at
 !> the current time U(t) and returns the solution at the next time level.
@@ -356,5 +361,6 @@ END IF
 
 nGMRESIterdt = 0
 END SUBROUTINE TimeStepByESDIRK
+#endif /*EQNSYSNR*/
 
 END MODULE MOD_TimeStep

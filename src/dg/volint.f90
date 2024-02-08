@@ -127,6 +127,9 @@ USE MOD_Lifting_Vars ,ONLY: gradUx,gradUy,gradUz
 #if FV_ENABLED
 USE MOD_FV_Vars      ,ONLY: FV_Elems
 #endif
+#if EQNSYSNR==4
+USE MOD_Baseflow_Vars,ONLY: UBase
+#endif /*EQNSYSNR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -146,7 +149,11 @@ DO iElem=1,nElems
 #endif
   ! Cut out the local DG solution for a grid cell iElem and all Gauss points from the global field
   ! Compute for all Gauss point values the Cartesian flux components
+#if EQNSYSNR!=4 
   CALL EvalFlux3D(PP_N,U(:,:,:,:,iElem),UPrim(:,:,:,:,iElem),f,g,h)
+#elif EQNSYSNR==4
+  CALL EvalFlux3D(PP_N,U(:,:,:,:,iElem),UBase(:,:,:,:,iElem),f,g,h)
+#endif /*EQNSYSNR*/
 #if VOLINT_VISC
   CALL EvalDiffFlux3D( UPrim(:,:,:,:,iElem),&
                       gradUx(:,:,:,:,iElem),&

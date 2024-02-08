@@ -99,7 +99,9 @@ USE MOD_Filter_Vars         ,ONLY: NFilter,FilterType
 USE MOD_IO_HDF5             ,ONLY: AddToElemData,ElementOut
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Overintegration_Vars,ONLY: NUnder
+#if EQNSYSNR!=4
 USE MOD_Predictor           ,ONLY: InitPredictor
+#endif /*EQNSYSNR*/
 USE MOD_ReadInTools         ,ONLY: GETREAL,GETINT,GETSTR
 USE MOD_StringTools         ,ONLY: LowCase,StripSpaces
 USE MOD_TimeDisc_Vars       ,ONLY: CFLScale
@@ -149,9 +151,11 @@ SELECT CASE(TimeDiscType)
   CASE('LSERKK3')
     ALLOCATE(S2   (1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems) &
             ,UPrev(1:PP_nVar,0:PP_N,0:PP_N,0:PP_NZ,1:nElems))
+#if EQNSYSNR!=4
   CASE('ESDIRK')
     ! Predictor for Newton
     CALL InitPredictor(TimeDiscMethod)
+#endif /*EQNSYSNR*/
 END SELECT
 
 ! Read the end time TEnd from ini file
@@ -200,6 +204,10 @@ USE MOD_Globals
 USE MOD_TimeDisc_Vars       ,ONLY: t,tAnalyze,tEnd,dt,dt_min,dt_minOld
 USE MOD_TimeDisc_Vars       ,ONLY: ViscousTimeStep,CalcTimeStart,nCalcTimeStep
 USE MOD_TimeDisc_Vars       ,ONLY: doAnalyze,doFinalize
+#if EQNSYSNR==4
+USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
+USE MOD_TimeDisc_Vars       ,ONLY: Timestep_global
+#endif /*EQNSYSNR==4*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -208,6 +216,9 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER                      :: errType
 !===================================================================================================================================
+#if EQNSYSNR==4
+Timestep_global=CalcTimeStep(errType,.TRUE.)
+#endif /*EQNSYSNR==4*/
 dt                 = EvalInitialTimeStep(errType)
 dt_min(DT_MIN)     = dt
 dt_min(DT_ANALYZE) = tAnalyze-t             ! Time to next analysis, put in extra variable so number does not change due to numerical errors

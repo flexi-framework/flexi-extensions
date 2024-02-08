@@ -136,3 +136,23 @@ PUBLIC::U_Mortar1,Flux_Mortar1
 CONTAINS
 #include "fillmortar.t90"
 END MODULE MOD_FillMortar1
+
+
+!==================================================================================================================================
+!>
+!==================================================================================================================================
+MODULE MOD_FillMortarBF
+IMPLICIT NONE
+PRIVATE
+
+INTEGER,PARAMETER :: TP_nVar = PP_nVarBase
+
+INTERFACE U_MortarBF
+  MODULE PROCEDURE U_Mortar
+END INTERFACE
+
+PUBLIC::U_MortarBF
+
+CONTAINS
+#include "fillmortar.t90"
+END MODULE MOD_FillMortarBF
