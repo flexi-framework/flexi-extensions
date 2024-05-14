@@ -79,7 +79,7 @@ doSmartRedis  = GETLOGICAL("doSmartRedis",".FALSE.")
 IF (doSmartRedis) THEN
   dbIsClustered = GETLOGICAL("ClusteredDatabase")
   ! Currently only the MPI root communicates with the Database. Could be changing in the future.
-  IF(MPIroot) CALL Client%Initialize(dbIsClustered)
+  IF(MPIroot) SR_Error = Client%Initialize(dbIsClustered)
 END IF
 
 useInvariants = GETLOGICAL("useInvariants",".FALSE.")
@@ -142,9 +142,9 @@ IF(MPIroot)THEN
   IF (PRESENT(Shape_Out)) THEN
     IF (PRODUCT(nValGather) .NE. PRODUCT(Shape_Out)) CALL ABORT(__STAMP__, &
                                                                 'Wrong output dimension in GatheredWrite to SmartRedis!')
-    CALL Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), Shape_Out)
+    SR_Error = Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), Shape_Out)
   ELSE
-    CALL Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), SHAPE(RealArray_Global))
+    SR_Error = Client%put_tensor(TRIM(Key), REAL(RealArray_Global,4), SHAPE(RealArray_Global))
   ENDIF
 ENDIF
 
@@ -174,9 +174,9 @@ REAL,ALLOCATABLE               :: RealArray_Global(:)
 INTEGER                        :: i,nValGather(rank),nDOFLocal
 INTEGER,DIMENSION(nProcessors) :: nDOFPerRank,offsetRank
 #endif
-INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
-INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
-LOGICAL                        :: found = .FALSE.
+INTEGER,PARAMETER              :: interval = 10      ! polling interval in milliseconds
+INTEGER,PARAMETER              :: tries    = HUGE(1) ! Infinite number of polling tries
+LOGICAL                        :: found    = .FALSE.
 !==================================================================================================================================
 #if USE_MPI
 nDOFLocal=PRODUCT(nVal)
@@ -198,10 +198,10 @@ ALLOCATE(RealArray_Global(PRODUCT(nVal)))
 #endif /*USE_MPI*/
 
 IF(MPIroot) THEN
-  found = Client%poll_tensor(TRIM(Key), interval, tries)
+  SR_Error = Client%poll_tensor(TRIM(Key), interval, tries, found)
   IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
-  CALL Client%unpack_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
-  CALL Client%delete_tensor(TRIM(Key))
+  SR_Error = Client%unpack_tensor(TRIM(Key), RealArray_Global, SHAPE(RealArray_Global))
+  SR_Error = Client%delete_tensor(TRIM(Key))
 ENDIF
 
 #if USE_MPI
@@ -278,13 +278,13 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
-  CALL Client%put_tensor(TRIM(Key),E_k(1:kmax),(/kmax/))
+  SR_Error = Client%put_tensor(TRIM(Key),E_k(1:kmax),(/kmax/))
 #endif
 
   ! Indicate if FLEXI is about to finalize
   lastTimeStepInt = MERGE(-1,1,lastTimeStep)
   Key = TRIM(FlexiTag)//"step_type"
-  CALL Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
+  SR_Error = Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
 ENDIF
 
 ! Get Cs from Redis Database and scatter across all MPI ranks
@@ -407,7 +407,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-IF(MPIroot .AND. doSmartRedis) CALL Client%destructor()
+IF(MPIroot .AND. doSmartRedis) SR_Error = Client%destructor()
 
 END SUBROUTINE FinalizeSmartRedis
 #endif

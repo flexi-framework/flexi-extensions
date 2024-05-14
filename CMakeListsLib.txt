@@ -489,28 +489,33 @@ IF(LIBS_USE_SMARTREDIS)
   OPTION(LIBS_BUILD_SMARTREDIS "Build SmartRedis Library during Compilation" OFF)
   IF (LIBS_BUILD_SMARTREDIS)
     SET (LIBS_SMARTREDIS_DOWNLOAD https://github.com/CrayLabs/SmartRedis.git )
-    SET(LIBS_SMARTREDIS_TAG "v0.2.0" CACHE STRING "SmartRedis version tag")
+    SET(LIBS_SMARTREDIS_TAG "v0.5.2" CACHE STRING "SmartRedis version tag")
     SET(LIBS_SMARTREDIS_DIR ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis)
 
     # Check if already built
-    IF (NOT EXISTS "${LIBS_SMARTREDIS_DIR}/src/smartredis/install/lib/libsmartredis.so")
+    IF (NOT EXISTS "${LIBS_SMARTREDIS_DIR}/src/smartredis/install/lib/libsmartredis-fortran.so")
       MESSAGE(STATUS "Build SmartRedis from source.")
       ExternalProject_Add(smartredis
         GIT_REPOSITORY ${LIBS_SMARTREDIS_DOWNLOAD}
         GIT_TAG ${LIBS_SMARTREDIS_TAG}
         ${${GITSHALLOW}}
-        PREFIX  ${LIBS_SMARTREDIS_DIR}
+        PREFIX ${LIBS_SMARTREDIS_DIR}
         UPDATE_COMMAND ""
-        CONFIGURE_COMMAND make lib
+        CONFIGURE_COMMAND make -j1 lib-with-fortran # Explicitly run in single! SmartRedis sets #Procs explicitly in its Makefile and will fail with -jX option!
         BUILD_IN_SOURCE 1
       )
       LIST(APPEND SELFBUILTEXTERNALS smartredis)
     ENDIF()
+    SET(LIBS_SMARTREDIS_LIB     "${LIBS_SMARTREDIS_DIR}/src/smartredis/install/lib/libsmartredis-fortran.so")
+    SET(LIBS_SMARTREDIS_INCLUDE "${LIBS_SMARTREDIS_DIR}/src/smartredis/install/include/")
+    MESSAGE(STATUS "SmartRedis library set to ${LIBS_SMARTREDIS_LIB}.")
+    MESSAGE(STATUS "SmartRedis include set to ${LIBS_SMARTREDIS_INCLUDE}.")
+  ELSE()
+    FIND_LIBRARY(LIBS_SMARTREDIS_LIB     smartredis-fortran HINTS $ENV{SMARTREDIS_DIR}/install/lib     ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/lib     )
+    FIND_PATH(   LIBS_SMARTREDIS_INCLUDE client.h           HINTS $ENV{SMARTREDIS_DIR}/install/include ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/include )
+    MESSAGE(STATUS "Found SmartRedis library at ${LIBS_SMARTREDIS_LIB}.")
+    MESSAGE(STATUS "Found SmartRedis include at ${LIBS_SMARTREDIS_INCLUDE}.")
   ENDIF()
-  FIND_LIBRARY(LIBS_SMARTREDIS_LIB              smartredis  HINTS $ENV{SMARTREDIS_DIR}/install/lib     ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/lib     )
-  FIND_PATH(   LIBS_SMARTREDIS_INCLUDE          client.h    HINTS $ENV{SMARTREDIS_DIR}/install/include ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/install/include )
-  FIND_PATH(   LIBS_SMARTREDIS_FORTRAN_INCLUDE  client.F90  HINTS $ENV{SMARTREDIS_DIR}/src/fortran     ${LIBS_EXTERNAL_LIB_DIR}/SmartRedis/src/smartredis/src/fortran     )
-
   LIST(APPEND linkedlibs ${LIBS_SMARTREDIS_LIB})
   INCLUDE_DIRECTORIES(${LIBS_SMARTREDIS_INCLUDE})
 ENDIF()
