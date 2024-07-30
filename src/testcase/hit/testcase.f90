@@ -1,7 +1,8 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2021  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
-! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
 !
 ! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -158,7 +159,7 @@ INTEGER                  :: HSize_proc(5)
 REAL,ALLOCATABLE         :: HIT_local(:,:,:,:,:)
 CHARACTER(LEN=31)        :: varnames(nHITVars)
 !==================================================================================================================================
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE...'
 
 !#if FV_ENABLED
@@ -203,6 +204,7 @@ IF(HIT_Forcing) THEN
       END IF
 
       ALLOCATE(HIT_local(1:3,0:HSize(2)-1,0:HSize(3)-1,0:HSize(4)-1,nElems))
+      DEALLOCATE(HSize)
       CALL ReadArray('HIT',5,HSize_proc,OffsetElem,5,RealArray=HIT_local)
       ! No interpolation needed, read solution directly from file
       IF(.NOT. InterpolateSolution)THEN
@@ -238,6 +240,15 @@ IF(MPIRoot)THEN
   ALLOCATE(Time(nWriteStats))
   ALLOCATE(writeBuf(nHITVars,nWriteStats))
   Filename = TRIM(ProjectName)//'_HITAnalysis'
+
+  varnames(1) ="Dissipation Rate Incompressible"
+  varnames(2) ="Dissipation Rate Compressible"
+  varnames(3) ="Ekin incomp"
+  varnames(4) ="Ekin comp"
+  varnames(5) ="U RMS"
+  varnames(6) ="Reynolds number"
+  varnames(7) ="A ILF"
+  CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
 END IF
 
 ! Spatial averaging according to de Laage de Meux, 2015
@@ -245,7 +256,7 @@ HIT_Avg = GETLOGICAL('HIT_Avg','.TRUE.')
 HIT_1st = GETLOGICAL('HIT_1st','.FALSE.')
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE HOMOGENEOUS ISOTROPIC TURBULENCE DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(132("-"))')
 
 #if USE_FFTW
 CALL InitFFT()
@@ -446,21 +457,6 @@ REAL                            :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N
 #endif
 CHARACTER(LEN=31)               :: varnames(nHITVars)
 !==================================================================================================================================
-
-! Init file output if not already initialized
-IF(MPIRoot .AND. writeAnalyzeFile .AND. (.NOT. AnalyzeFile_InitDone))THEN
-  AnalyzeFile_InitDone = .TRUE.
-  varnames(1) ="Dissipation Rate Incompressible"
-  varnames(2) ="Dissipation Rate Compressible"
-  varnames(3) ="Ekin incomp"
-  varnames(4) ="Ekin comp"
-  varnames(5) ="U RMS"
-  varnames(6) ="Reynolds number"
-  varnames(7) ="A ILF"
-  CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
-END IF
-
-
 Ekin      = 0.
 Ekin_comp = 0.
 rho       = 0.

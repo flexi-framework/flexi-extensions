@@ -1,7 +1,8 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
-! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
 !
 ! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -112,7 +113,9 @@ CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray
 SmagorinskyInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SMAGORINSKY DONE!'
 SWRITE(UNIT_stdOut,'(132("-"))')
+
 END SUBROUTINE InitSmagorinsky
+
 
 !===================================================================================================================================
 !> Compute Smagorinsky Eddy-Visosity
@@ -142,6 +145,7 @@ S_eN = SQRT ( 2.*(gradUx(LIFT_VEL1)**2 + gradUy(LIFT_VEL2)**2 + gradUz(LIFT_VEL3
 muSGS = damp * CS**2 * S_eN * dens
 END SUBROUTINE Smagorinsky_Point
 
+
 !===================================================================================================================================
 !> Compute Smagorinsky Eddy-Visosity for the volume
 !===================================================================================================================================
@@ -167,6 +171,7 @@ DO iElem = 1,nElems
 END DO
 END SUBROUTINE Smagorinsky_Volume
 
+
 !===============================================================================================================================
 !> Deallocate arrays and finalize variables used by Smagorinsky SGS model
 !===============================================================================================================================
@@ -179,7 +184,9 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===============================================================================================================================
+SDEALLOCATE(damp)
 SmagorinskyInitIsDone = .FALSE.
+
 END SUBROUTINE FinalizeSmagorinsky
 
 END MODULE MOD_Smagorinsky

@@ -1,7 +1,8 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
-! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
 !
 ! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -132,6 +133,7 @@ IF(info .NE. 0) THEN
   d_model = 0.
 ELSE
   sigma = SQRT(MAX(0.,lambda)) ! ensure were not negative
+  ! Sigma is in ascending order unlike in the paper by Nicoud (2011)
   d_model = (sigma(1)*(sigma(3)-sigma(2))*(sigma(2)-sigma(1)))/(sigma(3)**2)
 END IF
 ! Sigma-Model
@@ -175,7 +177,9 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===============================================================================================================================
+SDEALLOCATE(CSdeltaS2)
 SigmaModelInitIsDone = .FALSE.
+
 END SUBROUTINE FinalizeSigmaModel
 
 END MODULE MOD_SigmaModel

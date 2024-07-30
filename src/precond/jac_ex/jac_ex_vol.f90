@@ -1,7 +1,8 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
-! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
 !
 ! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -42,7 +43,7 @@ INTERFACE DGVolIntGradJac
   MODULE PROCEDURE DGVolIntGradJac
 END INTERFACE
 
-#if FV_ENABLED
+#if FV_RECONSTRUCT
 INTERFACE FVVolIntGradJac
   MODULE PROCEDURE FVVolIntGradJac
 END INTERFACE
@@ -55,7 +56,7 @@ PUBLIC::FVVolIntJac
 #endif
 #if PARABOLIC
 PUBLIC::DGVolIntGradJac
-#if FV_ENABLED
+#if FV_RECONSTRUCT
 PUBLIC::FVVolIntGradJac
 #endif
 #endif
@@ -624,7 +625,7 @@ USE MOD_FV_Vars               ,ONLY: FV_NormVecXi,FV_TangVec1Xi,FV_TangVec2Xi
 USE MOD_FV_Vars               ,ONLY: FV_NormVecEta,FV_TangVec1Eta,FV_TangVec2Eta
 USE MOD_FV_Vars               ,ONLY: FV_SurfElemXi_sw,FV_SurfElemEta_sw,FV_w_inv
 USE MOD_Implicit_Vars         ,ONLY: rEps0,nDOFVarElem
-USE MOD_Riemann               ,ONLY: Riemann_Point
+USE MOD_Riemann               ,ONLY: Riemann
 USE MOD_EOS                   ,ONLY: ConsToPrim,PrimToCons
 USE MOD_DG_Vars               ,ONLY: UPrim
 #if FV_RECONSTRUCT
@@ -746,7 +747,7 @@ DO p=0,PP_N
 #endif
     ! for the calculation of the flux Jacobian a finite difference approach is used so that all Riemann solvers can be plugged in
     DO i=1,PP_N ! Loop over inner subcell interfaces
-      CALL Riemann_Point(F(:,i-1,p,q),                             &
+      CALL Riemann(F(:,i-1,p,q),                                   &
                    FV_U_Xiplus_loc(     :,i-1),                    &
                    FV_U_Ximinus_loc(    :,i  ),                    &
                    FV_UPrim_Xiplus_loc( :,i-1),                    &
@@ -766,7 +767,7 @@ DO p=0,PP_N
         FV_U_minus_Tilde(jVar,i) = FV_U_minus_Tilde(jVar,i) + reps0_R
         CALL ConsToPrim(FV_UPrim_minus_Tilde(:,i),FV_U_minus_Tilde(:,i))
 
-        CALL Riemann_Point(F_Tilde(:,i-1,p,q),                        &
+        CALL Riemann(F_Tilde(:,i-1,p,q),                              &
                      FV_U_plus_Tilde(     :,i-1),                     &
                      FV_U_Ximinus_loc(    :,i  ),                     &
                      FV_UPrim_plus_Tilde( :,i-1),                     &
@@ -774,7 +775,7 @@ DO p=0,PP_N
                      FV_NormVecXi(        :,p  ,q,i,iElem),           &
                      FV_TangVec1Xi(       :,p  ,q,i,iElem),           &
                      FV_TangVec2Xi(       :,p  ,q,i,iElem),.FALSE.)
-        CALL Riemann_Point(F_Tilde(:,i,p,q),                          &
+        CALL Riemann(F_Tilde(:,i,p,q),                                &
                      FV_U_Xiplus_loc(     :,i-1),                     &
                      FV_U_minus_Tilde(    :,i  ),                     &
                      FV_UPrim_Xiplus_loc( :,i-1),                     &
@@ -902,7 +903,7 @@ DO p=0,PP_N
                                       UPrim_extended(:,p,:,q,iElem),dUdUvol_plus(:,:,:,:),dUdUvol_minus(:,:,:,:))
 #endif
     DO j=1,PP_N
-      CALL Riemann_Point(F(:,p,j-1,q),                              &
+      CALL Riemann(F(:,p,j-1,q),                                    &
                    FV_U_Etaplus_loc(     :,j-1),                    &
                    FV_U_Etaminus_loc(    :,j  ),                    &
                    FV_UPrim_Etaplus_loc( :,j-1),                    &
@@ -922,7 +923,7 @@ DO p=0,PP_N
         sreps0_R = 1./reps0_R
         FV_U_minus_Tilde(jVar,j) = FV_U_minus_Tilde(jVar,j) + reps0_R
         CALL ConsToPrim(FV_UPrim_minus_Tilde(:,j),FV_U_minus_Tilde(:,j))
-        CALL Riemann_Point(F_Tilde(:,p,j-1,q),                         &
+        CALL Riemann(F_Tilde(:,p,j-1,q),                               &
                      FV_U_plus_Tilde(      :,j-1),                     &
                      FV_U_Etaminus_loc(    :,j  ),                     &
                      FV_UPrim_plus_Tilde(  :,j-1),                     &
@@ -930,7 +931,7 @@ DO p=0,PP_N
                      FV_NormVecEta(        :,p,q  ,j,iElem),           &
                      FV_TangVec1Eta(       :,p,q  ,j,iElem),           &
                      FV_TangVec2Eta(       :,p,q  ,j,iElem),.FALSE.)
-        CALL Riemann_Point(F_Tilde(:,p,j,q),                           &
+        CALL Riemann(F_Tilde(:,p,j,q),                                 &
                      FV_U_Etaplus_loc(    :,j-1),                      &
                      FV_U_minus_Tilde(    :,j  ),                      &
                      FV_UPrim_Etaplus_loc(:,j-1),                      &
@@ -1042,7 +1043,7 @@ DO p=0,PP_N
                                       UPrim_extended(:,p,q,:,iElem),dUdUvol_plus(:,:,:,:),dUdUvol_minus(:,:,:,:))
 #endif
     DO k=1,PP_N
-      CALL Riemann_Point(F(:,p,q,k-1),                               &
+      CALL Riemann(F(:,p,q,k-1),                                     &
                    FV_U_Zetaplus_loc(     :,k-1),                    &
                    FV_U_Zetaminus_loc(    :,k  ),                    &
                    FV_UPrim_Zetaplus_loc( :,k-1),                    &
@@ -1063,7 +1064,7 @@ DO p=0,PP_N
         FV_U_minus_Tilde(jVar,k) = FV_U_minus_Tilde(jVar,k) + reps0_R
         CALL ConsToPrim(FV_UPrim_minus_Tilde(:,k),FV_U_minus_Tilde(:,k))
 
-        CALL Riemann_Point(F_Tilde(:,p,q,k-1),                          &
+        CALL Riemann(F_Tilde(:,p,q,k-1),                                &
                      FV_U_plus_Tilde(       :,k-1),                     &
                      FV_U_Zetaminus_loc(    :,k),                       &
                      FV_UPrim_plus_Tilde(   :,k-1),                     &
@@ -1071,7 +1072,7 @@ DO p=0,PP_N
                      FV_NormVecZeta(        :,p,q,k  ,iElem),           &
                      FV_TangVec1Zeta(       :,p,q,k  ,iElem),           &
                      FV_TangVec2Zeta(       :,p,q,k  ,iElem),.FALSE.)
-        CALL Riemann_Point(F_Tilde(:,p,q,k),                            &
+        CALL Riemann(F_Tilde(:,p,q,k),                                  &
                      FV_U_Zetaplus_loc(    :,k-1),                      &
                      FV_U_minus_Tilde(     :,k),                        &
                      FV_UPrim_Zetaplus_loc(:,k-1),                      &
@@ -1134,7 +1135,7 @@ DO p=0,PP_N
       BJ(s+1:s+PP_nVar,s+1:s+PP_nVar) = BJ(s+1:s+PP_nVar,s+1:s+PP_nVar) + dFdU_minus(:,:,p,q,k  )
       BJ(s+1:s+PP_nVar,r+1:r+PP_nVar) = BJ(s+1:s+PP_nVar,r+1:r+PP_nVar) + dFdU_plus( :,:,p,q,k  )
 #endif
-#if PARABOLIC
+#if PARABOLIC && FV_RECONSTRUCT
       IF (.NOT.(HyperbolicPrecond)) THEN
         Jac_Visc_plus  = 0.5*(FV_NormVecZeta(1,p,q,k,iElem)*fJac_visc(:,:,p,q,k-1) + &
                               FV_NormVecZeta(2,p,q,k,iElem)*gJac_visc(:,:,p,q,k-1) + &
@@ -1148,7 +1149,7 @@ DO p=0,PP_N
         BJ(s+1:s+PP_nVar,s+1:s+PP_nVar) = BJ(s+1:s+PP_nVar,s+1:s+PP_nVar) - FV_SurfElemZeta_sw(p,q,k,iElem) * FV_w_inv(k)   * Jac_Visc_minus
         BJ(s+1:s+PP_nVar,r+1:r+PP_nVar) = BJ(s+1:s+PP_nVar,r+1:r+PP_nVar) - FV_SurfElemZeta_sw(p,q,k,iElem) * FV_w_inv(k-1) * Jac_Visc_plus
       END IF
-#endif /*PARABOLIC*/
+#endif /*PARABOLIC && FV_RECONSTRUCT*/
     END DO !k
   END DO !p
 END DO !q
@@ -1156,7 +1157,7 @@ END DO !q
 
 END SUBROUTINE FVVolIntJac
 
-#if PARABOLIC
+#if PARABOLIC && FV_RECONSTRUCT
 !===================================================================================================================================
 !> volume integral: the total derivative of the viscous flux with respect to U:
 !>                  dF^v/DU_cons = dF^v/dQ_prim* DQ_prim/DU_prim* DU_prim/DU_cons + dF^v/DU_cons|_grad=cons.

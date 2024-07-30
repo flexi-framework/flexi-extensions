@@ -1,7 +1,8 @@
 !=================================================================================================================================
-! Copyright (c) 2010-2016  Prof. Claus-Dieter Munz
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
 ! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
-! For more information see https://www.flexi-project.org and https://nrg.iag.uni-stuttgart.de/
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
 !
 ! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 ! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -22,10 +23,11 @@ MODULE MOD_EddyVisc
 IMPLICIT NONE
 PRIVATE
 
-INTEGER,PARAMETER      :: EDDYVISCTYPE_NONE   = 0
-INTEGER,PARAMETER      :: EDDYVISCTYPE_SMAGO  = 1
-INTEGER,PARAMETER      :: EDDYVISCTYPE_VREMAN = 2
-INTEGER,PARAMETER      :: EDDYVISCTYPE_SIGMA  = 3
+INTEGER,PARAMETER      :: EDDYVISCTYPE_NONE     = 0
+INTEGER,PARAMETER      :: EDDYVISCTYPE_SMAGO    = 1
+INTEGER,PARAMETER      :: EDDYVISCTYPE_VREMAN   = 2
+INTEGER,PARAMETER      :: EDDYVISCTYPE_SIGMA    = 3
+INTEGER,PARAMETER      :: EDDYVISCTYPE_DYNSMAGO = 4
 
 INTERFACE DefineParametersEddyVisc
   MODULE PROCEDURE DefineParametersEddyVisc
@@ -51,14 +53,20 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 CALL prms%SetSection("EddyViscParameters")
-CALL prms%CreateIntFromStringOption('eddyViscType', "Type of eddy viscosity. None, Smagorinsky, Vreman, Sigma",'none')
-CALL addStrListEntry(               'eddyViscType','none',       EDDYVISCTYPE_NONE  )
-CALL addStrListEntry(               'eddyViscType','smagorinsky',EDDYVISCTYPE_SMAGO )
-CALL addStrListEntry(               'eddyViscType','vreman',     EDDYVISCTYPE_VREMAN)
-CALL addStrListEntry(               'eddyViscType','sigma',      EDDYVISCTYPE_SIGMA )
-CALL prms%CreateRealOption(         'CS',          "EddyViscParameters constant")
-CALL prms%CreateRealOption(         'PrSGS',       "Turbulent Prandtl number"                                 ,'0.7')
-CALL prms%CreateLogicalOption(      'VanDriest',   "Van Driest damping, only for channel flow!"               ,'.FALSE.')
+CALL prms%CreateIntFromStringOption('eddyViscType',  'Type of eddy viscosity. None, Smagorinsky, dynSmagorinsky, Vreman, Sigma',&
+                                                     'none')
+CALL addStrListEntry(               'eddyViscType',  'none',          EDDYVISCTYPE_NONE    )
+CALL addStrListEntry(               'eddyViscType',  'smagorinsky',   EDDYVISCTYPE_SMAGO   )
+CALL addStrListEntry(               'eddyViscType',  'dynsmagorinsky',EDDYVISCTYPE_DYNSMAGO)
+CALL addStrListEntry(               'eddyViscType',  'vreman',        EDDYVISCTYPE_VREMAN  )
+CALL addStrListEntry(               'eddyViscType',  'sigma',         EDDYVISCTYPE_SIGMA   )
+CALL prms%CreateIntOption(          'N_testFilter',  'Polynomial degree of test filter (modal cutoff filter).','-1')
+CALL prms%CreateRealOption(         'CS',            'EddyViscParameters constant')
+CALL prms%CreateRealOption(         'PrSGS',         'Turbulent Prandtl number','0.7')
+CALL prms%CreateRealArrayOption(    'eddyViscLimits','Limits for the computed eddy viscosity as multiples of the physical &
+                                                     &viscosity.','(/0.,100./)')
+CALL prms%CreateLogicalOption(      'VanDriest',     'Van Driest damping, only for channel flow!', '.FALSE.')
+CALL prms%CreateStringOption(       'WallDistFile',  'File containing the distances to the nearest walls in the domain.')
 END SUBROUTINE DefineParametersEddyVisc
 
 !===================================================================================================================================
@@ -71,6 +79,7 @@ USE MOD_Globals
 USE MOD_EddyVisc_Vars
 USE MOD_DefaultEddyVisc
 USE MOD_Smagorinsky
+USE MOD_DynSmagorinsky
 USE MOD_Vreman
 USE MOD_SigmaModel
 USE MOD_Mesh_Vars  ,ONLY: nElems,nSides
@@ -105,7 +114,11 @@ SELECT CASE(eddyViscType)
   CASE(EDDYVISCTYPE_SMAGO)  ! Smagorinsky Model with optional Van Driest damping for channel flow
     CALL InitSmagorinsky()
     ComputeEddyViscosity  => Smagorinsky_Volume
-    FinalizeEddyViscosity => Finalizesmagorinsky
+    FinalizeEddyViscosity => FinalizeSmagorinsky
+  CASE(EDDYVISCTYPE_DYNSMAGO)  ! Smagorinsky Model with dynamic procedure of Lilly
+    CALL InitDynSmagorinsky()
+    ComputeEddyViscosity  => DynSmagorinsky_Volume
+    FinalizeEddyViscosity => FinalizeDynSmagorinsky
   CASE(EDDYVISCTYPE_VREMAN) ! Vreman Model (Vreman, 2004)
     CALL InitVreman()
     ComputeEddyViscosity  => Vreman_Volume
