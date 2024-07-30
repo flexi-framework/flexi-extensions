@@ -1,6 +1,23 @@
+!=================================================================================================================================
+! Copyright (c) 2010-2022 Prof. Claus-Dieter Munz
+! Copyright (c) 2022-2024 Prof. Andrea Beck
+! This file is part of FLEXI, a high-order accurate framework for numerically solving PDEs with discontinuous Galerkin methods.
+! For more information see https://www.flexi-project.org and https://numericsresearchgroup.org
+!
+! FLEXI is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+! as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+!
+! FLEXI is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+!
+! You should have received a copy of the GNU General Public License along with FLEXI. If not, see <http://www.gnu.org/licenses/>.
+!=================================================================================================================================
 #include "flexi.h"
 #include "eos.h"
 
+!==================================================================================================================================
+!> This module contains the necessary routines for communication with Relexi via a SmartRedis client
+!==================================================================================================================================
 MODULE MOD_SmartRedis
 
 #if USE_SMARTREDIS
@@ -86,6 +103,13 @@ useInvariants = GETLOGICAL("useInvariants",".FALSE.")
 IF (useInvariants) NormInvariants = GETREAL("NormInvariants","1.")
 
 SR_nVarAction  = GETINT("SR_nVarAction")
+#if FV_ENABLED == 2
+IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, 'Only one action per element is supported for FV_ENABLED == 2')
+#endif
+#if EDDYVISCOSITY
+IF ( (SR_nVarAction.GT.2) .OR. (SR_nVarAction.LT.1) ) CALL ABORT(__STAMP__, &
+                                                           'Only one or two actions per element are supported for EDDYVISCOSITY')
+#endif
 
 END SUBROUTINE InitSmartRedis
 
@@ -315,11 +339,8 @@ IF (.NOT. lastTimeStep) THEN
       Cs(1,i,j,k,iElem) = MAX(0., MIN(0.5, Cs(1,i,j,k,iElem)))
     END DO; END DO; END DO
 #elif FV_ENABLED == 2
-    CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),FV_alpha(1,:,:,:,iElem))
     ! Limit resulting alpha to specificed range
-    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-      FV_alpha(1,i,j,k,iElem) = MAX(FV_alpha_min, MIN(FV_alpha_max, FV_alpha(1,i,j,k,iElem)))
-    END DO; END DO; END DO
+    FV_alpha(iElem) = MAX(FV_alpha_min, MIN(FV_alpha_max, actions_modal(1,0,0,0,iElem)))
 #endif
   END DO
 

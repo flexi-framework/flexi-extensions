@@ -248,7 +248,7 @@ IF(MPIRoot)THEN
   varnames(5) ="U RMS"
   varnames(6) ="Reynolds number"
   varnames(7) ="A ILF"
-  CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
+  IF(writeAnalyzeFile) CALL InitOutputToFile(FileName,'Homogeneous Isotropic Turbulence Analysis Data',nHITVars,varnames)
 END IF
 
 ! Spatial averaging according to de Laage de Meux, 2015

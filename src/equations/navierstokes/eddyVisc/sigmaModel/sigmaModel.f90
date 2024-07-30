@@ -89,12 +89,12 @@ END DO
 CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray=Cs)
 
 SigmaModelInitIsDone=.TRUE.
-SWRITE(UNIT_stdOut,'(A)')' INIT SigmaModel DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(A)')' INIT SIGMA-MODEL DONE!'
+SWRITE(UNIT_stdOut,'(132("-"))')
 END SUBROUTINE InitSigmaModel
 
 !===================================================================================================================================
-!> Compute SigmaModel Eddy-Visosity
+!> Compute sigma-Model Eddy-Visosity
 !===================================================================================================================================
 SUBROUTINE SigmaModel_Point(gradUx,gradUy,gradUz,dens,deltaS,CS,muSGS)
 ! MODULES

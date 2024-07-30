@@ -131,8 +131,10 @@ USE MOD_Filter_Vars         ,ONLY: NFilter
 USE MOD_Indicator_Vars      ,ONLY: nModes,IndicatorType
 USE MOD_Overintegration_Vars,ONLY: NUnder
 #endif /*FV_ENABLED == 1*/
-USE MOD_IO_HDF5             ,ONLY: AddToElemData,ElementOut
+#if FV_ENABLED == 3
 USE MOD_IO_HDF5             ,ONLY: AddToFieldData,FieldOut
+#endif /*FV_ENABLED == 3*/
+USE MOD_IO_HDF5             ,ONLY: AddToElemData,ElementOut
 USE MOD_Mesh_Vars           ,ONLY: nElems,nSides
 USE MOD_ReadInTools
 #if FV_RECONSTRUCT
@@ -202,11 +204,11 @@ IF (FV_doExtendAlpha) THEN
                                       'The parameter FV_alpha_extScale has to be between 0. and 1.!')
 ENDIF
 
-ALLOCATE(FV_alpha(1,0:PP_N,0:PP_N,0:PP_N,1:nElems))
+ALLOCATE(FV_alpha(1:nElems))
 ALLOCATE(FV_alpha_master(nSides))
 ALLOCATE(FV_alpha_slave( nSides))
 FV_alpha = 0.
-CALL AddToFieldData(FieldOut,(/FV_dim,PP_N+1,PP_N+1,PP_NZ+1,nElems/),'FV_alpha',(/'FV_alpha'/),RealArray=FV_alpha)
+CALL AddToElemData(ElementOut,'FV_alpha',FV_alpha)
 
 #if PP_NodeType == 1
 ALLOCATE(FV_U_master(PP_nVar,0:PP_N,0:PP_NZ,1:nSides))
