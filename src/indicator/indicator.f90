@@ -41,6 +41,9 @@ INTEGER,PARAMETER :: INDTYPE_DUCROSTIMESJST = 10
 INTEGER,PARAMETER :: INDTYPE_HALFHALF       = 3
 INTEGER,PARAMETER :: INDTYPE_CHECKERBOARD   = 33
 INTEGER,PARAMETER :: INDTYPE_BLEND          = 42
+#if USE_SMARTREDIS
+INTEGER,PARAMETER :: INDTYPE_RL             = 94
+#endif
 
 INTERFACE InitIndicator
   MODULE PROCEDURE InitIndicator
@@ -101,6 +104,9 @@ CALL addStrListEntry('IndicatorType','checkerboard',  INDTYPE_CHECKERBOARD)
 CALL addStrListEntry('IndicatorType','jameson',       INDTYPE_JAMESON)
 CALL addStrListEntry('IndicatorType','ducros',        INDTYPE_DUCROS)
 CALL addStrListEntry('IndicatorType','ducrostimesjst',INDTYPE_DUCROSTIMESJST)
+#if USE_SMARTREDIS
+CALL addStrListEntry('IndicatorType','rl',            INDTYPE_RL)
+#endif
 CALL prms%CreateIntOption('IndVar',        "Specify variable upon which indicator is applied, for general indicators.",&
                                            '1')
 CALL prms%CreateRealOption('IndStartTime', "Specify physical time when indicator evalution starts. Before this time"//&
@@ -300,20 +306,20 @@ CASE(INDTYPE_BLEND) ! fixed blending factor
 #endif
 CASE(INDTYPE_PERSSON) ! Modal Persson indicator
 #if FV_ENABLED == 2
-!  DO iElem=1,nElems
-!    IndValue(iElem) = IndPerssonBlend(U(:,:,:,:,iElem))
-!    FV_alpha(iElem)  = 1. / (1. + EXP(-sdT_FV * (IndValue(iElem) - T_FV)))
-!    ! Limit to alpha_max
-!    FV_alpha(iElem) = MIN(FV_alpha(iElem),FV_alpha_max)
-!  END DO ! iElem
-!  CALL FV_ExtendAlpha(FV_alpha)
-!    ! Do not compute FV contribution for elements below threshold
-!  DO iElem=1,nElems
-!    IF (FV_alpha(iElem) .LT. FV_alpha_min) FV_alpha(iElem) = 0.
-!  END DO ! iElem
-!#if PP_NodeType == 1
-!  IF (.NOT.FV_doExtendAlpha) CALL FV_CommAlpha(FV_alpha)
-!#endif
+  DO iElem=1,nElems
+    IndValue(iElem) = IndPerssonBlend(U(:,:,:,:,iElem))
+    FV_alpha(iElem)  = 1. / (1. + EXP(-sdT_FV * (IndValue(iElem) - T_FV)))
+    ! Limit to alpha_max
+    FV_alpha(iElem) = MIN(FV_alpha(iElem),FV_alpha_max)
+  END DO ! iElem
+  CALL FV_ExtendAlpha(FV_alpha)
+    ! Do not compute FV contribution for elements below threshold
+  DO iElem=1,nElems
+    IF (FV_alpha(iElem) .LT. FV_alpha_min) FV_alpha(iElem) = 0.
+  END DO ! iElem
+#if PP_NodeType == 1
+  IF (.NOT.FV_doExtendAlpha) CALL FV_CommAlpha(FV_alpha)
+#endif
 
 #elif FV_ENABLED == 3
   DO iElem=1,nElems
@@ -389,6 +395,11 @@ CASE(INDTYPE_CHECKERBOARD) ! every second element (checkerboard like)
 #endif /*FV_ENABLED*/
     END IF
   END DO ! iElem = 1, nElems
+#if USE_SMARTREDIS
+CASE(INDTYPE_RL)  ! RL
+  ! RL indicator is calculated in the smartredis module
+  ! Do nothing here!
+#endif
 CASE DEFAULT ! unknown Indicator Type
   CALL ABORT(__STAMP__,&
     "Unknown IndicatorType!")
