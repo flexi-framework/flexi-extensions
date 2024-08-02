@@ -354,19 +354,10 @@ END SUBROUTINE ExchangeDataSmartRedis
 !> NOTE: The first of the 6 invariants (trace(S)) of 'matrix' is trivially zero for incompressible flows, thus resulting in only
 !>       5 non-trivial invariants.
 !==================================================================================================================================
-SUBROUTINE ComputeInvariants(gradUx, gradUy, gradUz, Invariants)
+PPURE SUBROUTINE ComputeInvariants(gradUx, gradUy, gradUz, Invariants)
 ! MODULES
-USE MOD_Globals
 USE MOD_PreProc
-USE MOD_SmartRedis_Vars
-USE MOD_Mesh_Vars       ,ONLY: nElems,nGlobalElems
-#if USE_FFTW
-USE MOD_FFT_Vars,           ONLY: kmax
-USE MOD_Testcase_Vars,      ONLY: E_k
-#endif
-#if EDDYVISCOSITY
-USE MOD_EddyVisc_Vars,      ONLY: Cs
-#endif
+USE MOD_Mesh_Vars ,ONLY: nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -390,23 +381,23 @@ DO iElem=1,nElems
     S = 0.5*(mat+TRANSPOSE(mat)) ! Symmetric part
     W = 0.5*(mat-TRANSPOSE(mat)) ! Anti-Symmetric part
 
-    ! Trace S^2
+    ! Trace(S^2)
     S2 = MATMUL(S,S)
     Invariants(1,i,j,k,iElem) =  S2(1,1) +  S2(2,2) +  S2(3,3)
 
-    ! Trace W^2
+    ! Trace(W^2)
     W2 = MATMUL(W,W)
     Invariants(2,i,j,k,iElem) =  W2(1,1) +  W2(2,2) +  W2(3,3)
 
-    ! Trace S^3
+    ! Trace(S^3)
     mat = MATMUL(S2,S)
     Invariants(3,i,j,k,iElem) = mat(1,1) + mat(2,2) + mat(3,3)
 
-    ! Trace W^2*S
+    ! Trace(W^2*S)
     mat = MATMUL(W2,S)
     Invariants(4,i,j,k,iElem) = mat(1,1) + mat(2,2) + mat(3,3)
 
-    ! Trace W^2*S^2
+    ! Trace(W^2*S^2)
     mat = MATMUL(W2,S2)
     Invariants(5,i,j,k,iElem) = mat(1,1) + mat(2,2) + mat(3,3)
 
