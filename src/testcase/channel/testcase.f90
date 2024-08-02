@@ -104,6 +104,7 @@ CALL prms%CreateRealOption('ChannelMach', "Bulk mach number used in the channel 
 CALL prms%CreateIntOption('nWriteStats', "Write testcase statistics to file at every n-th AnalyzeTestcase step.", '100')
 CALL prms%CreateIntOption('nAnalyzeTestCase', "Call testcase specific analysis routines every n-th timestep. "//&
                                               "(Note: always called at global analyze level)"                   , '1000')
+CALL prms%CreateLogicalOption('writeAnalyzeFile', 'Flag to write an analyze file for the testcase'               ,'T')
 CALL prms%CreateLogicalOption('doComputeSpectra', 'Flag to enable computation of global kinetic energy spectrum.&
                                                  &ATTENTION: INCREDIBLY EXPENSIVE!!'                  ,'T')
 END SUBROUTINE DefineParametersTestcase
@@ -153,6 +154,9 @@ doComputeSpectra = GETLOGICAL('doComputeSpectra','.FALSE.')
 nWriteStats      = GETINT('nWriteStats')
 nAnalyzeTestCase = GETINT( 'nAnalyzeTestCase')
 
+! Check whether analyze data should be written to file
+writeAnalyzeFile = GETLOGICAL('writeAnalyzeFile','.TRUE.')
+
 ! Compute initial guess for bulk velocity for given Re_tau to compute background pressure
 Re_tau  = 1./mu0
 bulkVel = (Re_tau+c1)*LOG(Re_tau+c1) + 1.3064019*(Re_tau + 29.627395*EXP(-1./11.*Re_tau) + 0.66762137*(Re_tau+3)*EXP(-Re_tau/3.))
@@ -177,7 +181,7 @@ IF(MPIRoot) THEN
   Filename = TRIM(ProjectName)//'_Stats'
   varnames(1) = 'dpdx'
   varnames(2) = 'bulkVel'
-  CALL InitOutputToFile(Filename,'Statistics',2,varnames)
+  IF(writeAnalyzeFile) CALL InitOutputToFile(Filename,'Statistics',2,varnames)
 END IF
 
 #if USE_FFTW

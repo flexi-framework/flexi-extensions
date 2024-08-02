@@ -39,6 +39,7 @@ REAL,ALLOCATABLE   :: RS(:,:)
 #endif
 INTEGER            :: ioCounter   = 0      !< current number of buffer items
 INTEGER            :: nWriteStats = -999   !< Write testcase statistics to file at every n-th AnalyzeTestcase step
+LOGICAL            :: writeAnalyzeFile
 CHARACTER(LEN=255) :: Filename             !< filename to store testcase log data
 LOGICAL            :: doComputeSpectra
 !==================================================================================================================================
