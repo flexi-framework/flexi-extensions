@@ -260,7 +260,7 @@ SWRITE(UNIT_stdOut,'(132("-"))')
 
 #if USE_FFTW
 CALL InitFFT()
-ALLOCATE(E_k(0:kmax))
+ALLOCATE(E_k(kmax))
 #endif
 
 END SUBROUTINE InitTestcase
@@ -696,6 +696,7 @@ END DO; END DO; END DO
 E_k = 0.
 DO k=1,endw(3); DO j=1,endw(2); DO i=1,endw(1)
   IF (localk(4,i,j,k).GT.Nc) CYCLE
+  IF (localk(4,i,j,k).LE. 0) CYCLE
   E_k(localk(4,i,j,k)) = E_k(localk(4,i,j,k)) + REAL(SUM(U_FFT(:,i,j,k)*CONJG(U_FFT(:,i,j,k))))
 END DO; END DO; END DO
 

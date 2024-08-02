@@ -302,7 +302,7 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
-  SR_Error = Client%put_tensor(TRIM(Key),E_k(1:kmax),(/kmax/))
+  SR_Error = Client%put_tensor(TRIM(Key),E_k,SHAPE(E_k))
 #endif
 
   ! Indicate if FLEXI is about to finalize

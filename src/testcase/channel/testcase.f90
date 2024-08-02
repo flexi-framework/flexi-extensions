@@ -119,7 +119,7 @@ SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_ReadInTools,        ONLY: GETINT,GETREAL
+USE MOD_ReadInTools,        ONLY: GETINT,GETREAL,GETLOGICAL
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState,RefStateCons
 USE MOD_EOS,                ONLY: PrimToCons
@@ -187,7 +187,7 @@ END IF
 #if USE_FFTW
 CALL InitFFT()
 ! Allocate array for Reynolds stresses
-IF(MPIRoot) ALLOCATE(RS(0:9,N_FFT/2))
+IF(MPIRoot) ALLOCATE(E_k(0:9,N_FFT/2))
 #endif
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE CHANNEL DONE!'
@@ -350,7 +350,7 @@ USE MOD_FFT_Vars             ,ONLY: N_FFT
 USE MOD_Interpolation_Vars   ,ONLY: NodeType
 USE MOD_DG_Vars              ,ONLY: UPrim
 USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
-USE MOD_Testcase_Vars        ,ONLY: RS
+USE MOD_Testcase_Vars        ,ONLY: E_k
 #endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -404,20 +404,20 @@ IF (doComputeSpectra) THEN
     CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
 
     ! 4. Compute means
-    RS(:,:) = 0.
+    E_k(:,:) = 0.
     DO k=1,N_FFT ! z - spanwise
       DO i=1,N_FFT ! x - streamwise
         DO j=1,N_FFT ! y - channel width
           jhat = j
           IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
 
-          RS(U_MEAN,jhat) = RS(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
-          RS(V_MEAN,jhat) = RS(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
-          RS(W_MEAN,jhat) = RS(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
+          E_k(U_MEAN,jhat) = E_k(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
+          E_k(V_MEAN,jhat) = E_k(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
+          E_k(W_MEAN,jhat) = E_k(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
         END DO
       END DO
     END DO
-    RS = RS/REAL(N_FFT**2)/2 ! Normalize
+    E_k = E_k/REAL(N_FFT**2)/2 ! Normalize
 
     ! 5. Compute Reynolds stresses and average over x- and z-direction
     DO k=1,N_FFT ! z - spanwise
@@ -427,40 +427,40 @@ IF (doComputeSpectra) THEN
           IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
 
           ! First compute fluctuations by removing the mean
-          UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - RS(U_MEAN,jhat)
-          UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - RS(V_MEAN,jhat)
-          UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - RS(W_MEAN,jhat)
+          UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - E_k(U_MEAN,jhat)
+          UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - E_k(V_MEAN,jhat)
+          UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - E_k(W_MEAN,jhat)
 
           ! Then Compute the Reynolds stresses
-          RS(UU,jhat) = RS(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
-          RS(VV,jhat) = RS(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
-          RS(WW,jhat) = RS(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
-          RS(UV,jhat) = RS(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
-          RS(UW,jhat) = RS(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
-          RS(VW,jhat) = RS(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
+          E_k(UU,jhat) = E_k(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
+          E_k(VV,jhat) = E_k(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
+          E_k(WW,jhat) = E_k(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
+          E_k(UV,jhat) = E_k(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
+          E_k(UW,jhat) = E_k(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
+          E_k(VW,jhat) = E_k(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
         END DO
       END DO
     END DO
     ! Normalize quadratic entries
-    RS(UU:VW,:) = RS(UU:VW,:)/REAL(N_FFT**2)/2
+    E_k(UU:VW,:) = E_k(UU:VW,:)/REAL(N_FFT**2)/2
 
     ! 6. Get coordinates of interpolation points
     CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
-    !RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
-    RS(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+    !E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+    E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
 
 
     ! Debug writeout
-    WRITE(*,*)      'Y',RS(     Y,:)
-    WRITE(*,*) 'U_MEAN',RS(U_MEAN,:)
-    WRITE(*,*) 'V_MEAN',RS(V_MEAN,:)
-    WRITE(*,*) 'W_MEAN',RS(W_MEAN,:)
-    WRITE(*,*)     'UU',RS(    UU,:)
-    WRITE(*,*)     'VV',RS(    VV,:)
-    WRITE(*,*)     'WW',RS(    WW,:)
-    WRITE(*,*)     'UV',RS(    UV,:)
-    !WRITE(*,*)     'UW',RS(    UW,:)
-    !WRITE(*,*)     'VW',RS(    VW,:)
+    WRITE(*,*)      'Y',E_k(     Y,:)
+    WRITE(*,*) 'U_MEAN',E_k(U_MEAN,:)
+    WRITE(*,*) 'V_MEAN',E_k(V_MEAN,:)
+    WRITE(*,*) 'W_MEAN',E_k(W_MEAN,:)
+    WRITE(*,*)     'UU',E_k(    UU,:)
+    WRITE(*,*)     'VV',E_k(    VV,:)
+    WRITE(*,*)     'WW',E_k(    WW,:)
+    WRITE(*,*)     'UV',E_k(    UV,:)
+    !WRITE(*,*)     'UW',E_k(    UW,:)
+    !WRITE(*,*)     'VW',E_k(    VW,:)
   END IF
 END IF
 #endif
@@ -532,7 +532,7 @@ USE MOD_Globals
 IMPLICIT NONE
 !==================================================================================================================================
 #if USE_FFTW
-IF(MPIRoot) DEALLOCATE(RS)
+IF(MPIRoot) DEALLOCATE(E_k)
 #endif
 IF(MPIRoot) THEN
   SDEALLOCATE(writeBuf)
