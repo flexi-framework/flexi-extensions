@@ -71,7 +71,7 @@ CALL prms%SetSection("SmartRedis")
 CALL prms%CreateLogicalOption("doSmartRedis", "Communicate via the SmartRedis Client", ".FALSE.")
 CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
 CALL prms%CreateLogicalOption("useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
-CALL prms%CreateRealOption("NormInvariants", "Normalizing factor multiplied with gradient invariants", "1.")
+CALL prms%CreateLogicalOption("doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
 
 END SUBROUTINE DefineParametersSmartRedis
@@ -92,15 +92,15 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 
-doSmartRedis  = GETLOGICAL("doSmartRedis",".FALSE.")
+doSmartRedis  = GETLOGICAL("doSmartRedis")
 IF (doSmartRedis) THEN
   dbIsClustered = GETLOGICAL("ClusteredDatabase")
   ! Currently only the MPI root communicates with the Database. Could be changing in the future.
   IF(MPIroot) SR_Error = Client%Initialize(dbIsClustered)
 END IF
 
-useInvariants = GETLOGICAL("useInvariants",".FALSE.")
-IF (useInvariants) NormInvariants = GETREAL("NormInvariants","1.")
+useInvariants = GETLOGICAL("useInvariants")
+IF (useInvariants) doNormInvariants = GETLOGICAL("doNormInvariants")
 
 SR_nVarAction  = GETINT("SR_nVarAction")
 #if FV_ENABLED == 2
@@ -240,7 +240,7 @@ END SUBROUTINE GatheredReadSmartRedis
 
 
 !==================================================================================================================================
-!> 
+!>
 !==================================================================================================================================
 SUBROUTINE ExchangeDataSmartRedis(U, firstTimeStep, lastTimeStep)
 ! MODULES
@@ -282,8 +282,7 @@ INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of poll
 ! Gather U across all MPI ranks and write to Redis Database
 Key = TRIM(FlexiTag)//"state"
 IF (useInvariants) THEN
-  CALL ComputeInvariants(gradUx,gradUy,gradUz,inv)
-  inv = inv/NormInvariants ! Normalize
+  CALL ComputeInvariants(gradUx, gradUy, gradUz, inv, doNormInvariants)
 
   Dims = SHAPE(inv)
   Dims_Out(:) = Dims(:)
@@ -354,7 +353,7 @@ END SUBROUTINE ExchangeDataSmartRedis
 !> NOTE: The first of the 6 invariants (trace(S)) of 'matrix' is trivially zero for incompressible flows, thus resulting in only
 !>       5 non-trivial invariants.
 !==================================================================================================================================
-PPURE SUBROUTINE ComputeInvariants(gradUx, gradUy, gradUz, Invariants)
+PPURE SUBROUTINE ComputeInvariants(gradUx, gradUy, gradUz, Invariants, doNormalize)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars ,ONLY: nElems
@@ -364,22 +363,33 @@ IMPLICIT NONE
 REAL,INTENT(IN)             :: gradUx(PP_nVarLifting,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
 REAL,INTENT(IN)             :: gradUy(PP_nVarLifting,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
 REAL,INTENT(IN)             :: gradUz(PP_nVarLifting,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
+LOGICAL,INTENT(IN)          :: doNormalize
 REAL,INTENT(INOUT)          :: Invariants(5,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                :: i,j,k,iElem
+REAL                   :: norm
 REAL                   :: S(3,3),S2(3,3)
 REAL                   :: W(3,3),W2(3,3)
 REAL                   :: mat(3,3)
 !==================================================================================================================================
 DO iElem=1,nElems
   DO k=0,PP_NZ;DO j=0,PP_N; DO i=0,PP_N
+    ! Velocity gradient tensor \nabla u
     mat(:,1) = gradUx(VELV,i,j,k,iElem)
     mat(:,2) = gradUy(VELV,i,j,k,iElem)
     mat(:,3) = gradUz(VELV,i,j,k,iElem)
 
     S = 0.5*(mat+TRANSPOSE(mat)) ! Symmetric part
     W = 0.5*(mat-TRANSPOSE(mat)) ! Anti-Symmetric part
+
+    ! Normalize and de-dimensionalize invariants with the Frobenius norm of |S|=\sqrt{2*S_ij*S_ij}.
+    IF (doNormalize) THEN
+      ! This corresponds to making the velocity gradient tensor dimensionless with the characteristic velocity and length scale.
+      ! This again corresponds to using the resolved dissipation rate and the viscosity.
+      W = 1./SQRT(2*SUM(S(:,:)**2)) * W
+      S = 1./SQRT(2*SUM(S(:,:)**2)) * S
+    END IF
 
     ! Trace(S^2)
     S2 = MATMUL(S,S)

@@ -129,7 +129,10 @@ END SELECT
 
 #if USE_SMARTREDIS
 ! Write initial data to SmartRedis before first call of DG operator
-IF (doSmartRedis) CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
+IF (doSmartRedis) THEN
+  CALL DGTimeDerivative_weakForm(t) ! Fill initial gradients
+  CALL ExchangeDataSmartRedis(U(2:4,:,:,:,:),firstTimeStep=.TRUE.,lastTimeStep=.FALSE.)
+END IF
 #endif
 
 #if FV_ENABLED == 2 || FV_ENABLED == 3
