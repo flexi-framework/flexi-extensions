@@ -68,6 +68,8 @@ IMPLICIT NONE
 CALL prms%SetSection("RecordPoints")
 CALL prms%CreateLogicalOption('RP_inUse',          "Set true to compute solution history at points defined in recordpoints file.",&
                                                    '.FALSE.')
+CALL prms%CreateLogicalOption('RP_doWriteToFile',  "Set true to write evaluated solution at points to file during simulation.",&
+                                                   '.TRUE.')
 CALL prms%CreateStringOption( 'RP_DefFile',        "File containing element-local parametric recordpoint coordinates and structure.")
 CALL prms%CreateIntOption(    'RP_MaxMemory',      "Maximum memory in MiB to be used for storing recordpoint state history. "//&
                                                    "If memory is exceeded before regular IO level states are written to file.",&
@@ -133,6 +135,9 @@ IF(RP_onProc)THEN
   ALLOCATE(lastSample(0:nVar_loc,nRP))
   lastSample=0.
 END IF
+
+! Check whether RP should be written to file
+RP_doWriteToFile = GETLOGICAL('RP_doWriteToFile')
 
 RecordPointsInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT RECORDPOINTS DONE!'
@@ -386,8 +391,16 @@ iSample = iSample + 1
 RP_Data(1:nVar,:,iSample) = U_RP
 RP_Data(0,     :,iSample) = t
 
-! dataset is full, write data and reset
-IF(iSample.EQ.RP_Buffersize) CALL WriteRP(nVar,StrVarNames,tWriteData,.FALSE.)
+! dataset is full, write data (if requested) otherwise just reset
+IF(iSample.EQ.RP_Buffersize) THEN
+  IF (RP_doWriteToFile) THEN
+    CALL WriteRP(nVar,StrVarNames,tWriteData,.FALSE.)
+  ELSE
+    ! Just reset buffer and strart from scratch
+    iSample = 0
+    RP_Data(:,:) = 0.
+  END IF
+END IF
 
 END SUBROUTINE RecordPoints
 
