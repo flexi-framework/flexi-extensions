@@ -42,6 +42,8 @@ USE MOD_Analyze             ,ONLY: Analyze
 USE MOD_Analyze_Vars        ,ONLY: analyze_dt,tWriteData,WriteData_dt
 USE MOD_AnalyzeEquation_Vars,ONLY: doCalcTimeAverage
 USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
+USE MOD_BaseFlow            ,ONLY: UpdateBaseFlow
+USE MOD_BaseFlow_Vars       ,ONLY: doBaseFlow
 USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
 USE MOD_DG_Vars             ,ONLY: U
 USE MOD_Equation_Vars       ,ONLY: StrVarNames
@@ -139,6 +141,8 @@ END IF
 ! FV Blending requires the indicator before the DG operator
 CALL CalcIndicator(U,t)
 #endif
+! initial update of baseflow
+IF (doBaseFlow) CALL UpdateBaseFlow(0.)
 
 ! Do first RK stage of first timestep to fill gradients
 CALL DGTimeDerivative_weakForm(t)
@@ -168,12 +172,13 @@ CALL AnalyzeTestCase(t,.FALSE.)
 CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
 CALL Visualize(t,U)
 
-! No computation needed if tEnd = tStart!
-IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
+! compute initial timestep
+CALL InitTimeStep()
 
 ! Run initial analyze
 SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' Errors of initial solution:'
+! print initial analyze
 CALL Analyze(t,iter)
 
 ! compute initial timestep
@@ -196,6 +201,7 @@ CALL CPU_TIME(time_start)
 
 ! Run computation
 DO
+  IF (doBaseFlow)       CALL UpdateBaseFlow(dt)
   ! Update time step
   CALL UpdateTimeStep()
 

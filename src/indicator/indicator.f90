@@ -32,6 +32,8 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 
+LOGICAL           :: doIndicatorBaseFlow    = .FALSE. !< switch whether to compute indicator on baseflow
+
 INTEGER,PARAMETER :: INDTYPE_DG             = 0
 INTEGER,PARAMETER :: INDTYPE_FV             = 1
 INTEGER,PARAMETER :: INDTYPE_PERSSON        = 2
@@ -74,6 +76,7 @@ INTERFACE FinalizeIndicator
   MODULE PROCEDURE FinalizeIndicator
 END INTERFACE
 
+PUBLIC::doIndicatorBaseFlow
 PUBLIC::InitIndicator
 PUBLIC::CalcIndicator
 PUBLIC::IndPersson
