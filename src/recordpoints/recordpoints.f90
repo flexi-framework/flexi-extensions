@@ -359,7 +359,7 @@ SUBROUTINE RecordPoints(nVar,StrVarNames,iter,t,forceSampling)
 USE MOD_Analyze_Vars,     ONLY: WriteData_dt,tWriteData
 USE MOD_RecordPoints_Vars,ONLY: RP_Data
 USE MOD_RecordPoints_Vars,ONLY: RP_Buffersize,RP_MaxBufferSize,RP_SamplingOffset,iSample
-USE MOD_RecordPoints_Vars,ONLY: nRP
+USE MOD_RecordPoints_Vars,ONLY: nRP,RP_doWriteToFile
 USE MOD_Timedisc_Vars,    ONLY: dt
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -398,7 +398,7 @@ IF(iSample.EQ.RP_Buffersize) THEN
   ELSE
     ! Just reset buffer and strart from scratch
     iSample = 0
-    RP_Data(:,:) = 0.
+    RP_Data(:,:,:) = 0.
   END IF
 END IF
 

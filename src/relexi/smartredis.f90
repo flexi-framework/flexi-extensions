@@ -16,7 +16,7 @@
 #include "eos.h"
 
 !==================================================================================================================================
-!> This module contains the necessary routines for communication with Relexi via a SmartRedis client
+!> This module contains the necessary routines for communication with Relexi via a SmartRedis client.
 !==================================================================================================================================
 MODULE MOD_SmartRedis
 
@@ -25,12 +25,21 @@ MODULE MOD_SmartRedis
 IMPLICIT NONE
 PRIVATE
 
+INTEGER,PARAMETER      :: PRM_SMARTREDIS_NONE      = 0
+INTEGER,PARAMETER      :: PRM_SMARTREDIS_HIT       = 1
+INTEGER,PARAMETER      :: PRM_SMARTREDIS_CHANNEL   = 2
+INTEGER,PARAMETER      :: PRM_SMARTREDIS_CYLINDER  = 3
+
 INTERFACE DefineParametersSmartRedis
   MODULE PROCEDURE DefineParametersSmartRedis
 END INTERFACE
 
 INTERFACE InitSmartRedis
   MODULE PROCEDURE InitSmartRedis
+END INTERFACE
+
+INTERFACE AnalyzeSmartRedis
+  MODULE PROCEDURE AnalyzeSmartRedis
 END INTERFACE
 
 INTERFACE FinalizeSmartRedis
@@ -46,11 +55,11 @@ INTERFACE ExchangeDataSmartRedis
 END INTERFACE
 
 
-
 PUBLIC :: DefineParametersSmartRedis
 PUBLIC :: InitSmartRedis
 PUBLIC :: FinalizeSmartRedis
 PUBLIC :: ExchangeDataSmartRedis
+PUBLIC :: AnalyzeSmartRedis
 !==================================================================================================================================
 
 CONTAINS
@@ -60,7 +69,7 @@ CONTAINS
 !==================================================================================================================================
 SUBROUTINE DefineParametersSmartRedis()
 ! MODULES
-USE MOD_ReadInTools ,ONLY: prms
+USE MOD_ReadInTools ,ONLY: prms,addStrListEntry
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -69,10 +78,20 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("SmartRedis")
 CALL prms%CreateLogicalOption("doSmartRedis", "Communicate via the SmartRedis Client", ".FALSE.")
-CALL prms%CreateLogicalOption("ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
-CALL prms%CreateLogicalOption("useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
-CALL prms%CreateLogicalOption("doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
+CALL prms%CreateIntFromStringOption('SR_Type', "Type of SmartRedis communication: None, HIT, Channel, Cylinder.", "hit")
+CALL addStrListEntry('SR_Type','none',     PRM_SMARTREDIS_NONE)
+CALL addStrListEntry('SR_Type','hit',      PRM_SMARTREDIS_HIT)
+CALL addStrListEntry('SR_Type','channel',  PRM_SMARTREDIS_CHANNEL)
+CALL addStrListEntry('SR_Type','cylinder', PRM_SMARTREDIS_CYLINDER)
+CALL prms%CreateLogicalOption("SR_useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
+CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
+
+CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
+                                                 "0.: Variable is not updated, 1.: always take new value.", "0.03")
+CALL prms%CreateRealOption("SR_action_blendfac", "Exponential blending factor between [0,1] for actions per time step.\n"//&
+                                                 "0.: Variable is not updated, 1.: always take new value.", "0.01")
+CALL prms%CreateLogicalOption("SR_ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
 
 END SUBROUTINE DefineParametersSmartRedis
 
@@ -84,33 +103,71 @@ SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
 USE MOD_SmartRedis_Vars
-USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT
+USE MOD_Mesh_Vars,       ONLY: nBCs,BC
+USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT,GETINTFROMSTR
+USE MOD_TimeDisc_Vars,   ONLY: nRKStages
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER                   :: i
 !==================================================================================================================================
 
 doSmartRedis  = GETLOGICAL("doSmartRedis")
 IF (doSmartRedis) THEN
-  dbIsClustered = GETLOGICAL("ClusteredDatabase")
+  dbIsClustered = GETLOGICAL("SR_ClusteredDatabase")
   ! Currently only the MPI root communicates with the Database. Could be changing in the future.
   IF(MPIroot) SR_Error = Client%Initialize(dbIsClustered)
 END IF
 
-useInvariants = GETLOGICAL("useInvariants")
-IF (useInvariants) doNormInvariants = GETLOGICAL("doNormInvariants")
+SR_Type = GETINTFROMSTR('SR_Type')
 
-SR_nVarAction  = GETINT("SR_nVarAction")
+SELECT CASE (SR_Type)
+CASE (PRM_SMARTREDIS_NONE)
+  RETURN
+CASE (PRM_SMARTREDIS_HIT)
+  useInvariants = GETLOGICAL("SR_useInvariants")
+  IF (useInvariants) doNormInvariants = GETLOGICAL("SR_doNormInvariants")
+  SR_nVarAction  = GETINT("SR_nVarAction")
 #if FV_ENABLED == 2
-IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, 'Only one action per element is supported for FV_ENABLED == 2')
+  IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__,
+      'Only one action per element is supported for FV_ENABLED == 2')
 #endif
 #if EDDYVISCOSITY
-IF ( (SR_nVarAction.GT.2) .OR. (SR_nVarAction.LT.1) ) CALL ABORT(__STAMP__, &
-                                                           'Only one or two actions per element are supported for EDDYVISCOSITY')
+  IF ( (SR_nVarAction.GT.2) .OR. (SR_nVarAction.LT.1) ) CALL ABORT(__STAMP__, &
+      'Only one or two actions per element are supported for EDDYVISCOSITY')
 #endif
-
+CASE (PRM_SMARTREDIS_CHANNEL)
+  CALL ABORT(__STAMP__, 'CHANNEL case not implemented yet')
+CASE (PRM_SMARTREDIS_CYLINDER)
+  SR_nVarAction  = GETINT("SR_nVarAction")
+  IF (SR_nVarAction.NE.2) CALL ABORT(__STAMP__, &
+      'Exactly two actions per element are supported for CYLINDER case')
+  ! If we have cylinder, identify BC used for reward
+  IF (SR_Type.EQ.PRM_SMARTREDIS_CYLINDER) THEN
+    IF (COUNT(BC.EQ.31).NE.1) CALL ABORT(__STAMP__, &
+        'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
+    DO i=1,nBCs
+      IF (BC(i).EQ.31) THEN
+        SR_BC = i
+        EXIT
+      END IF
+    END DO
+    ! TODO: Compute automatically based on analyze_dt and relevant used-defined time scales
+    SR_reward_blendfac = GETREAL("SR_reward_blendfac")
+    SR_action_blendfac = GETREAL("SR_action_blendfac")
+    IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+        'SR_reward_blendfac must be in [0,1]')
+    IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+        'SR_action_blendfac must be in [0,1]')
+    ! Nullify temporally filtered quantities
+    SR_actions = 0.
+    SR_BodyForce = 0.
+  END IF
+CASE DEFAULT
+  CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
+END SELECT
 END SUBROUTINE InitSmartRedis
 
 
@@ -238,11 +295,81 @@ DEALLOCATE(RealArray_Global)
 
 END SUBROUTINE GatheredReadSmartRedis
 
+!==================================================================================================================================
+!> Routine executed after each time step to pre/postprocess actions, states and rewards
+!==================================================================================================================================
+SUBROUTINE AnalyzeSmartRedis()
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_SmartRedis_Vars
+USE MOD_Mesh_Vars,      ONLY: nBCs
+USE MOD_CalcBodyForces, ONLY: CalcBodyForces
+USE MOD_Exactfunc_Vars, ONLY: jetStrength
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,DIMENSION(3,nBCs)    :: Fv,Fp,BodyForce ! viscous/pressure/resulting body force
+!==================================================================================================================================
+SELECT CASE (SR_Type)
+CASE (PRM_SMARTREDIS_NONE)
+  RETURN
+CASE (PRM_SMARTREDIS_HIT)
+  RETURN
+CASE (PRM_SMARTREDIS_CHANNEL)
+  RETURN
+CASE (PRM_SMARTREDIS_CYLINDER)
+  ! Update actions and bodyforces for reward using exponential filtering to avoid spikes.
+  ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
+  !
+  ! 1.) Update Body Force (exponential blending)
+  CALL CalcBodyForces(Bodyforce, Fp, Fv)
+  SR_BodyForce = SR_BodyForce + SR_reward_blendfac*(BodyForce(:,SR_BC) - SR_BodyForce)
+  ! 2.) Update Jet Strength (exponential blending)
+  jetStrength = jetStrength + SR_action_blendfac*(SR_actions - jetStrength)
+CASE DEFAULT
+  CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
+END SELECT
+END SUBROUTINE AnalyzeSmartRedis
 
 !==================================================================================================================================
-!>
+!> Call corresponding subroutine for the SmartRedis communication type
 !==================================================================================================================================
 SUBROUTINE ExchangeDataSmartRedis(U, firstTimeStep, lastTimeStep)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_SmartRedis_Vars
+USE MOD_Mesh_Vars, ONLY: nElems
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)             :: U(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+LOGICAL,INTENT(IN)          :: FirstTimeStep
+LOGICAL,INTENT(IN)          :: LastTimeStep
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+SELECT CASE (SR_Type)
+CASE (PRM_SMARTREDIS_NONE)
+  RETURN
+CASE (PRM_SMARTREDIS_HIT)
+  CALL ExchangeDataSmartRedis_HIT(U, FirstTimeStep, LastTimeStep)
+CASE (PRM_SMARTREDIS_CHANNEL)
+  CALL ExchangeDataSmartRedis_CHANNEL(U, FirstTimeStep, LastTimeStep)
+CASE (PRM_SMARTREDIS_CYLINDER)
+  CALL ExchangeDataSmartRedis_CYLINDER(U, FirstTimeStep, LastTimeStep)
+CASE DEFAULT
+  CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
+END SELECT
+END SUBROUTINE ExchangeDataSmartRedis
+
+!==================================================================================================================================
+!> Data exchange with SmartRedis for the HIT case
+!==================================================================================================================================
+SUBROUTINE ExchangeDataSmartRedis_HIT(U, firstTimeStep, lastTimeStep)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -275,7 +402,10 @@ REAL                           :: actions(SR_nVarAction,nElems)
 REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
 REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
-INTEGER                        :: i,j,k,iElem
+INTEGER                        :: i,iElem
+#if EDDYVISCOSITY
+INTEGER                        :: j,k
+#endif
 INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 !==================================================================================================================================
@@ -342,10 +472,105 @@ IF (.NOT. lastTimeStep) THEN
     FV_alpha(iElem) = MAX(FV_alpha_min, MIN(FV_alpha_max, actions_modal(1,0,0,0,iElem)))
 #endif
   END DO
-
 END IF !.NOT.lastTimeStep
+END SUBROUTINE ExchangeDataSmartRedis_HIT
 
-END SUBROUTINE ExchangeDataSmartRedis
+!==================================================================================================================================
+!> Data exchange with SmartRedis for the CHANNEL case
+!==================================================================================================================================
+SUBROUTINE ExchangeDataSmartRedis_CHANNEL(U, firstTimeStep, lastTimeStep)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Mesh_Vars,          ONLY: nElems
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)             :: U(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+LOGICAL,INTENT(IN)          :: FirstTimeStep
+LOGICAL,INTENT(IN)          :: LastTimeStep
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+CALL ABORT(__STAMP__, 'CHANNEL case not implemented yet')
+END SUBROUTINE ExchangeDataSmartRedis_CHANNEL
+
+!==================================================================================================================================
+!> Data exchange with SmartRedis for the CYLINDER case
+!==================================================================================================================================
+SUBROUTINE ExchangeDataSmartRedis_CYLINDER(U, firstTimeStep, lastTimeStep)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_SmartRedis_Vars
+USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_RecordPoints,       ONLY: EvalRecordPoints
+USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP
+USE MOD_EOS,                ONLY: ConsToPrim
+USE MOD_Exactfunc_Vars,     ONLY: jetStrength
+USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)             :: U(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+LOGICAL,INTENT(IN)          :: FirstTimeStep
+LOGICAL,INTENT(IN)          :: LastTimeStep
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+CHARACTER(LEN=255)             :: Key
+INTEGER,PARAMETER              :: interval = 10      ! polling interval in milliseconds
+INTEGER,PARAMETER              :: tries    = HUGE(1) ! Infinite number of polling tries
+REAL                           :: U_RP(    PP_nVar    ,nRP)  ! cons. state at record points
+REAL                           :: UPrim_RP(PP_nVarPrim,nRP)  ! prim. state at record points
+LOGICAL                        :: found    = .FALSE.
+INTEGER                        :: i,lastTimeStepInt
+REAL                           :: actions(1),cd,cl
+!==================================================================================================================================
+! Gather U across all MPI ranks and write to Redis Database
+Key = TRIM(FlexiTag)//"state"
+CALL EvalRecordPoints(U_RP)
+DO i=1,nRP
+  CALL ConsToPrim(UPrim_RP(:,i),U_RP(:,i))
+  UPrim_RP(PRES,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
+
+END DO
+CALL GatheredWriteSmartRedis(1, SHAPE(UPrim_RP(PRES,:)), UPrim_RP(PRES,:), TRIM(Key), Shape_Out = (/nGlobalRP/))
+
+IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
+  ! Compute lift and drag coefficients, i.e. (area already taken into account in computation of forces)
+  ! cd = Drag/(0.5*rho_0*U_0^2)
+  ! cl = Lift/(0.5*rho_0*U_0^2)
+  ! since U_bulk = rho_0 = 1 in this case, it simplifies to
+  cd = SR_BodyForce(1)/0.5
+  cl = SR_BodyForce(2)/0.5
+  ! Put lift and drag coeffcicients into DB for Reward
+  Key = TRIM(FlexiTag)//"reward"
+  SR_Error = Client%put_tensor(TRIM(Key),(/cd,cl/),(/2/))
+
+  ! Indicate if FLEXI is about to finalize
+  lastTimeStepInt = MERGE(-1,1,lastTimeStep)
+  Key = TRIM(FlexiTag)//"step_type"
+  SR_Error = Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
+ENDIF
+
+! Get actions from Redis Database and scatter across all MPI ranks
+! Only necessary if we want to compute further, i.e. if not lastTimeStep
+IF (.NOT. lastTimeStep) THEN
+  Key = TRIM(FlexiTag)//"actions"
+  IF(MPIroot) THEN
+    SR_Error = Client%poll_tensor(TRIM(Key), interval, tries, found)
+    IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
+    SR_Error = Client%unpack_tensor(TRIM(Key), actions, SHAPE(actions))
+    SR_Error = Client%delete_tensor(TRIM(Key))
+  ENDIF
+  ! Ensure zero net massflow
+  SR_actions(1) =     actions(1)
+  SR_actions(2) = -1.*actions(1)
+#if USE_MPI
+  CALL MPI_BCAST(SR_actions,2,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
+#endif
+END IF !.NOT.lastTimeStep
+END SUBROUTINE ExchangeDataSmartRedis_CYLINDER
 
 !==================================================================================================================================
 !> Computes the 5 invariants of the velocity gradient tensor, according to
@@ -368,7 +593,6 @@ REAL,INTENT(INOUT)          :: Invariants(5,0:PP_N,0:PP_N,0:PP_NZ,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                :: i,j,k,iElem
-REAL                   :: norm
 REAL                   :: S(3,3),S2(3,3)
 REAL                   :: W(3,3),W2(3,3)
 REAL                   :: mat(3,3)
@@ -428,10 +652,8 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-
-IF(MPIroot .AND. doSmartRedis) SR_Error = Client%destructor()
-
+IF(MPIroot.AND.doSmartRedis) SR_Error = Client%destructor()
 END SUBROUTINE FinalizeSmartRedis
-#endif
+#endif /*USE_SMARTREDIS*/
 
 END MODULE MOD_SmartRedis

@@ -334,7 +334,7 @@ USE MOD_FV_Blending         ,ONLY: FV_Info
 USE MOD_PPLimiter           ,ONLY: PPLimiter_Info,PPLimiter
 #endif /*PP_LIMITER*/
 #if USE_SMARTREDIS
-USE MOD_SmartRedis          ,ONLY: ExchangeDataSmartRedis
+USE MOD_SmartRedis          ,ONLY: ExchangeDataSmartRedis, AnalyzeSmartRedis
 USE MOD_SmartRedis_Vars     ,ONLY: doSmartRedis
 #endif
 ! IMPLICIT VARIABLE HANDLING
@@ -371,6 +371,11 @@ END IF
 IF((MOD(iter,INT(nAnalyzeTestCase,KIND=8)).EQ.0).OR.doAnalyze) CALL AnalyzeTestCase(t,doFinalize)
 ! Evaluate recordpoints
 IF(RP_onProc) CALL RecordPoints(PP_nVar,StrVarNames,iter,t,doAnalyze)
+
+#if USE_SMARTREDIS
+! Update SmartRedis information for current time step
+IF (doSmartRedis) CALL AnalyzeSmartRedis()
+#endif
 
 ! Analyze and output now
 IF(doAnalyze)THEN
