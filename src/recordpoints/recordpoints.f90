@@ -393,13 +393,7 @@ RP_Data(0,     :,iSample) = t
 
 ! dataset is full, write data (if requested) otherwise just reset
 IF(iSample.EQ.RP_Buffersize) THEN
-  IF (RP_doWriteToFile) THEN
-    CALL WriteRP(nVar,StrVarNames,tWriteData,.FALSE.)
-  ELSE
-    ! Just reset buffer and strart from scratch
-    iSample = 0
-    RP_Data(:,:,:) = 0.
-  END IF
+  CALL WriteRP(nVar,StrVarNames,tWriteData,.FALSE.)
 END IF
 
 END SUBROUTINE RecordPoints
@@ -470,7 +464,7 @@ USE MOD_HDF5_Output       ,ONLY: WriteAttribute,WriteArray,MarkWriteSuccessful
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
 USE MOD_Mesh_Vars         ,ONLY: MeshFile
 USE MOD_Output_Vars       ,ONLY: ProjectName
-USE MOD_Recordpoints_Vars ,ONLY: lastSample
+USE MOD_Recordpoints_Vars ,ONLY: lastSample,RP_doWriteToFile
 USE MOD_Recordpoints_Vars ,ONLY: RPDefFile,RP_Data,iSample,nSamples
 USE MOD_Recordpoints_Vars ,ONLY: offsetRP,nRP,nGlobalRP
 USE MOD_Recordpoints_Vars ,ONLY: RP_Buffersize,RP_Maxbuffersize,RP_fileExists,chunkSamples
@@ -492,6 +486,12 @@ CHARACTER(LEN=255)             :: FileString
 CHARACTER(LEN=255)             :: tmp255
 REAL                           :: startT,endT
 !==================================================================================================================================
+! If writing RP files is suppressed, just reset buffer and return
+IF(.NOT.RP_doWriteToFile) THEN
+  RP_Data=0.
+  iSample = 0
+  RETURN
+END IF
 
 #if USE_MPI
 IF(myRPrank.EQ.0)THEN
