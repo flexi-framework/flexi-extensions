@@ -102,7 +102,7 @@ USE MOD_Equation_Vars     ,ONLY: nRefState,BCData,BCDataPrim,nBCByType,BCSideID
 USE MOD_Equation_Vars     ,ONLY: BCStateFile,RefStatePrim
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,BoundaryType,nBCs,Face_xGP
-USE MOD_Exactfunc_Vars    ,ONLY: jetWidth,jetStrength
+USE MOD_Exactfunc_Vars    ,ONLY: jetWidth,jetStrength,IniCenter
 #if PARABOLIC
 USE MOD_Exactfunc_Vars    ,ONLY: delta99_in,x_in,BlasiusInitDone
 #endif
@@ -177,8 +177,9 @@ END IF
 DO i=1,nBCs
   locType =BoundaryType(i,BC_TYPE)
   IF (locType.EQ.31) THEN
-    jetWidth    = GETREAL('jetWidth','10')
-    jetStrength = GETREALARRAY('jetStrength',2,'(/0.,0./)')
+    jetWidth     = GETREAL('jetWidth','10')
+    jetStrength  = GETREALARRAY('jetStrength',2,'(/0.,0./)')
+    IniCenter(:) = GETREALARRAY('iniCenter',3,'(/0.,0.,0./)')
   END IF
 END DO
 
@@ -272,7 +273,7 @@ USE MOD_EOS          ,ONLY: ConsToPrim,PrimtoCons
 USE MOD_EOS          ,ONLY: PRESSURE_RIEMANN
 USE MOD_EOS_Vars     ,ONLY: sKappaM1,Kappa,KappaM1,R
 USE MOD_ExactFunc    ,ONLY: ExactFunc
-USE MOD_ExactFunc_Vars,ONLY: jetWidth,jetStrength
+USE MOD_ExactFunc_Vars,ONLY: jetWidth,jetStrength,IniCenter
 USE MOD_Equation_Vars,ONLY: IniExactFunc,BCDataPrim,RefStatePrim
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -351,7 +352,7 @@ CASE(3,31,4,9,91,23,24,25,27)
       ! "Artificial neural networks trained through deep reinforcement learning discover control strategies for active flow control"
       tmp1 = jetWidth/180.*PP_PI ! Jet area in rad
       DO q=0,ZDIM(Nloc); DO p=0,Nloc
-        tmp2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+        tmp2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1)) ! position of point along the cylinder in rad
         ! if region of suction/blowing overwrite velocity at boundary
         IF     (ABS(tmp2-0.5*PP_PI).LT.0.5*tmp1) THEN ! Upper jet at +PI/2
           UPrim_boundary(VEL1,p,q)= jetStrength(1)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-0.5*PP_PI))
@@ -553,7 +554,7 @@ USE MOD_Globals      ,ONLY: Abort
 USE MOD_Mesh_Vars    ,ONLY: BoundaryType,BC
 USE MOD_EOS          ,ONLY: PrimToCons,ConsToPrim
 USE MOD_ExactFunc    ,ONLY: ExactFunc
-USE MOD_ExactFunc_Vars,ONLY: jetWidth
+USE MOD_ExactFunc_Vars,ONLY: jetWidth, IniCenter
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 USE MOD_Riemann      ,ONLY: ViscousFlux
@@ -643,7 +644,8 @@ ELSE
   CASE(31) ! Wall or Blowing/Suction Jet
     ang1 = jetWidth/180.*PP_PI ! area of jet in rad
     DO q=0,ZDIM(Nloc); DO p=0,Nloc
-      ang2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+      ! position of point along the cylinder in rad
+      ang2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1))
       ! region of suction/blowing
       IF ((ABS(ang2-0.5*PP_PI).LT.0.5*ang1) .OR. &  ! Upper jet at +PI/2
           (ABS(ang2+0.5*PP_PI).LT.0.5*ang1) ) THEN  ! Lower jet at -PI/2

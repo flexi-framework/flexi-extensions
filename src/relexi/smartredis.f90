@@ -103,7 +103,7 @@ SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
 USE MOD_SmartRedis_Vars
-USE MOD_Mesh_Vars,       ONLY: nBCs,BC
+USE MOD_Mesh_Vars,       ONLY: nBCs,BoundaryType
 USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT,GETINTFROMSTR
 USE MOD_TimeDisc_Vars,   ONLY: nRKStages
 IMPLICIT NONE
@@ -141,30 +141,24 @@ CASE (PRM_SMARTREDIS_HIT)
 CASE (PRM_SMARTREDIS_CHANNEL)
   CALL ABORT(__STAMP__, 'CHANNEL case not implemented yet')
 CASE (PRM_SMARTREDIS_CYLINDER)
-  SR_nVarAction  = GETINT("SR_nVarAction")
-  IF (SR_nVarAction.NE.2) CALL ABORT(__STAMP__, &
-      'Exactly two actions per element are supported for CYLINDER case')
-  ! If we have cylinder, identify BC used for reward
-  IF (SR_Type.EQ.PRM_SMARTREDIS_CYLINDER) THEN
-    IF (COUNT(BC.EQ.31).NE.1) CALL ABORT(__STAMP__, &
-        'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
-    DO i=1,nBCs
-      IF (BC(i).EQ.31) THEN
-        SR_BC = i
-        EXIT
-      END IF
-    END DO
-    ! TODO: Compute automatically based on analyze_dt and relevant used-defined time scales
-    SR_reward_blendfac = GETREAL("SR_reward_blendfac")
-    SR_action_blendfac = GETREAL("SR_action_blendfac")
-    IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
-        'SR_reward_blendfac must be in [0,1]')
-    IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
-        'SR_action_blendfac must be in [0,1]')
-    ! Nullify temporally filtered quantities
-    SR_actions = 0.
-    SR_BodyForce = 0.
-  END IF
+  IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1) CALL ABORT(__STAMP__, &
+      'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
+  DO i=1,nBCs
+    IF (BoundaryType(i,BC_TYPE).EQ.31) THEN
+      SR_BC = i
+      EXIT
+    END IF
+  END DO
+  ! TODO: Compute automatically based on analyze_dt and relevant used-defined time scales
+  SR_reward_blendfac = GETREAL("SR_reward_blendfac")
+  SR_action_blendfac = GETREAL("SR_action_blendfac")
+  IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+      'SR_reward_blendfac must be in [0,1]')
+  IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+      'SR_action_blendfac must be in [0,1]')
+  ! Nullify temporally filtered quantities
+  SR_actions = 0.
+  SR_BodyForce = 0.
 CASE DEFAULT
   CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
 END SELECT
