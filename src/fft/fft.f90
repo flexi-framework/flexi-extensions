@@ -86,15 +86,16 @@ INTEGER  :: void
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT FFT...'
 
+! Read global IJK sorting on root rank
+! TODO: Unnecessary for all non-root ranks. Could be circumvented by adapting function to read in single mode
+CALL ReadIJKSorting(doGlobal=.TRUE.)
+
 IF (MPIroot) THEN
 #if USE_OPENMP
   ! Initialize FFTW with maximum number of OpenMP threads if enabled
   void = FFTW_INIT_THREADS()
   CALL FFTW_PLAN_WITH_NTHREADS(OMP_GET_MAX_THREADS())
 #endif
-
-  ! Read global IJK sorting on root rank
-  CALL ReadIJKSorting(doGlobal=.TRUE.)
 
   N_Visu = NVisu
   N_FFT=(N_Visu+1)*nElems_IJK(1)
