@@ -66,7 +66,7 @@ SUBROUTINE InitFFT()
 ! MODULES
 USE MOD_Globals
 USE MOD_FFT_Vars
-USE MOD_Mesh_Readin,   ONLY: ReadIJKSorting_Global
+USE MOD_Mesh_Readin,   ONLY: ReadIJKSorting
 USE MOD_Mesh_Vars,     ONLY: nElems_IJK,Elem_IJK,nGlobalElems
 USE MOD_Output_Vars,   ONLY: NVisu
 #if USE_OPENMP
@@ -94,7 +94,7 @@ IF (MPIroot) THEN
 #endif
 
   ! Read global IJK sorting on root rank
-  CALL ReadIJKSorting_Global()
+  CALL ReadIJKSorting(doGlobal=.TRUE.)
 
   N_Visu = NVisu
   N_FFT=(N_Visu+1)*nElems_IJK(1)
