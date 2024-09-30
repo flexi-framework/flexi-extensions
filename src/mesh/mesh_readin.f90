@@ -424,7 +424,8 @@ DO iElem=FirstElemInd,LastElemInd
       ! BC sides don't need a connection, except for internal (BC_TYPE=0), periodic (BC_TYPE=1) and "dummy" inner BCs (BC_TYPE=100).
       ! For all other BC sides: reset the flip and mortars settings, do not build a connection.
       IF(aSide%BCindex.NE.0)THEN ! BC
-        IF((BoundaryType(aSide%BCindex,BC_TYPE).NE.1).AND.&
+        IF((BoundaryType(aSide%BCindex,BC_TYPE).NE.0).AND.&
+           (BoundaryType(aSide%BCindex,BC_TYPE).NE.1).AND.&
            (BoundaryType(aSide%BCindex,BC_TYPE).NE.100))THEN
           aSide%flip  =0
           IF(iMortar.EQ.0) aSide%mortarType  = 0
@@ -860,24 +861,36 @@ END FUNCTION ELEMIPROC
 !> Read arrays nElems_IJK (global number of elements in i,j,k direction) and Elem_IJK (mapping from global element to i,j,k index)
 !> for meshes that are i,j,k sorted.
 !===================================================================================================================================
-SUBROUTINE ReadIJKSorting()
+SUBROUTINE ReadIJKSorting(doGlobal)
 ! MODULES
-USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,offsetElem,nElems,MeshFile
+USE MOD_Mesh_Vars,       ONLY: nElems_IJK,Elem_IJK,offsetElem,nElems,nGlobalElems,MeshFile
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
+LOGICAL,INTENT(IN),OPTIONAL      :: doGlobal
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-LOGICAL        :: dsExists
+LOGICAL                          :: dsExists
+LOGICAL                          :: doGlobal_loc
 !===================================================================================================================================
+IF (PRESENT(doGlobal)) THEN
+  doGlobal_loc = doGlobal
+ELSE
+  doGlobal_loc = .FALSE.
+END IF
 
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL DatasetExists(File_ID,'nElems_IJK',dsExists)
 IF(dsExists)THEN
   CALL ReadArray('nElems_IJK',1,(/3/),0,1,IntArray=nElems_IJK)
-  ALLOCATE(Elem_IJK(3,nElems))
-  CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntArray=Elem_IJK)
+  IF (doGlobal_loc) THEN
+    ALLOCATE(Elem_IJK(3,nGlobalElems))
+    CALL ReadArray('Elem_IJK',2,(/3,nGlobalElems/),0,2,IntArray=Elem_IJK)
+  ELSE
+    ALLOCATE(Elem_IJK(3,nElems))
+    CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntArray=Elem_IJK)
+  END IF
 END IF
 CALL CloseDataFile()
 END SUBROUTINE ReadIJKSorting

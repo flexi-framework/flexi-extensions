@@ -26,16 +26,16 @@ IMPLICIT NONE
 PRIVATE
 
 INTERFACE InitSigmaModel
-   MODULE PROCEDURE InitSigmaModel
+  MODULE PROCEDURE InitSigmaModel
 END INTERFACE
 
 INTERFACE SigmaModel
-   MODULE PROCEDURE SigmaModel_Point
-   MODULE PROCEDURE SigmaModel_Volume
+  MODULE PROCEDURE SigmaModel_Point
+  MODULE PROCEDURE SigmaModel_Volume
 END INTERFACE
 
 INTERFACE FinalizeSigmaModel
-   MODULE PROCEDURE FinalizeSigmaModel
+  MODULE PROCEDURE FinalizeSigmaModel
 END INTERFACE
 
 PUBLIC::InitSigmaModel,SigmaModel_Volume,FinalizeSigmaModel
@@ -179,7 +179,6 @@ IMPLICIT NONE
 !===============================================================================================================================
 SDEALLOCATE(CSdeltaS2)
 SigmaModelInitIsDone = .FALSE.
-
 END SUBROUTINE FinalizeSigmaModel
 
 END MODULE MOD_SigmaModel

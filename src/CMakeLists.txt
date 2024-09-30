@@ -60,7 +60,7 @@ ENDIF()
 # =========================================================================
 OPTION(FLEXI_SPLIT_DG "Use split DG formulation" OFF)
 CMAKE_DEPENDENT_OPTION(FLEXI_PROLONG_ENTROPY "Prolong on entropy variables" ON
-                             "FLEXI_SPLIT_DG; FLEXI_EQNSYSNAME STREQUAL navierstokes; FLEXI_NODETYPE STREQUAL GAUSS" ON)
+                       "FLEXI_SPLIT_DG; FLEXI_EQNSYSNAME STREQUAL navierstokes; FLEXI_NODETYPE STREQUAL GAUSS" ON)
 IF(FLEXI_SPLIT_DG)
   ADD_DEFINITIONS(-DSPLIT_DG)
   IF((FLEXI_EQNSYSNAME STREQUAL "navierstokes") AND (FLEXI_NODETYPE STREQUAL "GAUSS"))
@@ -158,8 +158,8 @@ ENDIF()
 # =========================================================================
 # Eddy viscosity models
 # =========================================================================
-CMAKE_DEPENDENT_OPTION(FLEXI_EDDYVISCOSITY "Enable eddy viscosity modells" OFF
-                                           "FLEXI_PARABOLIC"               OFF)
+CMAKE_DEPENDENT_OPTION(FLEXI_EDDYVISCOSITY "Enable eddy viscosity models" OFF
+                                           "FLEXI_PARABOLIC"              OFF)
 IF (FLEXI_EDDYVISCOSITY)
   ADD_DEFINITIONS(-DEDDYVISCOSITY=1)
 ELSE()
@@ -329,7 +329,9 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/recordpoints/*.f90
                            ./src/restart/*.f90
                            ./src/output/*.f90
+                           ./src/baseflow/*.f90
                            ./src/sponge/*.f90
+                           ./src/avg2d/*.f90
                            ./src/filter/*.f90
                            ./src/io_hdf5/*.f90
                            ./src/relexi/*.f90
@@ -373,7 +375,8 @@ IF (FLEXI_EDDYVISCOSITY)
             eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/smagorinsky/*.f90
             eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/dynSmagorinsky/*.f90
             eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/vreman/*.f90
-            eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/sigmaModel/*.f90)
+            eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/sigmaModel/*.f90
+            eddyviscF90 ./src/equations/${FLEXI_EQNSYSNAME}/eddyVisc/wale/*.f90)
   LIST(APPEND eqnsysF90 ${eddyviscF90})
 ENDIF()
 
