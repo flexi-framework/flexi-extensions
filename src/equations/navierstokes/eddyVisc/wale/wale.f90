@@ -55,6 +55,7 @@ USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_Interpolation_Vars ,ONLY: InterpolationInitIsDone,wGP
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone,nElems,sJ,Elem_xGP
 USE MOD_EOS_Vars           ,ONLY: mu0
+USE MOD_IO_HDF5            ,ONLY:AddToFieldData,FieldOut
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -70,11 +71,13 @@ END IF
 SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT WALE...'
 
-! Read model coefficient
+!! Read model coefficient
+!CS = GETREAL('CS')
+ALLOCATE(CS(1,0:PP_N,0:PP_N,0:PP_N,nElems))
 CS = GETREAL('CS')
 
 ! Allocate precomputed (model constant*filter width)**2
-ALLOCATE(CSdeltaS2(nElems))
+!ALLOCATE(CSdeltaS2(nElems))
 
 ! WALE: (CS*deltaS)**2 * beta * dens
 ! Calculate the filter width deltaS := (Cell volume)^(1/3) / (PP_N+1)
@@ -84,8 +87,10 @@ DO iElem=1,nElems
     CellVol = CellVol + wGP(i)*wGP(j)*wGP(k)/sJ(i,j,k,iElem,0)
   END DO; END DO; END DO
   DeltaS(iElem)    = CellVol**(1./3.) / (REAL(PP_N)+1.)
-  CsDeltaS2(iElem) = (DeltaS(iElem)*CS)**2.
+  !CsDeltaS2(iElem) = (DeltaS(iElem)*CS)**2.
 END DO
+
+CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray=Cs)
 
 WALEInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT WALE DONE!'
@@ -97,14 +102,16 @@ END SUBROUTINE InitWALE
 !===================================================================================================================================
 !> Compute WALE eddy-visosity
 !===================================================================================================================================
-PPURE SUBROUTINE WALE_Point(gradUx,gradUy,gradUz,dens,CsDeltaS2,muSGS)
+!PPURE SUBROUTINE WALE_Point(gradUx,gradUy,gradUz,dens,CsDeltaS2,muSGS)
+PPURE SUBROUTINE WALE_Point(gradUx,gradUy,gradUz,dens,DeltaS,Cw,muSGS)
 ! MODULES
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVarLifting),INTENT(IN)  :: gradUx, gradUy, gradUz   !> Gradients in x,y,z directions
 REAL                          ,INTENT(IN)  :: dens       !> pointwise density
-REAL                          ,INTENT(IN)  :: CsDeltaS2  !> constant factor (CS*deltaS)**2
+REAL                          ,INTENT(IN)  :: DeltaS     !> filter width
+REAL                          ,INTENT(IN)  :: Cw         !> Cw
 REAL                          ,INTENT(OUT) :: muSGS      !> pointwise eddyviscosity
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -137,7 +144,7 @@ norm_S_d = 0.5*( (g_sq(1,2)+g_sq(2,1))**2 + (g_sq(2,3)+g_sq(3,2))**2 + (g_sq(3,1
          + (g_sq(1,1)-tr_g_sq)**2 + (g_sq(2,2)-tr_g_sq)**2 + (g_sq(3,3)-tr_g_sq)**2                 ! Diagonal
 
 ! WALE model: mu = rho * (DeltaS*C_w)**2 * beta
-muSGS = dens * CsDeltaS2 * norm_S_d**(3./2.) / (norm_S**(5./2.) + norm_S_d**(5./4.)) ! Eq. (13)
+muSGS = dens * (DeltaS*Cw)**2 * norm_S_d**(3./2.) / (norm_S**(5./2.) + norm_S_d**(5./4.)) ! Eq. (13)
 END SUBROUTINE WALE_Point
 
 
@@ -148,7 +155,7 @@ SUBROUTINE WALE_Volume()
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars,         ONLY: nElems
-USE MOD_EddyVisc_Vars,     ONLY: CsDeltaS2, muSGS
+USE MOD_EddyVisc_Vars,     ONLY: Cs, DeltaS, muSGS
 USE MOD_Lifting_Vars,      ONLY: gradUx, gradUy, gradUz
 USE MOD_DG_Vars,           ONLY: U
 IMPLICIT NONE
@@ -161,7 +168,8 @@ INTEGER             :: i,j,k,iElem
 DO iElem = 1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
     CALL WALE_Point(gradUx(   :,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
-                         U(DENS,i,j,k,iElem), CsDeltaS2(     iElem),  muSGS(1,i,j,k,iElem))
+                         U(DENS,i,j,k,iElem), DeltaS(        iElem),     Cs(1,i,j,k,iElem),  muSGS(1,i,j,k,iElem))
+                         !U(DENS,i,j,k,iElem), CsDeltaS2(     iElem),  muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE WALE_Volume
