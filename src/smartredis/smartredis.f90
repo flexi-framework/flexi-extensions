@@ -16,7 +16,7 @@
 #include "eos.h"
 
 !==================================================================================================================================
-!> This module contains the necessary routines for communication with Relexi via a SmartRedis client
+!> This module contains the necessary routines for communication with the SmartSim Orchestrator via a SmartRedis client
 !==================================================================================================================================
 MODULE MOD_SmartRedis
 

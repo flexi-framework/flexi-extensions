@@ -334,7 +334,7 @@ FILE(GLOB_RECURSE flexiF90 ./src/interpolation/*.f90
                            ./src/avg2d/*.f90
                            ./src/filter/*.f90
                            ./src/io_hdf5/*.f90
-                           ./src/relexi/*.f90
+                           ./src/smartredis/*.f90
                            ./src/timedisc/*.f90
                            ./src/implicit/*.f90
                            ./src/areas/*.f90
