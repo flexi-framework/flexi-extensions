@@ -18,7 +18,7 @@
 MODULE MOD_RecordPoints_Vars
 ! MODULES
 #if USE_MPI
-USE mpi
+USE MPI
 #endif
 
 IMPLICIT NONE
@@ -30,6 +30,7 @@ SAVE
 CHARACTER(LEN=255) :: RPDefFile               !< File containing element-local parametric recordpoint coordinates and structure
 LOGICAL            :: RecordPointsInitIsDone = .FALSE. !< mark wheter recordpoints init routine is finished
 LOGICAL            :: RP_inUse  = .FALSE.     !< mark whether recordpoints should be evaluated during computation
+LOGICAL            :: RP_doWriteToFile = .FALSE. !< mark whether evaluated recordpoints should be written to file during simulation
 LOGICAL            :: RP_onProc = .FALSE.     !< marks wheter current proc has RPs
 LOGICAL            :: RP_fileExists = .FALSE. !< flag if RP file for analyze level has been created
 INTEGER            :: RP_Buffersize           !< no. of time samples (size of RP_Data)

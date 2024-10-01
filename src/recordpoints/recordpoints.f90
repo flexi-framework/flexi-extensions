@@ -68,6 +68,8 @@ IMPLICIT NONE
 CALL prms%SetSection("RecordPoints")
 CALL prms%CreateLogicalOption('RP_inUse',          "Set true to compute solution history at points defined in recordpoints file.",&
                                                    '.FALSE.')
+CALL prms%CreateLogicalOption('RP_doWriteToFile',  "Set true to write evaluated solution at points to file during simulation.",&
+                                                   '.TRUE.')
 CALL prms%CreateStringOption( 'RP_DefFile',        "File containing element-local parametric recordpoint coordinates and structure.")
 CALL prms%CreateIntOption(    'RP_MaxMemory',      "Maximum memory in MiB to be used for storing recordpoint state history. "//&
                                                    "If memory is exceeded before regular IO level states are written to file.",&
@@ -133,6 +135,9 @@ IF(RP_onProc)THEN
   ALLOCATE(lastSample(0:nVar_loc,nRP))
   lastSample=0.
 END IF
+
+! Check whether RP should be written to file
+RP_doWriteToFile = GETLOGICAL('RP_doWriteToFile')
 
 RecordPointsInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT RECORDPOINTS DONE!'
@@ -457,7 +462,7 @@ USE MOD_HDF5_Output       ,ONLY: WriteAttribute,WriteArray,MarkWriteSuccessful
 USE MOD_IO_HDF5           ,ONLY: File_ID,OpenDataFile,CloseDataFile
 USE MOD_Mesh_Vars         ,ONLY: MeshFile
 USE MOD_Output_Vars       ,ONLY: ProjectName
-USE MOD_Recordpoints_Vars ,ONLY: lastSample
+USE MOD_Recordpoints_Vars ,ONLY: lastSample,RP_doWriteToFile
 USE MOD_Recordpoints_Vars ,ONLY: RPDefFile,RP_Data,iSample,nSamples
 USE MOD_Recordpoints_Vars ,ONLY: offsetRP,nRP,nGlobalRP
 USE MOD_Recordpoints_Vars ,ONLY: RP_Buffersize,RP_Maxbuffersize,RP_fileExists,chunkSamples
@@ -479,6 +484,12 @@ CHARACTER(LEN=255)             :: FileString
 CHARACTER(LEN=255)             :: tmp255
 REAL                           :: startT,endT
 !==================================================================================================================================
+! If writing RP files is suppressed, just reset buffer and return
+IF(.NOT.RP_doWriteToFile) THEN
+  RP_Data=0.
+  iSample = 0
+  RETURN
+END IF
 
 #if USE_MPI
 IF(myRPrank.EQ.0)THEN

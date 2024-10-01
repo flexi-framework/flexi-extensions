@@ -18,7 +18,7 @@
 MODULE MOD_SmartRedis_Vars
 #if USE_SMARTREDIS
 ! MODULES
-USE SmartRedis_Client,  ONLY: client_type
+USE SmartRedis_Client,  ONLY: CLIENT_TYPE
 IMPLICIT NONE
 PUBLIC
 SAVE
@@ -26,13 +26,19 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-TYPE(client_type)   :: client           ! Client instance of SmartRedis to communicate with Redis Database
+TYPE(CLIENT_TYPE)   :: client           ! Client instance of SmartRedis to communicate with Redis Database
+INTEGER             :: SR_Type          ! Type of the SmartRedis communication
 LOGICAL             :: dbIsClustered    ! Indicate whether the Redis Database is clustered, i.e. distributed on different nodes
 LOGICAL             :: doSmartRedis     ! Flag whether communication with SmartRedis should be done
 LOGICAL             :: useInvariants    ! If true, the invariants of the gradient tensor are used as state instead of the velocities
 LOGICAL             :: doNormInvariants ! Normalize invariants by first one
 INTEGER             :: SR_nVarAction    ! Number/Dimension of actions received by agent per element
 INTEGER             :: SR_Error         ! Integer containing the SmartRedis Error
+INTEGER             :: SR_BC            ! Integer containing the SmartRedis Boundary Condition
+REAL                :: SR_BodyForce(3)  ! Array containing the (postprocessed) body force of the SR wall
+REAL                :: SR_actions(2)    ! Array containing the actions received by the agent
+REAL                :: SR_action_blendfac ! Blend factor for blending actions
+REAL                :: SR_reward_blendfac ! Blend factor for blending actions
 #endif
 
 END MODULE MOD_SmartRedis_Vars
