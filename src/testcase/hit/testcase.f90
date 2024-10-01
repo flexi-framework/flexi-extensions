@@ -723,7 +723,9 @@ END SUBROUTINE WriteStats
 SUBROUTINE FinalizeTestcase()
 ! MODULES
 USE MOD_Globals
+#if USE_FFTW
 USE MOD_FFT,  ONLY: FinalizeFFT
+#endif
 USE MOD_TestCase_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
