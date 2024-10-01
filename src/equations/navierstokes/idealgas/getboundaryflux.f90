@@ -661,7 +661,7 @@ ELSE
              gradUx_master(:,p,q),gradUy_master(:,p,q), gradUz_master(:,p,q),&
              NormVec(:,p,q)&
 #if EDDYVISCOSITY
-            ,muSGS_master(:,p,q,SideID),muSGS_master(:,p,q,SideID)&
+            ,muSGS_master(1,p,q,SideID),muSGS_master(1,p,q,SideID)&
 #endif
         )
         ! Sum up Euler and Diffusion Flux
@@ -680,7 +680,7 @@ ELSE
                              gradUx_master(:,p,q), gradUy_master(:,p,q), gradUz_master(:,p,q), &
                                Fd_Face_loc(:,p,q),   Gd_Face_loc(:,p,q),   Hd_Face_loc(:,p,q)  &
 #if EDDYVISCOSITY
-                             ,muSGS_master(:,p,q,SideID) &
+                             ,muSGS_master(1,p,q,SideID) &
 #endif
                            )
         ! Enforce energy flux is exactly zero at adiabatic wall
