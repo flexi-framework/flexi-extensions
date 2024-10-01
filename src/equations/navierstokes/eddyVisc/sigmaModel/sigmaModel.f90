@@ -54,9 +54,8 @@ USE MOD_EddyVisc_Vars
 USE MOD_ReadInTools        ,ONLY: GETREAL,GETLOGICAL
 USE MOD_Interpolation_Vars ,ONLY: InterpolationInitIsDone,wGP
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone,nElems,sJ
-!USE MOD_IO_HDF5            ,ONLY:AddToElemData,ElementOut
-USE MOD_IO_HDF5            ,ONLY:AddToFieldData,FieldOut
- IMPLICIT NONE
+USE MOD_IO_HDF5            ,ONLY: AddToFieldData,FieldOut
+IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -85,7 +84,6 @@ DO iElem=1,nElems
   !CSdeltaS2(iElem) = (CS * deltaS(iElem))**2
 END DO
 
-!CALL AddToElemData(ElementOut,'CS',RealArray=CS)
 CALL AddToFieldData(FieldOut,(/1,PP_N+1,PP_N+1,PP_NZ+1/),'Cs',(/'Cs'/),RealArray=Cs)
 
 SigmaModelInitIsDone=.TRUE.

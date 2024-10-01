@@ -71,8 +71,7 @@ END IF
 SWRITE(UNIT_stdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT WALE...'
 
-!! Read model coefficient
-!CS = GETREAL('CS')
+! Read model coefficient
 ALLOCATE(CS(1,0:PP_N,0:PP_N,0:PP_N,nElems))
 CS = GETREAL('CS')
 
@@ -102,7 +101,6 @@ END SUBROUTINE InitWALE
 !===================================================================================================================================
 !> Compute WALE eddy-visosity
 !===================================================================================================================================
-!PPURE SUBROUTINE WALE_Point(gradUx,gradUy,gradUz,dens,CsDeltaS2,muSGS)
 PPURE SUBROUTINE WALE_Point(gradUx,gradUy,gradUz,dens,DeltaS,Cw,muSGS)
 ! MODULES
 IMPLICIT NONE
@@ -169,7 +167,6 @@ DO iElem = 1,nElems
   DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
     CALL WALE_Point(gradUx(   :,i,j,k,iElem), gradUy(:,i,j,k,iElem), gradUz(:,i,j,k,iElem), &
                          U(DENS,i,j,k,iElem), DeltaS(        iElem),     Cs(1,i,j,k,iElem),  muSGS(1,i,j,k,iElem))
-                         !U(DENS,i,j,k,iElem), CsDeltaS2(     iElem),  muSGS(1,i,j,k,iElem))
   END DO; END DO; END DO ! i,j,k
 END DO
 END SUBROUTINE WALE_Volume
