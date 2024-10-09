@@ -139,7 +139,11 @@ CASE (PRM_SMARTREDIS_HIT)
       'Only one or two actions per element are supported for EDDYVISCOSITY')
 #endif
 CASE (PRM_SMARTREDIS_CHANNEL)
-  CALL ABORT(__STAMP__, 'CHANNEL case not implemented yet')
+  useInvariants = GETLOGICAL("SR_useInvariants")
+  IF (useInvariants) doNormInvariants = GETLOGICAL("SR_doNormInvariants")
+  SR_nVarAction  = GETINT("SR_nVarAction")
+  IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, &
+      'Only one action per element is supported for CHANNEL')
 CASE (PRM_SMARTREDIS_CYLINDER)
   IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1) CALL ABORT(__STAMP__, &
       'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
@@ -476,7 +480,18 @@ SUBROUTINE ExchangeDataSmartRedis_CHANNEL(U, firstTimeStep, lastTimeStep)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_SmartRedis_Vars
+USE MOD_ChangeBasisByDim,   ONLY: ChangeBasisVolume
+USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
+USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems,Elem_xGP
+USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
+#if USE_FFTW
+USE MOD_FFT_Vars,           ONLY: kmax
+USE MOD_Testcase_Vars,      ONLY: E_k
+#endif
+#if EDDYVISCOSITY
+USE MOD_EddyVisc_Vars,      ONLY: Cs
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -485,8 +500,86 @@ LOGICAL,INTENT(IN)          :: FirstTimeStep
 LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+CHARACTER(LEN=255)             :: Key
+REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL                           :: send(6,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL                           :: actions(SR_nVarAction,nElems)
+REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL                           :: Vdm(0:PP_N,0:PP_N)
+INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
+INTEGER                        :: i,j,k,iElem
+INTEGER,PARAMETER              :: interval = 10   ! polling interval in milliseconds
+INTEGER,PARAMETER              :: tries    = HUGE(1)   ! Infinite number of polling tries
 !==================================================================================================================================
-CALL ABORT(__STAMP__, 'CHANNEL case not implemented yet')
+! Gather U across all MPI ranks and write to Redis Database
+Key = TRIM(FlexiTag)//"state"
+IF (useInvariants) THEN
+  CALL ComputeInvariants(gradUx, gradUy, gradUz, inv, doNormInvariants)
+
+  DO iElem=1,nElems
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      send(  1,i,j,k,iElem) = 1. - ABS(Elem_xGP(2,i,j,k,iElem))
+      send(2:6,i,j,k,iElem) = inv(:,i,j,k,iElem)
+    END DO; END DO; END DO
+  END DO
+
+  Dims = SHAPE(send)
+  Dims_Out(:) = Dims(:)
+  Dims_Out(5) = nGlobalElems
+
+  CALL GatheredWriteSmartRedis(5, Dims, send, TRIM(Key), Shape_Out = Dims_Out)
+ELSE
+  CALL ABORT(__STAMP__, 'Only invariants are supported for CHANNEL case')
+  !Dims = SHAPE(U)
+  !Dims_Out(:) = Dims(:)
+  !Dims_Out(5) = nGlobalElems
+
+  !CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
+END IF
+
+IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
+#if USE_FFTW
+  ! Put Energy Spectrum into DB for Reward
+  Key = TRIM(FlexiTag)//"Ekin"
+  SR_Error = Client%put_tensor(TRIM(Key),E_k,SHAPE(E_k))
+#endif
+
+  ! Indicate if FLEXI is about to finalize
+  lastTimeStepInt = MERGE(-1,1,lastTimeStep)
+  Key = TRIM(FlexiTag)//"step_type"
+  SR_Error = Client%put_tensor(TRIM(Key),lastTimeStepInt,(/1/))
+ENDIF
+
+! Get Cs from Redis Database and scatter across all MPI ranks
+! Only necessary if we want to compute further, i.e. if not lastTimeStep
+IF (.NOT. lastTimeStep) THEN
+  Key = TRIM(FlexiTag)//"actions"
+  CALL GatheredReadSmartRedis(SIZE(SHAPE(actions)), SHAPE(actions), actions, TRIM(Key))
+
+  ! Construct field data from obtained modes
+  actions_modal = 0.
+  actions_modal(1,0,0,0,:) = actions(1,:) ! constant
+  IF (SR_nVarAction.EQ.2) THEN
+    actions_modal(1,2,0,0,:) = actions(2,:)-0.25 ! quad. x-direction
+    actions_modal(1,0,2,0,:) = actions(2,:)-0.25 ! quad. y-direction
+    actions_modal(1,0,0,2,:) = actions(2,:)-0.25 ! quad. z-direction
+  END IF
+
+  ! Build the non-normalized VDM from modal to nodal
+  ! Means all Legendre-Polynomials fulfill P(1) = 1 (makes coefficients more interpretable)
+  DO i=0,PP_N
+    Vdm(:,i) = Vdm_Leg(:,i)/SQRT(REAL(i)+0.5)
+  END DO
+  DO iElem=1,nElems
+#if EDDYVISCOSITY
+    CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),Cs(      1,:,:,:,iElem))
+    ! Limit resulting Cs to specificed range
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      Cs(1,i,j,k,iElem) = MAX(0., MIN(0.5, Cs(1,i,j,k,iElem)))
+    END DO; END DO; END DO
+#endif
+  END DO
+END IF !.NOT.lastTimeStep
 END SUBROUTINE ExchangeDataSmartRedis_CHANNEL
 
 !==================================================================================================================================

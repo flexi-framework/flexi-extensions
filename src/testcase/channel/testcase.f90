@@ -383,7 +383,10 @@ INTEGER,PARAMETER :: VW = 9
 IF(MPIRoot)THEN
   ioCounter=ioCounter+1
   writeBuf(:,ioCounter) = (/Time, dpdx, BulkVel/)
-  IF(ioCounter.GE.nWriteStats .OR. doFlush) CALL WriteStats()
+  IF(ioCounter.GE.nWriteStats .OR. doFlush) THEN
+    IF(writeAnalyzeFile) CALL WriteStats()
+    ioCounter = 0
+  END IF
 END IF
 
 #if USE_FFTW
