@@ -377,7 +377,6 @@ USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems
 USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
 #if USE_FFTW
-USE MOD_FFT_Vars,           ONLY: kmax
 USE MOD_Testcase_Vars,      ONLY: E_k
 #endif
 #if EDDYVISCOSITY
@@ -486,7 +485,6 @@ USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems,Elem_xGP
 USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
 #if USE_FFTW
-USE MOD_FFT_Vars,           ONLY: kmax
 USE MOD_Testcase_Vars,      ONLY: E_k
 #endif
 #if EDDYVISCOSITY
@@ -683,6 +681,7 @@ INTEGER                :: i,j,k,iElem
 REAL                   :: S(3,3),S2(3,3)
 REAL                   :: W(3,3),W2(3,3)
 REAL                   :: mat(3,3)
+REAL                   :: eps = 1.e-10
 !==================================================================================================================================
 DO iElem=1,nElems
   DO k=0,PP_NZ;DO j=0,PP_N; DO i=0,PP_N
@@ -696,10 +695,16 @@ DO iElem=1,nElems
 
     ! Normalize and de-dimensionalize invariants with the Frobenius norm of |S|=\sqrt{2*S_ij*S_ij}.
     IF (doNormalize) THEN
-      ! This corresponds to making the velocity gradient tensor dimensionless with the characteristic velocity and length scale.
+      ! Variant 1: Non-dimensionalize the velocity gradient tensor with the characteristic velocity and length scale.
       ! This again corresponds to using the resolved dissipation rate and the viscosity.
-      W = 1./SQRT(2*SUM(S(:,:)**2)) * W
-      S = 1./SQRT(2*SUM(S(:,:)**2)) * S
+      ! Avoid dividing by zero by adding epsilon
+      W = 1./MAX( eps, SQRT(2*SUM(S(:,:)**2)) ) * W
+      S = 1./MAX( eps, SQRT(2*SUM(S(:,:)**2)) ) * S
+
+      !! Variant 2: Use full velocity gradient tensor, to avoid numerical issues for pure rotation
+      !! Avoid dividing by zero by adding epsilon
+      !W = 1./MAX( eps, SQRT(2*SUM(mat(:,:)**2)) ) * W
+      !S = 1./MAX( eps, SQRT(2*SUM(mat(:,:)**2)) ) * S
     END IF
 
     ! Trace(S^2)
