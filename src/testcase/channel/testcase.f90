@@ -36,6 +36,20 @@ PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 
+#if USE_FFTW
+! Indices for data set in E_k
+INTEGER,PARAMETER :: Y = 0
+INTEGER,PARAMETER :: U_MEAN = 1
+INTEGER,PARAMETER :: V_MEAN = 2
+INTEGER,PARAMETER :: W_MEAN = 3
+INTEGER,PARAMETER :: UU = 4
+INTEGER,PARAMETER :: VV = 5
+INTEGER,PARAMETER :: WW = 6
+INTEGER,PARAMETER :: UV = 7
+INTEGER,PARAMETER :: UW = 8
+INTEGER,PARAMETER :: VW = 9
+#endif
+
 INTERFACE DefineParametersTestcase
   MODULE PROCEDURE DefineParametersTestcase
 END INTERFACE
@@ -353,6 +367,8 @@ USE MOD_Interpolation_Vars   ,ONLY: NodeType
 USE MOD_DG_Vars              ,ONLY: UPrim
 USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
 USE MOD_Testcase_Vars        ,ONLY: E_k
+USE MOD_TimeAverage          ,ONLY: GETMAPBYNAME
+USE MOD_AnalyzeEquation_Vars ,ONLY: UAvg,UFluc,nVarAvg,nVarFluc,iAvg,VarNamesFlucOut,dtAvg
 #endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -362,23 +378,6 @@ REAL,INTENT(IN)                 :: Time                   !< simulation time
 LOGICAL,INTENT(IN)              :: doFlush                !< indicate that data has to be written
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#if USE_FFTW
-REAL          :: UPrim_Global(PP_nVarPrim,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
-REAL          :: UPrim_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
-REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
-REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
-INTEGER       :: i,j,k,jhat
-INTEGER,PARAMETER :: Y = 0
-INTEGER,PARAMETER :: U_MEAN = 1
-INTEGER,PARAMETER :: V_MEAN = 2
-INTEGER,PARAMETER :: W_MEAN = 3
-INTEGER,PARAMETER :: UU = 4
-INTEGER,PARAMETER :: VV = 5
-INTEGER,PARAMETER :: WW = 6
-INTEGER,PARAMETER :: UV = 7
-INTEGER,PARAMETER :: UW = 8
-INTEGER,PARAMETER :: VW = 9
-#endif
 !==================================================================================================================================
 IF(MPIRoot)THEN
   ioCounter=ioCounter+1
@@ -391,87 +390,210 @@ END IF
 
 #if USE_FFTW
 IF (doComputeSpectra) THEN
-#if USE_MPI
-  ! 1. Get Global Solution and coordinates
-  IF (MPIroot) THEN
-    CALL GetGlobalSolution(PP_nVarPrim,UPrim, UPrim_Global)
-    CALL GetGlobalSolution(3,Elem_xGP, Elem_xGP_Global)
-  ELSE
-    CALL GetGlobalSolution(PP_nVarPrim,UPrim)
-    CALL GetGlobalSolution(3,Elem_xGP)
-  END IF
-#else
-  UPrim_Global = UPrim
-#endif
+  ! Either compute the mean profiles based on time-averaged data or instantaneous data
+  !CALL ComputeGlobalMeanProfiles_TimeAvg(E_k)
+  CALL ComputeGlobalMeanProfiles_Instantaneous(E_k)
 
-  IF(MPIroot) THEN
-    ! 3. Interpolate to global equidistant basis
-    CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
-
-    ! 4. Compute means
-    E_k(:,:) = 0.
-    DO k=1,N_FFT ! z - spanwise
-      DO i=1,N_FFT ! x - streamwise
-        DO j=1,N_FFT ! y - channel width
-          jhat = j
-          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
-
-          E_k(U_MEAN,jhat) = E_k(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
-          E_k(V_MEAN,jhat) = E_k(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
-          E_k(W_MEAN,jhat) = E_k(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
-        END DO
-      END DO
-    END DO
-    E_k = E_k/REAL(N_FFT**2)/2 ! Normalize
-
-    ! 5. Compute Reynolds stresses and average over x- and z-direction
-    DO k=1,N_FFT ! z - spanwise
-      DO i=1,N_FFT ! x - streamwise
-        DO j=1,N_FFT ! y - channel width
-          jhat = j
-          IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
-
-          ! First compute fluctuations by removing the mean
-          UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - E_k(U_MEAN,jhat)
-          UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - E_k(V_MEAN,jhat)
-          UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - E_k(W_MEAN,jhat)
-
-          ! Then Compute the Reynolds stresses
-          E_k(UU,jhat) = E_k(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
-          E_k(VV,jhat) = E_k(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
-          E_k(WW,jhat) = E_k(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
-          E_k(UV,jhat) = E_k(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
-          E_k(UW,jhat) = E_k(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
-          E_k(VW,jhat) = E_k(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
-        END DO
-      END DO
-    END DO
-    ! Normalize quadratic entries
-    E_k(UU:VW,:) = E_k(UU:VW,:)/REAL(N_FFT**2)/2
-
-    ! 6. Get coordinates of interpolation points
-    CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
-    !E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
-    E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
-
-
-    ! Debug writeout
-    WRITE(*,*)      'Y',E_k(     Y,:)
-    WRITE(*,*) 'U_MEAN',E_k(U_MEAN,:)
-    WRITE(*,*) 'V_MEAN',E_k(V_MEAN,:)
-    WRITE(*,*) 'W_MEAN',E_k(W_MEAN,:)
-    WRITE(*,*)     'UU',E_k(    UU,:)
-    WRITE(*,*)     'VV',E_k(    VV,:)
-    WRITE(*,*)     'WW',E_k(    WW,:)
-    WRITE(*,*)     'UV',E_k(    UV,:)
-    !WRITE(*,*)     'UW',E_k(    UW,:)
-    !WRITE(*,*)     'VW',E_k(    VW,:)
-  END IF
+  ! Debug writeout
+  SWRITE(*,*)      'Y',E_k(     Y,:)
+  SWRITE(*,*) 'U_MEAN',E_k(U_MEAN,:)
+  SWRITE(*,*) 'V_MEAN',E_k(V_MEAN,:)
+  SWRITE(*,*) 'W_MEAN',E_k(W_MEAN,:)
+  SWRITE(*,*)     'UU',E_k(    UU,:)
+  SWRITE(*,*)     'VV',E_k(    VV,:)
+  SWRITE(*,*)     'WW',E_k(    WW,:)
+  SWRITE(*,*)     'UV',E_k(    UV,:)
 END IF
+#endif /* USE_FFTW */
+END SUBROUTINE AnalyzeTestcase
+
+
+#if USE_FFTW
+!==================================================================================================================================
+!> Computes the global mean profiles based on time-averaged data.
+!==================================================================================================================================
+SUBROUTINE ComputeGlobalMeanProfiles_TimeAvg(E_k)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_FFT                  ,ONLY: Interpolate_DG2FFT
+USE MOD_FFT_Vars             ,ONLY: N_FFT
+USE MOD_Interpolation_Vars   ,ONLY: NodeType
+USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
+USE MOD_TimeAverage          ,ONLY: GETMAPBYNAME
+USE MOD_AnalyzeEquation_Vars ,ONLY: UAvg,UFluc,nVarAvg,nVarFluc,iAvg,VarNamesFlucOut,dtAvg
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(OUT)           :: E_k(0:9,N_FFT/2)   !< Averaged Profiles in y-direction
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: UAvg_Global(nVarAvg ,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: UFlc_Global(nVarFluc,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: UAvg_FFT(nVarAvg ,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: UFlc_FFT(nVarFluc,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: UAvg_Profile(nVarAvg ,N_FFT/2)
+REAL          :: UFlc_Profile(nVarFluc,N_FFT/2)
+INTEGER       :: i,j,k,jhat
+!==================================================================================================================================
+#if USE_MPI
+! 1. Get Global Solution and coordinates
+IF (MPIroot) THEN
+  CALL GetGlobalSolution(nVarAvg , UAvg,  UAvg_Global)
+  CALL GetGlobalSolution(nVarFluc, UFluc, UFlc_Global)
+  CALL GetGlobalSolution(3, Elem_xGP, Elem_xGP_Global)
+ELSE
+  CALL GetGlobalSolution(nVarAvg , UAvg)
+  CALL GetGlobalSolution(nVarFluc, UFluc)
+  CALL GetGlobalSolution(3, Elem_xGP)
+END IF
+#else
+UAvg_Global = UAvg
+UFlc_Global = UFluc
 #endif
 
-END SUBROUTINE AnalyzeTestCase
+IF(MPIroot) THEN
+  ! 2. Interpolate to global equidistant basis
+  CALL Interpolate_DG2FFT(NodeType,nVarAvg ,UAvg_Global,UAvg_FFT)
+  CALL Interpolate_DG2FFT(NodeType,nVarFluc,UFlc_Global,UFlc_FFT)
+  CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
 
+  ! 3. Spatial Average
+  UAvg_Profile(:,:) = 0.
+  UFlc_Profile(:,:) = 0.
+  DO k=1,N_FFT ! z - spanwise
+    DO i=1,N_FFT ! x - streamwise
+      DO j=1,N_FFT ! y - channel width
+        jhat = j
+        IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+        UAvg_Profile(:,jhat) = UAvg_Profile(:,jhat) + UAvg_FFT(:,i,j,k)
+        UFlc_Profile(:,jhat) = UFlc_Profile(:,jhat) + UFlc_FFT(:,i,j,k)
+      END DO
+    END DO
+  END DO
+  ! Normalize entries by number of points and 2 channel halves
+  UAvg_Profile(:,:) = UAvg_Profile(:,:)/REAL(N_FFT**2)/2.
+  UFlc_Profile(:,:) = UFlc_Profile(:,:)/REAL(N_FFT**2)/2.
+  ! If we are not in first timestep, normalize by averaging time
+  IF (dtAvg.GT.0.) THEN
+    UAvg_Profile(:,:) = UAvg_Profile(:,:)/dtAvg
+    UFlc_Profile(:,:) = UFlc_Profile(:,:)/dtAvg
+  END IF
+
+  ! 4. Compute actual Reynolds stresses and fill Buffer for SmartRedis
+  ! 4.1 First mean velocities (indices/mappings can be found in timeavg.f90, line 400)
+  E_k(U_MEAN,:) = UAvg_Profile(iAvg(6),:)
+  E_k(V_MEAN,:) = UAvg_Profile(iAvg(7),:)
+  E_k(W_MEAN,:) = UAvg_Profile(iAvg(8),:)
+  ! 5.2 Now Reynolds stresses via:
+  !    ____   ___   _ _
+  !    u'v' = u*v - u*v  (follows from Reynolds decomposition)
+  !
+  i = GETMAPBYNAME('VelocityX',VarNamesFlucOut,nVarFluc)
+  E_k(UU,:) = UFlc_Profile(i,:) - E_k(U_MEAN,:)*E_k(U_MEAN,:)
+  i = GETMAPBYNAME('VelocityY',VarNamesFlucOut,nVarFluc)
+  E_k(VV,:) = UFlc_Profile(i,:) - E_k(V_MEAN,:)*E_k(V_MEAN,:)
+  i = GETMAPBYNAME('VelocityZ',VarNamesFlucOut,nVarFluc)
+  E_k(WW,:) = UFlc_Profile(i,:) - E_k(W_MEAN,:)*E_k(W_MEAN,:)
+  i = GETMAPBYNAME('uv',VarNamesFlucOut,nVarFluc)
+  E_k(UV,:) = UFlc_Profile(i,:) - E_k(U_MEAN,:)*E_k(V_MEAN,:)
+  ! 4.3 Fill buffer with coordiantes
+  E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+END IF
+END SUBROUTINE ComputeGlobalMeanProfiles_TimeAvg
+
+!==================================================================================================================================
+!> Computes the global mean profiles based on time-averaged data.
+!==================================================================================================================================
+SUBROUTINE ComputeGlobalMeanProfiles_Instantaneous(E_k)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_DG_Vars              ,ONLY: UPrim
+USE MOD_FFT                  ,ONLY: Interpolate_DG2FFT
+USE MOD_FFT_Vars             ,ONLY: N_FFT
+USE MOD_Interpolation_Vars   ,ONLY: NodeType
+USE MOD_Mesh_Vars            ,ONLY: nGlobalElems,Elem_xGP
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(OUT)           :: E_k(0:9,N_FFT/2)   !< Averaged Profiles in y-direction
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL          :: Elem_xGP_Global(3,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: Elem_xGP_FFT(3,1:N_FFT,1:N_FFT,1:N_FFT)
+REAL          :: UPrim_Global(PP_nVarPrim ,0:PP_N,0:PP_N,0:PP_N,nGlobalElems)
+REAL          :: UPrim_FFT(3 ,1:N_FFT,1:N_FFT,1:N_FFT)
+INTEGER       :: i,j,k,jhat
+!==================================================================================================================================
+#if USE_MPI
+! 1. Get Global Solution and coordinates
+IF (MPIroot) THEN
+  CALL GetGlobalSolution(PP_nVarPrim,UPrim, UPrim_Global)
+  CALL GetGlobalSolution(3,Elem_xGP, Elem_xGP_Global)
+ELSE
+  CALL GetGlobalSolution(PP_nVarPrim,UPrim)
+  CALL GetGlobalSolution(3,Elem_xGP)
+END IF
+#else
+UPrim_Global = UPrim
+#endif
+
+IF(MPIroot) THEN
+  ! 2. Interpolate to global equidistant basis
+  CALL Interpolate_DG2FFT(NodeType,3,UPrim_Global(2:4,:,:,:,:),UPrim_FFT)
+  CALL Interpolate_DG2FFT(NodeType,3,Elem_xGP_Global,Elem_xGP_FFT)
+
+  ! 3. Compute means
+  E_k(:,:) = 0.
+  DO k=1,N_FFT ! z - spanwise
+    DO i=1,N_FFT ! x - streamwise
+      DO j=1,N_FFT ! y - channel width
+        jhat = j
+        IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+        E_k(U_MEAN,jhat) = E_k(U_MEAN,jhat) + UPrim_FFT(1,i,j,k)
+        E_k(V_MEAN,jhat) = E_k(V_MEAN,jhat) + UPrim_FFT(2,i,j,k)
+        E_k(W_MEAN,jhat) = E_k(W_MEAN,jhat) + UPrim_FFT(3,i,j,k)
+      END DO
+    END DO
+  END DO
+  ! Normalize linear entries by number of points and 2 channel halves
+  E_k(:,:) = E_k(:,:)/REAL(N_FFT**2)/2.
+
+  ! 4. Compute Reynolds stresses and average over x- and z-direction
+  DO k=1,N_FFT ! z - spanwise
+    DO i=1,N_FFT ! x - streamwise
+      DO j=1,N_FFT ! y - channel width
+        jhat = j
+        IF (j .GT. N_FFT/2) jhat = N_FFT-j+1 ! Average also over both channel halfs
+
+        ! First compute fluctuations by removing the mean
+        UPrim_FFT(1,i,j,k) = UPrim_FFT(1,i,j,k) - E_k(U_MEAN,jhat)
+        UPrim_FFT(2,i,j,k) = UPrim_FFT(2,i,j,k) - E_k(V_MEAN,jhat)
+        UPrim_FFT(3,i,j,k) = UPrim_FFT(3,i,j,k) - E_k(W_MEAN,jhat)
+
+        ! Then Compute the Reynolds stresses
+        E_k(UU,jhat) = E_k(UU,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(1,i,j,k)
+        E_k(VV,jhat) = E_k(VV,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(2,i,j,k)
+        E_k(WW,jhat) = E_k(WW,jhat) + UPrim_FFT(3,i,j,k)*UPrim_FFT(3,i,j,k)
+        E_k(UV,jhat) = E_k(UV,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(2,i,j,k)
+        E_k(UW,jhat) = E_k(UW,jhat) + UPrim_FFT(1,i,j,k)*UPrim_FFT(3,i,j,k)
+        E_k(VW,jhat) = E_k(VW,jhat) + UPrim_FFT(2,i,j,k)*UPrim_FFT(3,i,j,k)
+      END DO
+    END DO
+  END DO
+  ! Normalize quadratic entries by number of points and 2 channel halves
+  E_k(UU:VW,:) = E_k(UU:VW,:)/REAL(N_FFT**2)/2.
+
+  ! 6. Get coordinates of interpolation points
+  E_k(Y,:) = Elem_xGP_FFT(2,1,1:N_FFT/2,1)
+END IF
+END SUBROUTINE ComputeGlobalMeanProfiles_Instantaneous
+#endif /* USE_FFTW */
 
 #if USE_MPI
 !==================================================================================================================================

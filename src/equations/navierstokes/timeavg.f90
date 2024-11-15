@@ -43,7 +43,11 @@ INTERFACE CalcTimeAverage
   MODULE PROCEDURE CalcTimeAverage
 END INTERFACE
 
-PUBLIC::InitCalcTimeAverage, FinalizeTimeAverage, CalcTimeAverage
+INTERFACE GETMAPBYNAME
+  MODULE PROCEDURE GETMAPBYNAME
+END INTERFACE
+
+PUBLIC::InitCalcTimeAverage, FinalizeTimeAverage, CalcTimeAverage, GETMAPBYNAME
 !==================================================================================================================================
 CONTAINS
 
