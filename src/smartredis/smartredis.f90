@@ -90,7 +90,7 @@ CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per elem
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
                                                  "0.: Variable is not updated, 1.: always take new value.", "0.03")
 CALL prms%CreateRealOption("SR_action_blendfac", "Exponential blending factor between [0,1] for actions per time step.\n"//&
-                                                 "0.: Variable is not updated, 1.: always take new value.", "0.01")
+                                                 "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateLogicalOption("SR_ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
 
 END SUBROUTINE DefineParametersSmartRedis
@@ -102,8 +102,9 @@ END SUBROUTINE DefineParametersSmartRedis
 SUBROUTINE InitSmartRedis()
 ! MODULES
 USE MOD_Globals
+USE MOD_PreProc
 USE MOD_SmartRedis_Vars
-USE MOD_Mesh_Vars,       ONLY: nBCs,BoundaryType
+USE MOD_Mesh_Vars,       ONLY: nBCs,BoundaryType,nElems
 USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT,GETINTFROMSTR
 USE MOD_TimeDisc_Vars,   ONLY: nRKStages
 IMPLICIT NONE
@@ -139,11 +140,18 @@ CASE (PRM_SMARTREDIS_HIT)
       'Only one or two actions per element are supported for EDDYVISCOSITY')
 #endif
 CASE (PRM_SMARTREDIS_CHANNEL)
+  ! Input/state features
   useInvariants = GETLOGICAL("SR_useInvariants")
   IF (useInvariants) doNormInvariants = GETLOGICAL("SR_doNormInvariants")
   SR_nVarAction  = GETINT("SR_nVarAction")
   IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, &
       'Only one action per element is supported for CHANNEL')
+  ! Blending factors for action
+  SR_action_blendfac = GETREAL("SR_action_blendfac")
+  IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+      'SR_action_blendfac must be in [0,1]')
+  ALLOCATE(SR_actions_field(1,0:PP_N,0:PP_N,0:PP_N,nElems))
+  SR_actions_field = 0.
 CASE (PRM_SMARTREDIS_CYLINDER)
   IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1) CALL ABORT(__STAMP__, &
       'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
@@ -304,6 +312,9 @@ USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars,      ONLY: nBCs
 USE MOD_CalcBodyForces, ONLY: CalcBodyForces
 USE MOD_Exactfunc_Vars, ONLY: jetStrength
+#if EDDYVISCOSITY
+USE MOD_EddyVisc_Vars,  ONLY: Cs
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -317,6 +328,11 @@ CASE (PRM_SMARTREDIS_NONE)
 CASE (PRM_SMARTREDIS_HIT)
   RETURN
 CASE (PRM_SMARTREDIS_CHANNEL)
+#if EDDYVISCOSITY
+  ! Update Cs from actions using exponential filtering to avoid spikes.
+  ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
+  Cs(:,:,:,:,:) = Cs(:,:,:,:,:) + SR_action_blendfac*(SR_actions_field(:,:,:,:,:) - Cs(:,:,:,:,:))
+#endif
   RETURN
 CASE (PRM_SMARTREDIS_CYLINDER)
   ! Update actions and bodyforces for reward using exponential filtering to avoid spikes.
@@ -502,7 +518,6 @@ CHARACTER(LEN=255)             :: Key
 REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: send(6,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: actions(SR_nVarAction,nElems)
-REAL                           :: actions_modal(1,0:PP_N,0:PP_N,0:PP_N,nElems)
 REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
 INTEGER                        :: i,j,k,iElem
@@ -554,13 +569,14 @@ IF (.NOT. lastTimeStep) THEN
   Key = TRIM(FlexiTag)//"actions"
   CALL GatheredReadSmartRedis(SIZE(SHAPE(actions)), SHAPE(actions), actions, TRIM(Key))
 
-  ! Construct field data from obtained modes
-  actions_modal = 0.
-  actions_modal(1,0,0,0,:) = actions(1,:) ! constant
+  ! Construct field data from obtained modes.
+  ! First fill the modal (Legendre) representation and interpolate to nodal later
+  SR_actions_field = 0.
+  SR_actions_field(1,0,0,0,:) = actions(1,:) ! constant
   IF (SR_nVarAction.EQ.2) THEN
-    actions_modal(1,2,0,0,:) = actions(2,:)-0.25 ! quad. x-direction
-    actions_modal(1,0,2,0,:) = actions(2,:)-0.25 ! quad. y-direction
-    actions_modal(1,0,0,2,:) = actions(2,:)-0.25 ! quad. z-direction
+    SR_actions_field(1,2,0,0,:) = actions(2,:)-0.25 ! quad. x-direction
+    SR_actions_field(1,0,2,0,:) = actions(2,:)-0.25 ! quad. y-direction
+    SR_actions_field(1,0,0,2,:) = actions(2,:)-0.25 ! quad. z-direction
   END IF
 
   ! Build the non-normalized VDM from modal to nodal
@@ -570,10 +586,12 @@ IF (.NOT. lastTimeStep) THEN
   END DO
   DO iElem=1,nElems
 #if EDDYVISCOSITY
-    CALL ChangeBasisVolume(PP_N,PP_N,Vdm,actions_modal(1,:,:,:,iElem),Cs(      1,:,:,:,iElem))
-    ! Limit resulting Cs to specificed range
+    ! Interpolate modal -> nodal (in-place)
+    ! ATTENTION: Cs is filled in analyze routine to get smooth transition
+    CALL ChangeBasisVolume(1,PP_N,PP_N,Vdm,SR_actions_field(:,:,:,:,iElem))
+    ! Limit resulting values to specificed range
     DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
-      Cs(1,i,j,k,iElem) = MAX(0., MIN(0.5, Cs(1,i,j,k,iElem)))
+      SR_actions_field(1,i,j,k,iElem) = MAX(0., MIN(0.5, SR_actions_field(1,i,j,k,iElem)))
     END DO; END DO; END DO
 #endif
   END DO
@@ -745,6 +763,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 IF(MPIroot.AND.doSmartRedis) SR_Error = Client%destructor()
+SDEALLOCATE(SR_actions_field)
 END SUBROUTINE FinalizeSmartRedis
 #endif /*USE_SMARTREDIS*/
 
