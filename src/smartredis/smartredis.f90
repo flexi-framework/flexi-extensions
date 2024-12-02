@@ -621,10 +621,12 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: Key
+INTEGER,PARAMETER              :: nVar = 1           ! Number of variables at each RP
 INTEGER,PARAMETER              :: interval = 10      ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1) ! Infinite number of polling tries
 REAL                           :: U_RP(    PP_nVar    ,nRP)  ! cons. state at record points
 REAL                           :: UPrim_RP(PP_nVarPrim,nRP)  ! prim. state at record points
+REAL                           :: data_send(nVar,nRP) ! Array filled with state variables actually send to Redis
 LOGICAL                        :: found    = .FALSE.
 INTEGER                        :: i,lastTimeStepInt
 REAL                           :: actions(1),cd,cl
@@ -634,10 +636,9 @@ Key = TRIM(FlexiTag)//"state"
 CALL EvalRecordPoints(U_RP)
 DO i=1,nRP
   CALL ConsToPrim(UPrim_RP(:,i),U_RP(:,i))
-  UPrim_RP(PRES,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
-
+  data_send(1,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
 END DO
-CALL GatheredWriteSmartRedis(1, SHAPE(UPrim_RP(PRES,:)), UPrim_RP(PRES,:), TRIM(Key), Shape_Out = (/nGlobalRP/))
+CALL GatheredWriteSmartRedis(2, SHAPE(data_send), data_send(:,:), TRIM(Key), Shape_Out = (/nVar,nGlobalRP/))
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   ! Compute lift and drag coefficients, i.e. (area already taken into account in computation of forces)
