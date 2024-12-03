@@ -46,6 +46,7 @@ INTEGER,ALLOCATABLE:: RP_ElemID(:)            !< mapping from RP->Elem (nRP)
 #if FV_ENABLED
 INTEGER,ALLOCATABLE:: FV_RP_ijk(:,:)          !< ijk-index of FV subcell nearest to record point [1:3,nRP]
 #endif
+REAL,ALLOCATABLE   :: x_RP(:,:)               !< Physical coordinates of RPs on procs
 REAL,ALLOCATABLE   :: L_xi_RP(:,:)            !< Lagrange basis evaluated at RP coords (xi-dir)
 REAL,ALLOCATABLE   :: L_eta_RP(:,:)           !< Lagrange basis evaluated at RP coords (eta-dir)
 REAL,ALLOCATABLE   :: L_zeta_RP(:,:)          !< Lagrange basis evaluated at RP coords (zeta-dir)

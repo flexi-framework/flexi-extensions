@@ -193,7 +193,7 @@ USE MOD_HDF5_Input
 USE MOD_Mesh_Vars             ,ONLY:MeshFile,nGlobalElems
 USE MOD_Mesh_Vars             ,ONLY:OffsetElem
 USE MOD_Mesh_Vars             ,ONLY:nElems
-USE MOD_RecordPoints_Vars     ,ONLY:RP_onProc,L_xi_RP,L_eta_RP,L_zeta_RP
+USE MOD_RecordPoints_Vars     ,ONLY:RP_onProc,L_xi_RP,L_eta_RP,L_zeta_RP,x_RP
 USE MOD_RecordPoints_Vars     ,ONLY:offsetRP,RP_ElemID,nRP,nGlobalRP
 #if FV_ENABLED
 USE MOD_RecordPoints_Vars     ,ONLY:FV_RP_ijk
@@ -274,6 +274,10 @@ ELSE
     END DO
   END DO
 END IF
+
+! Read physical coordinates of RPs for SmartRedis
+ALLOCATE(x_RP(3,nRP))
+CALL ReadArray('x_RP',2,(/3,nRP/),offsetRP,2,RealArray=x_RP)
 
 CALL CloseDataFile()
 GETTIME(EndT)
@@ -600,6 +604,7 @@ SDEALLOCATE(L_xi_RP)
 SDEALLOCATE(L_eta_RP)
 SDEALLOCATE(L_zeta_RP)
 SDEALLOCATE(lastSample)
+SDEALLOCATE(x_RP)
 #if FV_ENABLED
 SDEALLOCATE(FV_RP_ijk)
 #endif

@@ -608,9 +608,9 @@ USE MOD_PreProc
 USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars,          ONLY: nElems
 USE MOD_RecordPoints,       ONLY: EvalRecordPoints
-USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP
+USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP,x_RP
 USE MOD_EOS,                ONLY: ConsToPrim
-USE MOD_Exactfunc_Vars,     ONLY: jetStrength
+USE MOD_Exactfunc_Vars,     ONLY: jetStrength,IniCenter
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -637,6 +637,8 @@ CALL EvalRecordPoints(U_RP)
 DO i=1,nRP
   CALL ConsToPrim(UPrim_RP(:,i),U_RP(:,i))
   data_send(1,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
+  IF (nVar.GE.2) data_send(2,i) = x_RP(1,i) - IniCenter(1) ! x-coordinate
+  IF (nVar.GE.3) data_send(3,i) = x_RP(2,i) - IniCenter(2) ! y-coordinate
 END DO
 CALL GatheredWriteSmartRedis(2, SHAPE(data_send), data_send(:,:), TRIM(Key), Shape_Out = (/nVar,nGlobalRP/))
 
