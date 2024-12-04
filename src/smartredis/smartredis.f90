@@ -86,7 +86,7 @@ CALL addStrListEntry('SR_Type','cylinder', PRM_SMARTREDIS_CYLINDER)
 CALL prms%CreateLogicalOption("SR_useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
 CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
-
+CALL prms%CreateIntOption("SR_nSendReward", "After how many actions FLEXI should send Reward information.", "1")
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
                                                  "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateRealOption("SR_action_blendfac", "Exponential blending factor between [0,1] for actions per time step.\n"//&
@@ -146,6 +146,9 @@ CASE (PRM_SMARTREDIS_CHANNEL)
   SR_nVarAction  = GETINT("SR_nVarAction")
   IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, &
       'Only one action per element is supported for CHANNEL')
+  ! Sparse reward
+  SR_nSendReward = GETINT("SR_nSendReward")
+  SR_iSendReward = 0
   ! Blending factors for action
   SR_action_blendfac = GETREAL("SR_action_blendfac")
   IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
@@ -562,9 +565,18 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
   E_k_avg(:,:) = E_k_avg(:,:) + SR_reward_blendfac*(E_k(:,:) - E_k_avg(:,:))
 
+  ! Increment reward counter for sparse reward
+  SR_iSendReward = SR_iSendReward + 1
+
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
-  SR_Error = Client%put_tensor(TRIM(Key),E_k_avg,SHAPE(E_k_avg))
+  IF ( MODULO(SR_iSendReward, SR_nSendReward) .EQ. 0) THEN
+    SWRITE(*,*) 'Sending FULL reward'
+    SR_Error = Client%put_tensor(TRIM(Key),E_k_avg,SHAPE(E_k_avg))
+  ELSE
+    SWRITE(*,*) 'Sending EMPTY reward'
+    SR_Error = Client%put_tensor(TRIM(Key),E_k_avg*0.,SHAPE(E_k_avg))
+  END IF
 #endif
 
   ! Indicate if FLEXI is about to finalize
