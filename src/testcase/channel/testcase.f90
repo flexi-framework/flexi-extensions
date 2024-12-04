@@ -201,7 +201,12 @@ END IF
 #if USE_FFTW
 CALL InitFFT()
 ! Allocate array for Reynolds stresses
-IF(MPIRoot) ALLOCATE(E_k(0:9,N_FFT/2))
+IF (MPIRoot) THEN
+  ALLOCATE(E_k(    0:9,N_FFT/2))
+  ALLOCATE(E_k_avg(0:9,N_FFT/2))
+  E_k     = 0.
+  E_k_avg = 0.
+END IF
 #endif
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE CHANNEL DONE!'
@@ -658,10 +663,11 @@ USE MOD_Globals
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !==================================================================================================================================
-#if USE_FFTW
-IF(MPIRoot) DEALLOCATE(E_k)
-#endif
 IF(MPIRoot) THEN
+#if USE_FFTW
+  SDEALLOCATE(E_k)
+  SDEALLOCATE(E_k_avg)
+#endif
   SDEALLOCATE(writeBuf)
 END IF
 END SUBROUTINE

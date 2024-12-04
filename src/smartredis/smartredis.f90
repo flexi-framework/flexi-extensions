@@ -88,7 +88,7 @@ CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of 
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
 
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
-                                                 "0.: Variable is not updated, 1.: always take new value.", "0.03")
+                                                 "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateRealOption("SR_action_blendfac", "Exponential blending factor between [0,1] for actions per time step.\n"//&
                                                  "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateLogicalOption("SR_ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
@@ -150,6 +150,10 @@ CASE (PRM_SMARTREDIS_CHANNEL)
   SR_action_blendfac = GETREAL("SR_action_blendfac")
   IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
       'SR_action_blendfac must be in [0,1]')
+  ! Blending factors for reward
+  SR_reward_blendfac = GETREAL("SR_reward_blendfac")
+  IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+      'SR_reward_blendfac must be in [0,1]')
   ALLOCATE(SR_actions_field(1,0:PP_N,0:PP_N,0:PP_N,nElems))
   SR_actions_field = 0.
 CASE (PRM_SMARTREDIS_CYLINDER)
@@ -501,7 +505,7 @@ USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems,Elem_xGP
 USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
 #if USE_FFTW
-USE MOD_Testcase_Vars,      ONLY: E_k
+USE MOD_Testcase_Vars,      ONLY: E_k, E_k_avg
 #endif
 #if EDDYVISCOSITY
 USE MOD_EddyVisc_Vars,      ONLY: Cs
@@ -552,9 +556,15 @@ END IF
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
+  ! Compute temporal average via exponential filter
+  IF (NORM2(E_k_avg) .LT. 1.e-5) E_k_avg(:,:) = E_k(:,:) ! Initialize time-avg in first step
+
+  ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
+  E_k_avg(:,:) = E_k_avg(:,:) + SR_reward_blendfac*(E_k(:,:) - E_k_avg(:,:))
+
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
-  SR_Error = Client%put_tensor(TRIM(Key),E_k,SHAPE(E_k))
+  SR_Error = Client%put_tensor(TRIM(Key),E_k_avg,SHAPE(E_k_avg))
 #endif
 
   ! Indicate if FLEXI is about to finalize

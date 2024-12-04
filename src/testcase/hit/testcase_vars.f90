@@ -45,8 +45,9 @@ REAL,ALLOCATABLE          :: UPrim_temp(:,:,:,:,:)    !< temporal derivative of 
 !INTEGER                   :: HIT_nFilter              !< polynomial degree of cut-off filter
 REAL                      :: HIT_tFilter              !< filter width of temporal filter
 REAL                      :: A_ILF                    !< forcing coefficient
-REAL,ALLOCATABLE          :: E_k(:)
-LOGICAL                   :: doComputeSpectra
+REAL,ALLOCATABLE          :: E_k(:)                   !< holds energy spectrum
+REAL,ALLOCATABLE          :: E_k_avg(:)               !< holds temporally averaged energy spectrum
+LOGICAL                   :: doComputeSpectra         !< Flag whether to compute energy spectrum
 !----------------------------------------------------------------------------------------------------------------------------------
 ! ANAYLZE VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
