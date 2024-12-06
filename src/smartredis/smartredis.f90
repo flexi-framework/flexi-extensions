@@ -503,6 +503,7 @@ SUBROUTINE ExchangeDataSmartRedis_CHANNEL(U, firstTimeStep, lastTimeStep)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SmartRedis_Vars
+USE MOD_DG_Vars,            ONLY: UPrim
 USE MOD_ChangeBasisByDim,   ONLY: ChangeBasisVolume
 USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems,Elem_xGP
@@ -524,6 +525,7 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 CHARACTER(LEN=255)             :: Key
 REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: send(6,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL                           :: send2(4,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: actions(SR_nVarAction,nElems)
 REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
@@ -549,21 +551,27 @@ IF (useInvariants) THEN
 
   CALL GatheredWriteSmartRedis(5, Dims, send, TRIM(Key), Shape_Out = Dims_Out)
 ELSE
-  CALL ABORT(__STAMP__, 'Only invariants are supported for CHANNEL case')
-  !Dims = SHAPE(U)
-  !Dims_Out(:) = Dims(:)
-  !Dims_Out(5) = nGlobalElems
+  DO iElem=1,nElems
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      send2(  1,i,j,k,iElem) = 1. - ABS(Elem_xGP(2,i,j,k,iElem))
+      send2(2:4,i,j,k,iElem) = UPrim(VELV,i,j,k,iElem)
+    END DO; END DO; END DO
+  END DO
 
-  !CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
+  Dims = SHAPE(send2)
+  Dims_Out(:) = Dims(:)
+  Dims_Out(5) = nGlobalElems
+
+  CALL GatheredWriteSmartRedis(5, Dims, send2, TRIM(Key), Shape_Out = Dims_Out)
 END IF
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
   ! Compute temporal average via exponential filter
-  IF (NORM2(E_k_avg) .LT. 1.e-5) E_k_avg(:,:) = E_k(:,:) ! Initialize time-avg in first step
+  IF (NORM2(E_k_avg) .LT. 1.e-5) E_k_avg = E_k ! Initialize time-avg in first step
 
   ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
-  E_k_avg(:,:) = E_k_avg(:,:) + SR_reward_blendfac*(E_k(:,:) - E_k_avg(:,:))
+  E_k_avg = E_k_avg + SR_reward_blendfac*(E_k - E_k_avg)
 
   ! Increment reward counter for sparse reward
   SR_iSendReward = SR_iSendReward + 1
@@ -729,9 +737,9 @@ REAL,PARAMETER         :: eps = 1.e-10
 DO iElem=1,nElems
   DO k=0,PP_NZ;DO j=0,PP_N; DO i=0,PP_N
     ! Velocity gradient tensor \nabla u
-    mat(:,1) = gradUx(VELV,i,j,k,iElem)
-    mat(:,2) = gradUy(VELV,i,j,k,iElem)
-    mat(:,3) = gradUz(VELV,i,j,k,iElem)
+    mat(:,1) = gradUx(LIFT_VELV,i,j,k,iElem)
+    mat(:,2) = gradUy(LIFT_VELV,i,j,k,iElem)
+    mat(:,3) = gradUz(LIFT_VELV,i,j,k,iElem)
 
     S = 0.5*(mat+TRANSPOSE(mat)) ! Symmetric part
     W = 0.5*(mat-TRANSPOSE(mat)) ! Anti-Symmetric part
