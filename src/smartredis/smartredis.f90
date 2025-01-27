@@ -88,8 +88,9 @@ CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of 
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
 CALL prms%CreateIntOption("SR_BodyForce_array_len", "Length of the circular buffer", "700")
 
+CALL prms%CreateIntOption("SR_nSendReward", "After how many actions FLEXI should send Reward information.", "1")
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
-                                                 "0.: Variable is not updated, 1.: always take new value.", "0.03")
+                                                 "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateRealOption("SR_action_blendfac", "Exponential blending factor between [0,1] for actions per time step.\n"//&
                                                  "0.: Variable is not updated, 1.: always take new value.", "1.")
 CALL prms%CreateLogicalOption("SR_ClusteredDatabase", "SmartRedis database is clustered", ".FALSE.")
@@ -147,10 +148,17 @@ CASE (PRM_SMARTREDIS_CHANNEL)
   SR_nVarAction  = GETINT("SR_nVarAction")
   IF (SR_nVarAction.NE.1) CALL ABORT(__STAMP__, &
       'Only one action per element is supported for CHANNEL')
+  ! Sparse reward
+  SR_nSendReward = GETINT("SR_nSendReward")
+  SR_iSendReward = 0
   ! Blending factors for action
   SR_action_blendfac = GETREAL("SR_action_blendfac")
   IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
       'SR_action_blendfac must be in [0,1]')
+  ! Blending factors for reward
+  SR_reward_blendfac = GETREAL("SR_reward_blendfac")
+  IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
+      'SR_reward_blendfac must be in [0,1]')
   ALLOCATE(SR_actions_field(1,0:PP_N,0:PP_N,0:PP_N,nElems))
   SR_actions_field = 0.
 CASE (PRM_SMARTREDIS_CYLINDER)
@@ -513,12 +521,13 @@ SUBROUTINE ExchangeDataSmartRedis_CHANNEL(U, firstTimeStep, lastTimeStep)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_SmartRedis_Vars
+USE MOD_DG_Vars,            ONLY: UPrim
 USE MOD_ChangeBasisByDim,   ONLY: ChangeBasisVolume
 USE MOD_Interpolation_Vars, ONLY: Vdm_Leg
 USE MOD_Mesh_Vars,          ONLY: nElems,nGlobalElems,Elem_xGP
 USE MOD_Lifting_Vars,       ONLY: gradUx,gradUy,gradUz
 #if USE_FFTW
-USE MOD_Testcase_Vars,      ONLY: E_k
+USE MOD_Testcase_Vars,      ONLY: E_k, E_k_avg
 #endif
 #if EDDYVISCOSITY
 USE MOD_EddyVisc_Vars,      ONLY: Cs
@@ -534,6 +543,7 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 CHARACTER(LEN=255)             :: Key
 REAL                           :: inv(5,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: send(6,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL                           :: send2(4,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL                           :: actions(SR_nVarAction,nElems)
 REAL                           :: Vdm(0:PP_N,0:PP_N)
 INTEGER                        :: lastTimeStepInt(1),Dims(5),Dims_Out(5)
@@ -559,19 +569,40 @@ IF (useInvariants) THEN
 
   CALL GatheredWriteSmartRedis(5, Dims, send, TRIM(Key), Shape_Out = Dims_Out)
 ELSE
-  CALL ABORT(__STAMP__, 'Only invariants are supported for CHANNEL case')
-  !Dims = SHAPE(U)
-  !Dims_Out(:) = Dims(:)
-  !Dims_Out(5) = nGlobalElems
+  DO iElem=1,nElems
+    DO k=0,PP_NZ; DO j=0,PP_N; DO i=0,PP_N
+      send2(  1,i,j,k,iElem) = 1. - ABS(Elem_xGP(2,i,j,k,iElem))
+      send2(2:4,i,j,k,iElem) = UPrim(VELV,i,j,k,iElem)
+    END DO; END DO; END DO
+  END DO
 
-  !CALL GatheredWriteSmartRedis(5, Dims, U, TRIM(Key), Shape_Out = Dims_Out)
+  Dims = SHAPE(send2)
+  Dims_Out(:) = Dims(:)
+  Dims_Out(5) = nGlobalElems
+
+  CALL GatheredWriteSmartRedis(5, Dims, send2, TRIM(Key), Shape_Out = Dims_Out)
 END IF
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
 #if USE_FFTW
+  ! Compute temporal average via exponential filter
+  IF (NORM2(E_k_avg) .LT. 1.e-5) E_k_avg = E_k ! Initialize time-avg in first step
+
+  ! formula for exponential blending: y = y + alpha*(x-y) or y = alpha*x + (1-alpha)*y
+  E_k_avg = E_k_avg + SR_reward_blendfac*(E_k - E_k_avg)
+
+  ! Increment reward counter for sparse reward
+  SR_iSendReward = SR_iSendReward + 1
+
   ! Put Energy Spectrum into DB for Reward
   Key = TRIM(FlexiTag)//"Ekin"
-  SR_Error = Client%put_tensor(TRIM(Key),E_k,SHAPE(E_k))
+  IF ( MODULO(SR_iSendReward, SR_nSendReward) .EQ. 0) THEN
+    SWRITE(*,*) 'Sending FULL reward'
+    SR_Error = Client%put_tensor(TRIM(Key),E_k_avg,SHAPE(E_k_avg))
+  ELSE
+    SWRITE(*,*) 'Sending EMPTY reward'
+    SR_Error = Client%put_tensor(TRIM(Key),E_k_avg*0.,SHAPE(E_k_avg))
+  END IF
 #endif
 
   ! Indicate if FLEXI is about to finalize
@@ -625,9 +656,9 @@ USE MOD_PreProc
 USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars,          ONLY: nElems
 USE MOD_RecordPoints,       ONLY: EvalRecordPoints
-USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP
+USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP,x_RP
 USE MOD_EOS,                ONLY: ConsToPrim
-USE MOD_Exactfunc_Vars,     ONLY: jetStrength
+USE MOD_Exactfunc_Vars,     ONLY: jetStrength,IniCenter
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -638,10 +669,12 @@ LOGICAL,INTENT(IN)          :: LastTimeStep
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 CHARACTER(LEN=255)             :: Key
+INTEGER,PARAMETER              :: nVar = 1           ! Number of variables at each RP
 INTEGER,PARAMETER              :: interval = 10      ! polling interval in milliseconds
 INTEGER,PARAMETER              :: tries    = HUGE(1) ! Infinite number of polling tries
 REAL                           :: U_RP(    PP_nVar    ,nRP)  ! cons. state at record points
 REAL                           :: UPrim_RP(PP_nVarPrim,nRP)  ! prim. state at record points
+REAL                           :: data_send(nVar,nRP) ! Array filled with state variables actually send to Redis
 LOGICAL                        :: found    = .FALSE.
 INTEGER                        :: i,lastTimeStepInt
 REAL                           :: actions(1),cd,cl
@@ -651,10 +684,11 @@ Key = TRIM(FlexiTag)//"state"
 CALL EvalRecordPoints(U_RP)
 DO i=1,nRP
   CALL ConsToPrim(UPrim_RP(:,i),U_RP(:,i))
-  UPrim_RP(PRES,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
-
+  data_send(1,i) = UPrim_RP(PRES,i) - RefStatePrim(PRES,IniRefState) ! Subtract mean pressure
+  IF (nVar.GE.2) data_send(2,i) = x_RP(1,i) - IniCenter(1) ! x-coordinate
+  IF (nVar.GE.3) data_send(3,i) = x_RP(2,i) - IniCenter(2) ! y-coordinate
 END DO
-CALL GatheredWriteSmartRedis(1, SHAPE(UPrim_RP(PRES,:)), UPrim_RP(PRES,:), TRIM(Key), Shape_Out = (/nGlobalRP/))
+CALL GatheredWriteSmartRedis(2, SHAPE(data_send), data_send(:,:), TRIM(Key), Shape_Out = (/nVar,nGlobalRP/))
 
 IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   ! Compute lift and drag coefficients, i.e. (area already taken into account in computation of forces)
@@ -729,9 +763,9 @@ REAL,PARAMETER         :: eps = 1.e-10
 DO iElem=1,nElems
   DO k=0,PP_NZ;DO j=0,PP_N; DO i=0,PP_N
     ! Velocity gradient tensor \nabla u
-    mat(:,1) = gradUx(VELV,i,j,k,iElem)
-    mat(:,2) = gradUy(VELV,i,j,k,iElem)
-    mat(:,3) = gradUz(VELV,i,j,k,iElem)
+    mat(:,1) = gradUx(LIFT_VELV,i,j,k,iElem)
+    mat(:,2) = gradUy(LIFT_VELV,i,j,k,iElem)
+    mat(:,3) = gradUz(LIFT_VELV,i,j,k,iElem)
 
     S = 0.5*(mat+TRANSPOSE(mat)) ! Symmetric part
     W = 0.5*(mat-TRANSPOSE(mat)) ! Anti-Symmetric part

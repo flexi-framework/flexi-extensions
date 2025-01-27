@@ -32,6 +32,8 @@ LOGICAL             :: dbIsClustered    ! Indicate whether the Redis Database is
 LOGICAL             :: doSmartRedis     ! Flag whether communication with SmartRedis should be done
 LOGICAL             :: useInvariants    ! If true, the invariants of the gradient tensor are used as state instead of the velocities
 LOGICAL             :: doNormInvariants ! Normalize invariants by first one
+INTEGER             :: SR_iSendReward   ! Counter for sparse reward
+INTEGER             :: SR_nSendReward   ! Only send reward each n-th interaction for sparse reward
 INTEGER             :: SR_nVarAction    ! Number/Dimension of actions received by agent per element
 INTEGER             :: SR_Error         ! Integer containing the SmartRedis Error
 INTEGER             :: SR_BC            ! Integer containing the SmartRedis Boundary Condition
