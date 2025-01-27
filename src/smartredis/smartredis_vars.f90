@@ -40,6 +40,10 @@ REAL                :: SR_actions(2)    ! Array containing the actions received 
 REAL,ALLOCATABLE    :: SR_actions_field(:,:,:,:,:) ! Array containing the actions received by the agent
 REAL                :: SR_action_blendfac ! Blend factor for blending actions
 REAL                :: SR_reward_blendfac ! Blend factor for blending actions
+REAL,ALLOCATABLE    :: SR_BodyForce_array(:) ! Array containing the instantaneous body forces for moving average computation
+INTEGER             :: SR_BodyForce_array_head ! head of the BodyForces array (treated as a circular buffer)
+INTEGER             :: SR_BodyForce_array_tail ! tail of the BodyForces array (treated as a circular buffer)
+INTEGER             :: SR_BodyForce_array_len  ! Max length of the BodyForces array (treated as a circular buffer)
 #endif
 
 END MODULE MOD_SmartRedis_Vars

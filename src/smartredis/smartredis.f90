@@ -86,6 +86,7 @@ CALL addStrListEntry('SR_Type','cylinder', PRM_SMARTREDIS_CYLINDER)
 CALL prms%CreateLogicalOption("SR_useInvariants", "Use Invariants of gradient tensor as state for agent", ".FALSE.")
 CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
+CALL prms%CreateIntOption("SR_BodyForce_array_len", "Length of the circular buffer", "700")
 
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
                                                  "0.: Variable is not updated, 1.: always take new value.", "0.03")
@@ -164,6 +165,7 @@ CASE (PRM_SMARTREDIS_CYLINDER)
   ! TODO: Compute automatically based on analyze_dt and relevant used-defined time scales
   SR_reward_blendfac = GETREAL("SR_reward_blendfac")
   SR_action_blendfac = GETREAL("SR_action_blendfac")
+  SR_BodyForce_array_len = GETINT("SR_BodyForce_array_len")
   IF (SR_reward_blendfac.LT.0. .OR. SR_reward_blendfac.GT.1.) CALL ABORT(__STAMP__, &
       'SR_reward_blendfac must be in [0,1]')
   IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
@@ -171,6 +173,11 @@ CASE (PRM_SMARTREDIS_CYLINDER)
   ! Nullify temporally filtered quantities
   SR_actions = 0.
   SR_BodyForce = 0.
+  ! Array for moving average computation
+  ALLOCATE(SR_BodyForce_array(SR_BodyForce_array_len*3))
+  ! SR_BodyForce_array = 0.
+  SR_BodyForce_array_head = 0.
+  SR_BodyForce_array_tail = 0.
 CASE DEFAULT
   CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
 END SELECT
@@ -312,6 +319,7 @@ USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars,      ONLY: nBCs
 USE MOD_CalcBodyForces, ONLY: CalcBodyForces
 USE MOD_Exactfunc_Vars, ONLY: jetStrength
+USE MOD_TimeDisc_Vars,  ONLY: dt
 #if EDDYVISCOSITY
 USE MOD_EddyVisc_Vars,  ONLY: Cs
 #endif
@@ -343,6 +351,15 @@ CASE (PRM_SMARTREDIS_CYLINDER)
   SR_BodyForce = SR_BodyForce + SR_reward_blendfac*(BodyForce(:,SR_BC) - SR_BodyForce)
   ! 2.) Update Jet Strength (exponential blending)
   jetStrength = jetStrength + SR_action_blendfac*(SR_actions - jetStrength)
+  ! 3.) Update SR_BodyForce_array
+  SR_BodyForce_array(3*SR_BodyForce_array_tail+1 + 0) = BodyForce(1,SR_BC) / 0.5
+  SR_BodyForce_array(3*SR_BodyForce_array_tail+1 + 1) = BodyForce(2,SR_BC) / 0.5
+  SR_BodyForce_array(3*SR_BodyForce_array_tail+1 + 2) = dt
+  SR_BodyForce_array_tail = MODULO(SR_BodyForce_array_tail + 1, SR_BodyForce_array_len)
+  IF (SR_BodyForce_array_tail.EQ.SR_BodyForce_array_head) THEN
+    SR_BodyForce_array_head = MODULO(SR_BodyForce_array_head + 1, SR_BodyForce_array_len)
+  ENDIF
+
 CASE DEFAULT
   CALL ABORT(__STAMP__, 'Unknown SmartRedis communication type')
 END SELECT
@@ -649,6 +666,14 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   ! Put lift and drag coeffcicients into DB for Reward
   Key = TRIM(FlexiTag)//"reward"
   SR_Error = Client%put_tensor(TRIM(Key),(/cd,cl/),(/2/))
+  ! Put jetStrength into DB (for inspection/debugging)
+  Key = TRIM(FlexiTag)//"jetStrength"
+  SR_Error = Client%put_tensor(TRIM(Key),jetStrength,(/2/))
+  ! Communicate the SR_BodyForce_array and its read params
+  Key = TRIM(FlexiTag)//"BodyForce_array"
+  SR_Error = Client%put_tensor(TRIM(Key),SR_BodyForce_array(:),(/3*SR_BodyForce_array_len/))
+  Key = TRIM(FlexiTag)//"BodyForce_array_readparams"
+  SR_Error = Client%put_tensor(TRIM(Key),(/SR_BodyForce_array_head,SR_BodyForce_array_tail/),(/2/))
 
   ! Indicate if FLEXI is about to finalize
   lastTimeStepInt = MERGE(-1,1,lastTimeStep)
@@ -764,6 +789,7 @@ IMPLICIT NONE
 !==================================================================================================================================
 IF(MPIroot.AND.doSmartRedis) SR_Error = Client%destructor()
 SDEALLOCATE(SR_actions_field)
+SDEALLOCATE(SR_BodyForce_array)
 END SUBROUTINE FinalizeSmartRedis
 #endif /*USE_SMARTREDIS*/
 
