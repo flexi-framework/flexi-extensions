@@ -178,14 +178,16 @@ END IF
 DO i=1,nBCs
   locType =BoundaryType(i,BC_TYPE)
   IF ((locType.EQ.31).OR.(locType.EQ.32)) THEN
-    numJets         = GETREAL('numJets', '2')
+    numJets         = GETINT('numJets', '2')
     ALLOCATE(jetStrength(numJets))
     jetStrength     = 0.
-    ALLOCATE(jetAngPos  (numJets)) ! never used in BC31
-    jetAngPos       = 0.           ! never used in BC31
     jetWidth        = GETREAL('jetWidth','10')
     jetStrength(:)  = GETREALARRAY('jetStrength',numJets)
     IniCenter(:)    = GETREALARRAY('iniCenter',3,'(/0.,0.,0./)')
+  END IF
+  IF (locType.EQ.32) THEN
+    ALLOCATE(jetAngPos  (numJets)) ! never used in BC31
+    jetAngPos       = 0.           ! never used in BC31
     jetAngPos(:)    = GETREALARRAY('jetAngPos',numJets) ! never used in BC31
   END IF
 END DO
@@ -297,7 +299,7 @@ REAL,INTENT(IN)         :: Face_xGP(         3,0:Nloc,0:ZDIM(Nloc)) !< positions
 REAL,INTENT(OUT)        :: UPrim_boundary(PRIM,0:Nloc,0:ZDIM(Nloc)) !< resulting boundary state
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                 :: p,q,r
+INTEGER                 :: p,q,jet_idx
 INTEGER                 :: BCType,BCState
 REAL,DIMENSION(PP_nVar) :: Cons
 REAL                    :: Ma,MaOut,c,cb,pt,pb ! for BCType==23,24,25.27
@@ -375,10 +377,11 @@ CASE(3,31,32,4,9,91,23,24,25,27)
       tmp1 = jetWidth/180.*PP_PI ! Jet area in rad
       DO q=0,ZDIM(Nloc); DO p=0,Nloc
         tmp2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1)) ! position of point along the cylinder in rad
-        DO r=1,numJets
+        DO jet_idx=1,numJets
           ! if region of suction/blowing overwrite velocity at boundary
-          IF (ABS(tmp2-jetAngPos(r)).LT.0.5*tmp1) THEN ! r'th jet
-            UPrim_boundary(VEL1,p,q)= jetStrength(r)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-jetAngPos(r)))
+          IF (ABS(tmp2-jetAngPos(jet_idx)).LT.0.5*tmp1) THEN ! r'th jet
+            UPrim_boundary(VEL1,p,q)= jetStrength(jet_idx)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-jetAngPos(jet_idx)))
+            EXIT
           END IF
         END DO
       END DO; END DO
@@ -607,7 +610,7 @@ REAL,INTENT(IN)      :: Face_xGP(3,0:Nloc,0:ZDIM(Nloc))                !< positi
 REAL,INTENT(OUT)     :: Flux(PP_nVar,0:Nloc,0:ZDIM(Nloc))              !< resulting boundary fluxes
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                              :: p,q,r
+INTEGER                              :: p,q,jet_idx
 INTEGER                              :: BCType,BCState
 REAL                                 :: UCons_boundary(PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
 REAL                                 :: UCons_master  (PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
@@ -728,8 +731,8 @@ ELSE
       ang2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1))
       ! region of suction/blowing
       isInsideJet = .FALSE.
-      DO r=1:numJets
-        IF (ABS(ang2-jetAngPos(r)).LT.0.5*ang1) THEN
+      DO jet_idx=1,numJets
+        IF (ABS(ang2-jetAngPos(jet_idx)).LT.0.5*ang1) THEN
           isInsideJet = .TRUE.
           CALL PrimToCons(UPrim_master(:,p,q),  UCons_master(:,p,q))
           CALL PrimToCons(UPrim_boundary(:,p,q),UCons_boundary(:,p,q))
@@ -749,6 +752,7 @@ ELSE
           ! Sum up Euler and Diffusion Flux
           Flux(:,p,q) = Flux(:,p,q) + Fd_Face_loc(:,p,q)
 #endif /* PARABOLIC */
+          EXIT
         END IF ! Jet
       END DO ! jetAngPos
       IF (.NOT. isInsideJet) THEN ! Wall
@@ -1055,7 +1059,7 @@ USE MOD_DG_Vars      ,ONLY: UPrim_Boundary
 USE MOD_Mesh_Vars    ,ONLY: BoundaryType,BC
 USE MOD_Lifting_Vars ,ONLY: doWeakLifting
 USE MOD_TestCase     ,ONLY: Lifting_GetBoundaryFluxTestcase
-USE MOD_ExactFunc_Vars ,ONLY: jetWidth, numJets, jetAngPos
+USE MOD_ExactFunc_Vars ,ONLY: jetWidth, numJets, jetAngPos, IniCenter
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1071,7 +1075,7 @@ REAL,INTENT(IN)   :: Face_xGP(              3,0:PP_N,0:PP_NZ) !< positions of su
 REAL,INTENT(IN)   :: SurfElem(                0:PP_N,0:PP_NZ) !< surface element to multiply with flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER           :: p,q,r
+INTEGER           :: p,q,jet_idx
 INTEGER           :: BCType,BCState
 REAL              :: ang1,ang2
 LOGICAL           :: isInsideJet
@@ -1101,7 +1105,7 @@ ELSE
   CASE(31) ! No-slip wall BCs
     ang1 = jetWidth/180.*PP_PI ! opening of jet in rad
     DO q=0,PP_NZ; DO p=0,PP_N
-      ang2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+      ang2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1)) ! position of point along the cylinder in rad
       ! region of suction/blowing
       IF ((ABS(ang2-0.5*PP_PI).LT.0.5*ang1) .OR. &  ! Upper jet at +0.5*PI
           (ABS(ang2+0.5*PP_PI).LT.0.5*ang1) ) THEN  ! Lower jet at -0.5*PI
@@ -1120,13 +1124,14 @@ ELSE
   CASE(32) ! No-slip wall BCs
     ang1 = jetWidth/180.*PP_PI ! opening of jet in rad
     DO q=0,PP_NZ; DO p=0,PP_N
-      ang2 = ATAN2(Face_xGP(2,p,q),Face_xGP(1,p,q)) ! position of point along the cylinder in rad
+      ang2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1)) ! position of point along the cylinder in rad
       isInsideJet = .FALSE.
-      DO r=1,numJets
+      DO jet_idx=1,numJets
         ! region of suction/blowing
-        IF (ABS(ang2-jetAngPos(r)).LT.0.5*ang1) THEN ! r'th jet
+        IF (ABS(ang2-jetAngPos(jet_idx)).LT.0.5*ang1) THEN ! r'th jet
           isInsideJet = .TRUE.
           Flux=0.5*(UPrim_master(PRIM_LIFT,:,:)  + UPrim_boundary(PRIM_LIFT,:,:))
+          EXIT
         END IF ! jetAngPos
       END DO ! numJets
       IF (.NOT. isInsideJet) THEN ! Wall

@@ -163,10 +163,12 @@ CASE (PRM_SMARTREDIS_CHANNEL)
   ALLOCATE(SR_actions_field(1,0:PP_N,0:PP_N,0:PP_N,nElems))
   SR_actions_field = 0.
 CASE (PRM_SMARTREDIS_CYLINDER)
-  IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1).OR.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).NE.1).OR.((COUNT(BoundaryType(:,BC_TYPE).EQ.31).EQ.1).AND.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).EQ.1)) CALL ABORT(__STAMP__, &
+  IF (&
+        ((COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1).AND.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).NE.1)).OR.&
+        ((COUNT(BoundaryType(:,BC_TYPE).EQ.31).EQ.1).AND.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).EQ.1))) CALL ABORT(__STAMP__, &
       'Exactly one BC of type 31/32 (cylinder) must be defined for SmartRedis cylinder case')
   DO i=1,nBCs
-    IF (BoundaryType(i,BC_TYPE).EQ.31).OR.(BoundaryType(i,BC_TYPE).EQ.32) THEN
+    IF ((BoundaryType(i,BC_TYPE).EQ.31).OR.(BoundaryType(i,BC_TYPE).EQ.32)) THEN
       SR_BC = i
       EXIT
     END IF
@@ -680,7 +682,7 @@ REAL                           :: data_send(nVar,nRP) ! Array filled with state 
 LOGICAL                        :: found    = .FALSE.
 INTEGER                        :: i,lastTimeStepInt
 REAL                           :: cd,cl
-REAL,ALLOCATABLE               :: actions
+REAL,ALLOCATABLE               :: actions(:)
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
 Key = TRIM(FlexiTag)//"state"
@@ -705,7 +707,7 @@ IF (MPIroot .AND. (.NOT. firstTimeStep)) THEN
   SR_Error = Client%put_tensor(TRIM(Key),(/cd,cl/),(/2/))
   ! Put jetStrength into DB (for inspection/debugging)
   Key = TRIM(FlexiTag)//"jetStrength"
-  SR_Error = Client%put_tensor(TRIM(Key),jetStrength,(/2/))
+  SR_Error = Client%put_tensor(TRIM(Key),jetStrength,(/numJets/))
   ! Communicate the SR_BodyForce_array and its read params
   Key = TRIM(FlexiTag)//"BodyForce_array"
   SR_Error = Client%put_tensor(TRIM(Key),SR_BodyForce_array(:),(/3*SR_BodyForce_array_len/))
