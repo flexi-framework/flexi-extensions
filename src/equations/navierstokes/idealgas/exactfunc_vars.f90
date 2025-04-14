@@ -41,8 +41,10 @@ REAL              :: SiqmaSqr          !< Sigma squared of the gaussian distribu
 REAL              :: JetRadius         !< parameter for Roundjet
 REAL              :: JetEnd            !< parameter for Roundjet
 REAL              :: JetWidth          !< parameter for Roundjet
-REAL              :: JetStrength(2)    !< parameter for Roundjet
+REAL,ALLOCATABLE  :: JetStrength(:)    !< parameter for Roundjet
 REAL              :: JetAmplitude      !< parameter for amplitude (max velocity) of jet
+INTEGER           :: NumJets           !< number of jets
+REAL,ALLOCATABLE  :: JetAngPos(:)      !< angular positions in [rad] of the jets on the cylinder
 LOGICAL           :: RoundJetInitDone=.FALSE.
 #if PARABOLIC
 REAL              :: delta99_in        !< boundary layer thickness for Blasius solution

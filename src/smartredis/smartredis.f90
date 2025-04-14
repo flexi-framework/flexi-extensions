@@ -109,6 +109,7 @@ USE MOD_SmartRedis_Vars
 USE MOD_Mesh_Vars,       ONLY: nBCs,BoundaryType,nElems
 USE MOD_ReadInTools,     ONLY: GETLOGICAL,GETREAL,GETINT,GETINTFROMSTR
 USE MOD_TimeDisc_Vars,   ONLY: nRKStages
+USE MOD_Exactfunc_Vars,  ONLY: numJets
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -162,10 +163,10 @@ CASE (PRM_SMARTREDIS_CHANNEL)
   ALLOCATE(SR_actions_field(1,0:PP_N,0:PP_N,0:PP_N,nElems))
   SR_actions_field = 0.
 CASE (PRM_SMARTREDIS_CYLINDER)
-  IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1) CALL ABORT(__STAMP__, &
-      'Exactly one BC of type 31 (cylinder) must be defined for SmartRedis cylinder case')
+  IF (COUNT(BoundaryType(:,BC_TYPE).EQ.31).NE.1).OR.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).NE.1).OR.((COUNT(BoundaryType(:,BC_TYPE).EQ.31).EQ.1).AND.(COUNT(BoundaryType(:,BC_TYPE).EQ.32).EQ.1)) CALL ABORT(__STAMP__, &
+      'Exactly one BC of type 31/32 (cylinder) must be defined for SmartRedis cylinder case')
   DO i=1,nBCs
-    IF (BoundaryType(i,BC_TYPE).EQ.31) THEN
+    IF (BoundaryType(i,BC_TYPE).EQ.31).OR.(BoundaryType(i,BC_TYPE).EQ.32) THEN
       SR_BC = i
       EXIT
     END IF
@@ -179,6 +180,7 @@ CASE (PRM_SMARTREDIS_CYLINDER)
   IF (SR_action_blendfac.LT.0. .OR. SR_action_blendfac.GT.1.) CALL ABORT(__STAMP__, &
       'SR_action_blendfac must be in [0,1]')
   ! Nullify temporally filtered quantities
+  ALLOCATE(SR_actions(numJets))
   SR_actions = 0.
   SR_BodyForce = 0.
   ! Array for moving average computation
@@ -658,7 +660,7 @@ USE MOD_Mesh_Vars,          ONLY: nElems
 USE MOD_RecordPoints,       ONLY: EvalRecordPoints
 USE MOD_RecordPoints_Vars,  ONLY: nRP,nGlobalRP,x_RP
 USE MOD_EOS,                ONLY: ConsToPrim
-USE MOD_Exactfunc_Vars,     ONLY: jetStrength,IniCenter
+USE MOD_Exactfunc_Vars,     ONLY: jetStrength,IniCenter,numJets
 USE MOD_Equation_Vars,      ONLY: RefStatePrim,IniRefState
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -677,7 +679,8 @@ REAL                           :: UPrim_RP(PP_nVarPrim,nRP)  ! prim. state at re
 REAL                           :: data_send(nVar,nRP) ! Array filled with state variables actually send to Redis
 LOGICAL                        :: found    = .FALSE.
 INTEGER                        :: i,lastTimeStepInt
-REAL                           :: actions(1),cd,cl
+REAL                           :: cd,cl
+REAL,ALLOCATABLE               :: actions
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
 Key = TRIM(FlexiTag)//"state"
@@ -720,14 +723,23 @@ ENDIF
 IF (.NOT. lastTimeStep) THEN
   Key = TRIM(FlexiTag)//"actions"
   IF(MPIroot) THEN
+    IF (numJets.EQ.2) THEN
+      ALLOCATE(actions(1))
+    ELSE
+      ALLOCATE(actions(numJets))
+    ENDIF
     SR_Error = Client%poll_tensor(TRIM(Key), interval, tries, found)
     IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
     SR_Error = Client%unpack_tensor(TRIM(Key), actions, SHAPE(actions))
     SR_Error = Client%delete_tensor(TRIM(Key))
   ENDIF
   ! Ensure zero net massflow
-  SR_actions(1) =     actions(1)
-  SR_actions(2) = -1.*actions(1)
+  IF (numJets.EQ.2) THEN
+    SR_actions(1) =     actions(1)
+    SR_actions(2) = -1.*actions(1)
+  ELSE
+    SR_actions(:) = actions(:)
+  END IF
 #if USE_MPI
   CALL MPI_BCAST(SR_actions,2,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
 #endif

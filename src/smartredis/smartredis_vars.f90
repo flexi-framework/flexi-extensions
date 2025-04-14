@@ -38,7 +38,7 @@ INTEGER             :: SR_nVarAction    ! Number/Dimension of actions received b
 INTEGER             :: SR_Error         ! Integer containing the SmartRedis Error
 INTEGER             :: SR_BC            ! Integer containing the SmartRedis Boundary Condition
 REAL                :: SR_BodyForce(3)  ! Array containing the (postprocessed) body force of the SR wall
-REAL                :: SR_actions(2)    ! Array containing the actions received by the agent
+REAL,ALLOCATABLE    :: SR_actions(:)    ! Array containing the actions received by the agent
 REAL,ALLOCATABLE    :: SR_actions_field(:,:,:,:,:) ! Array containing the actions received by the agent
 REAL                :: SR_action_blendfac ! Blend factor for blending actions
 REAL                :: SR_reward_blendfac ! Blend factor for blending actions
