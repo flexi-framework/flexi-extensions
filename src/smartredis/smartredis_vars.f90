@@ -46,6 +46,7 @@ REAL,ALLOCATABLE    :: SR_BodyForce_array(:) ! Array containing the instantaneou
 INTEGER             :: SR_BodyForce_array_head ! head of the BodyForces array (treated as a circular buffer)
 INTEGER             :: SR_BodyForce_array_tail ! tail of the BodyForces array (treated as a circular buffer)
 INTEGER             :: SR_BodyForce_array_len  ! Max length of the BodyForces array (treated as a circular buffer)
+LOGICAL             :: SR_zerosum_actions      ! For BC32, signals whether to alter the received actions and make the zum to zero
 #endif
 
 END MODULE MOD_SmartRedis_Vars

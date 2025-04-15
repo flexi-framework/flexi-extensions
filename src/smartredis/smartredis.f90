@@ -87,6 +87,7 @@ CALL prms%CreateLogicalOption("SR_useInvariants", "Use Invariants of gradient te
 CALL prms%CreateLogicalOption("SR_doNormInvariants", "Normalizing invariants of velocity gradient tensor", ".TRUE.")
 CALL prms%CreateIntOption("SR_nVarAction", "Number/Dimension of actions per element", "1")
 CALL prms%CreateIntOption("SR_BodyForce_array_len", "Length of the circular buffer", "700")
+CALL prms%CreateLogicalOption("SR_zerosum_actions", "Alter the received actions to make them sum to zero.", ".TRUE.")
 
 CALL prms%CreateIntOption("SR_nSendReward", "After how many actions FLEXI should send Reward information.", "1")
 CALL prms%CreateRealOption("SR_reward_blendfac", "Exponential blending factor between [0,1] for reward per time step.\n"//&
@@ -173,6 +174,7 @@ CASE (PRM_SMARTREDIS_CYLINDER)
       EXIT
     END IF
   END DO
+  SR_zerosum_actions = GETLOGICAL("SR_zerosum_actions")
   ! TODO: Compute automatically based on analyze_dt and relevant used-defined time scales
   SR_reward_blendfac = GETREAL("SR_reward_blendfac")
   SR_action_blendfac = GETREAL("SR_action_blendfac")
@@ -681,7 +683,7 @@ REAL                           :: UPrim_RP(PP_nVarPrim,nRP)  ! prim. state at re
 REAL                           :: data_send(nVar,nRP) ! Array filled with state variables actually send to Redis
 LOGICAL                        :: found    = .FALSE.
 INTEGER                        :: i,lastTimeStepInt
-REAL                           :: cd,cl
+REAL                           :: cd,cl,denom
 REAL,ALLOCATABLE               :: actions(:)
 !==================================================================================================================================
 ! Gather U across all MPI ranks and write to Redis Database
@@ -728,20 +730,38 @@ IF (.NOT. lastTimeStep) THEN
     IF (numJets.EQ.2) THEN
       ALLOCATE(actions(1))
     ELSE
-      ALLOCATE(actions(numJets))
-    ENDIF
+      IF (SR_zerosum_actions) THEN
+        ALLOCATE(actions(numJets+1))
+      ELSE
+        ALLOCATE(actions(numJets))
+      END IF
+    END IF
     SR_Error = Client%poll_tensor(TRIM(Key), interval, tries, found)
     IF(.NOT. found) CALL ABORT(__STAMP__, 'Failed to retrieve tensor with key '//TRIM(key))
     SR_Error = Client%unpack_tensor(TRIM(Key), actions, SHAPE(actions))
     SR_Error = Client%delete_tensor(TRIM(Key))
-  ENDIF
+  END IF
   ! Ensure zero net massflow
   IF (numJets.EQ.2) THEN
+    ! The standard BC31 case
     SR_actions(1) =     actions(1)
     SR_actions(2) = -1.*actions(1)
   ELSE
-    SR_actions(:) = actions(:)
+    SR_actions(:) = actions(1:numJets)
+    IF (SR_zerosum_actions) THEN
+      ! It is assumed `actions(1:numJets)` all lie in [0, 1], and `actions(numJets+1)` is the scaling to use.
+      ! The following procedure then ensures that they sum to zero, and the final outputs lie in the range [-2/numJets, 1]*actions(numJets+1).
+      denom = 0.
+      DO i=1,numJets
+        SR_actions(i) = SR_actions(i) + 1./REAL(numJets)
+        denom = denom + SR_actions(i)
+      END DO
+      SR_actions(:) = SR_actions(:)/denom - 1./REAL(numJets)
+      SR_actions(:) = actions(numJets+1) * SR_actions(:) * 2. * REAL(numJets) / (REAL(numJets) - 1.)
+    END IF
   END IF
+  PRINT*, "   Actions received : ", actions
+  PRINT*, "Actions implemented : ", SR_actions
 #if USE_MPI
   CALL MPI_BCAST(SR_actions,2,MPI_DOUBLE_PRECISION,0,MPI_COMM_FLEXI,iError)
 #endif
