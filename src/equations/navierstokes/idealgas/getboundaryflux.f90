@@ -379,7 +379,9 @@ CASE(3,31,32,4,9,91,23,24,25,27)
         tmp2 = ATAN2(Face_xGP(2,p,q)-IniCenter(2),Face_xGP(1,p,q)-IniCenter(1)) ! position of point along the cylinder in rad
         DO jet_idx=1,numJets
           ! if region of suction/blowing overwrite velocity at boundary
-          IF (ABS(tmp2-jetAngPos(jet_idx)).LT.0.5*tmp1) THEN ! r'th jet
+          tmp3 = tmp2-jetAngPos(jet_idx)
+          tmp3 = MIN(MODULO(tmp3, PP_PI), MODULO(-tmp3, PP_PI)) ! To deal with the {-pi <--> 0} boundary in `ATAN2`
+          IF (tmp3.LT.0.5*tmp1) THEN ! r'th jet
             UPrim_boundary(VEL1,p,q)= jetStrength(jet_idx)*PP_PI/(2.*tmp1)*COS(PP_PI/tmp1*(tmp2-jetAngPos(jet_idx)))
             EXIT
           END IF
@@ -614,7 +616,7 @@ INTEGER                              :: p,q,jet_idx
 INTEGER                              :: BCType,BCState
 REAL                                 :: UCons_boundary(PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
 REAL                                 :: UCons_master  (PP_nVar    ,0:Nloc,0:ZDIM(Nloc))
-REAL                                 :: ang1,ang2
+REAL                                 :: ang1,ang2,tmp3
 LOGICAL                              :: isInsideJet ! for BCType==32
 #if PARABOLIC
 INTEGER                              :: iVar
@@ -732,7 +734,9 @@ ELSE
       ! region of suction/blowing
       isInsideJet = .FALSE.
       DO jet_idx=1,numJets
-        IF (ABS(ang2-jetAngPos(jet_idx)).LT.0.5*ang1) THEN
+        tmp3 = ang2-jetAngPos(jet_idx)
+        tmp3 = MIN(MODULO(tmp3, PP_PI), MODULO(-tmp3, PP_PI)) ! To deal with the {-pi <--> 0} boundary in `ATAN2`
+        IF (tmp3.LT.0.5*ang1) THEN ! r'th jet
           isInsideJet = .TRUE.
           CALL PrimToCons(UPrim_master(:,p,q),  UCons_master(:,p,q))
           CALL PrimToCons(UPrim_boundary(:,p,q),UCons_boundary(:,p,q))
@@ -1077,7 +1081,7 @@ REAL,INTENT(IN)   :: SurfElem(                0:PP_N,0:PP_NZ) !< surface element
 ! LOCAL VARIABLES
 INTEGER           :: p,q,jet_idx
 INTEGER           :: BCType,BCState
-REAL              :: ang1,ang2
+REAL              :: ang1,ang2,tmp3
 LOGICAL           :: isInsideJet
 !==================================================================================================================================
 BCType  = Boundarytype(BC(SideID),BC_TYPE)
@@ -1128,7 +1132,9 @@ ELSE
       isInsideJet = .FALSE.
       DO jet_idx=1,numJets
         ! region of suction/blowing
-        IF (ABS(ang2-jetAngPos(jet_idx)).LT.0.5*ang1) THEN ! r'th jet
+        tmp3 = ang2-jetAngPos(jet_idx)
+        tmp3 = MIN(MODULO(tmp3, PP_PI), MODULO(-tmp3, PP_PI)) ! To deal with the {-pi <--> 0} boundary in `ATAN2`
+        IF (tmp3.LT.0.5*ang1) THEN ! r'th jet
           isInsideJet = .TRUE.
           Flux=0.5*(UPrim_master(PRIM_LIFT,:,:)  + UPrim_boundary(PRIM_LIFT,:,:))
           EXIT
