@@ -396,8 +396,8 @@ END IF
 #if USE_FFTW
 IF (doComputeSpectra) THEN
   ! Either compute the mean profiles based on time-averaged data or instantaneous data
-  !CALL ComputeGlobalMeanProfiles_TimeAvg(E_k)
-  CALL ComputeGlobalMeanProfiles_Instantaneous(E_k)
+  CALL ComputeGlobalMeanProfiles_TimeAvg(E_k)
+  !CALL ComputeGlobalMeanProfiles_Instantaneous(E_k)
 
   ! Debug writeout
   SWRITE(*,*)      'Y',E_k(     Y,:)
